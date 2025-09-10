@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Leaflet Satellite Map with Fuzzy Search</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <div id="topbar">
+    <input id="searchBox" placeholder="Search UniqueID or MowingID (e.g. M0123)" autofocus />
+    <div id="suggestions" class="hidden"></div>
+  </div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Esri satellite imagery via Leaflet Providers (no token required) -->
+  <script src="https://unpkg.com/leaflet-providers@1.13.0/leaflet-providers.js"></script>
+  <!-- Fuse.js for fuzzy search -->
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2/dist/fuse.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
