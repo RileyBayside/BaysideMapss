@@ -1,0 +1,121 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Leaflet Satellite Map - Search by Unique ID</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/2.9.9/leaflet-search.min.css" />
+  <style>
+    body, html, #map { height: 100%; margin:0; padding:0; }
+    #map { height: 100vh; }
+    .legend { background: white; padding: 6px; border-radius: 4px; box-shadow: 0 0 6px rgba(0,0,0,0.3); }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/2.9.9/leaflet-search.src.min.js"></script>
+
+<script>
+  const map = L.map('map').setView([0,0], 2);
+
+  // Satellite basemap (Esri World Imagery)
+  const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19,
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+  }).addTo(map);
+
+  // Styling function based on geometry type
+  function styleFeature(feature) {
+    return {
+      color: '#2b7bba',
+      weight: 2,
+      opacity: 0.9,
+      fillOpacity: 0.3
+    };
+  }
+
+  let geojsonLayer;
+  fetch('data.geojson')
+    .then(r => r.json())
+    .then(data => {
+      geojsonLayer = L.geoJSON(data, {
+        style: styleFeature,
+        onEachFeature: function(feature, layer) {
+          // Build popup content from properties
+          let props = feature.properties || {};
+          let html = '<div><strong>' + (props.name || props['Unique ID'] || '') + '</strong><br/>';
+          for (let k in props) {
+            html += '<b>' + k + ':</b> ' + props[k] + '<br/>';
+          }
+          html += '</div>';
+          layer.bindPopup(html);
+        }
+      }).addTo(map);
+
+      // Zoom to layer bounds
+      if (geojsonLayer.getBounds && geojsonLayer.getBounds().isValid()) {
+        map.fitBounds(geojsonLayer.getBounds());
+      }
+
+      // Setup search control that searches properties by "Unique ID" or "UniqueID" or "name"
+      const searchControl = new L.Control.Search({
+        layer: geojsonLayer,
+        propertyName: 'Unique ID', // primary property name to search
+        initial: false,
+        zoom: 17,
+        marker: false,
+        textPlaceholder: 'Search Unique ID (e.g. M0123)'
+      });
+
+      // Fallback: if "Unique ID" doesn't exist, allow "UniqueID" or "name"
+      // We'll implement a small wrapper to support multiple property names.
+      // However the plugin doesn't support multiple names directly, so we'll add a custom search input too.
+      map.addControl(searchControl);
+
+      // Additional custom search box (works regardless of property name)
+      const customDiv = L.control({position: 'topleft'});
+      customDiv.onAdd = function(map) {
+        const div = L.DomUtil.create('div', 'legend');
+        div.innerHTML = '<input id="uidSearch" placeholder="Search Unique ID (e.g. M0123)" style="width:220px;padding:4px"/>&nbsp;<button id="uidGo">Go</button>';
+        L.DomEvent.disableClickPropagation(div);
+        return div;
+      };
+      customDiv.addTo(map);
+
+      document.getElementById('uidGo').addEventListener('click', () => {
+        const q = document.getElementById('uidSearch').value.trim().toLowerCase();
+        if (!q) return;
+        let found = null;
+        geojsonLayer.eachLayer(function(layer) {
+          const p = layer.feature.properties || {};
+          // check common possible keys
+          const candidates = ['Unique ID','UniqueID','Unique_Id','UniqueId','Unique_Id','name','Name','MowingID','Mowing Id','MowingID'];
+          for (let k of candidates) {
+            if (p[k] && (''+p[k]).toLowerCase() === q) {
+              found = layer;
+              break;
+            }
+          }
+          if (found) return;
+        });
+        if (found) {
+          map.fitBounds(found.getBounds ? found.getBounds() : found.getLatLng().toBounds(50));
+          found.openPopup();
+        } else {
+          alert('No feature found with Unique ID: ' + q);
+        }
+      });
+
+    })
+    .catch(err => {
+      console.error('Error loading GeoJSON:', err);
+      alert('Failed to load data.geojson. Make sure the file exists in the same folder.');
+    });
+</script>
+</body>
+</html>
