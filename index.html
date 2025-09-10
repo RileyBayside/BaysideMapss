@@ -1,0 +1,244 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Leaflet KML Map — Satellite + Fuzzy Search</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* minimal in-file fallback for older clients */
+    body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+  </style>
+</head>
+<body>
+  <div id="topbar">
+    <div id="searchBox">
+      <input id="searchInput" placeholder="Search by Unique ID or MowingID (e.g. M0123)" autocomplete="off">
+      <div id="suggestions" class="suggestions"></div>
+    </div>
+    <div id="legend">Satellite imagery • Click features for details</div>
+  </div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-omnivore@0.3.4/leaflet-omnivore.min.js"></script>
+
+  <script>
+  // Create map (center will be set after features load)
+  var map = L.map('map', {zoomControl:true});
+
+  // Satellite tile (Esri World Imagery)
+  var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+  }).addTo(map);
+
+  // Layer group for the KML
+  var kmlLayer = L.featureGroup().addTo(map);
+
+  // Utility: Levenshtein distance for fuzzy matching
+  function levenshtein(a,b) {
+    if(a === b) return 0;
+    var al = a.length, bl = b.length;
+    if(al === 0) return bl;
+    if(bl === 0) return al;
+    var v0 = new Array(bl+1);
+    var v1 = new Array(bl+1);
+    for (var j=0; j<=bl; j++) v0[j] = j;
+    for (var i=0; i<al; i++) {
+      v1[0] = i+1;
+      for (var j=0; j<bl; j++) {
+        var cost = a[i] === b[j] ? 0 : 1;
+        v1[j+1] = Math.min(v1[j]+1, v0[j+1]+1, v0[j]+cost);
+      }
+      var tmp = v0; v0 = v1; v1 = tmp;
+    }
+    return v0[bl];
+  }
+
+  // Load KML from local file (data.kml)
+  omnivore.kml('data.kml')
+    .on('ready', function(e) {
+      var layer = e.target; // GeoJSON layer
+      layer.eachLayer(function(l) {
+        // Build popup content from properties
+        var props = l.feature && l.feature.properties ? l.feature.properties : {};
+        var title = props.name || props.Name || props['unique id'] || props['Unique ID'] || '';
+        // description might be in description or other fields
+        var desc = props.description || props.Description || '';
+        // Gather all properties into a table
+        var html = '<div class="popup">';
+        if (title) html += '<h3>' + title + '</h3>';
+        html += '<table>';
+        for (var k in props) {
+          if (!props.hasOwnProperty(k)) continue;
+          html += '<tr><th>' + k + '</th><td>' + props[k] + '</td></tr>';
+        }
+        html += '</table></div>';
+        l.bindPopup(html);
+
+        kmlLayer.addLayer(l);
+      });
+
+      // fit map to layer bounds
+      if (kmlLayer.getBounds().isValid()) {
+        map.fitBounds(kmlLayer.getBounds(), {padding:[20,20]});
+      } else {
+        map.setView([0,0],2);
+      }
+
+      // Build searchable index
+      buildIndexFromLayer(kmlLayer);
+    })
+    .on('error', function(err){ console.error('Failed to load KML', err); alert('Failed to load data.kml — check console'); });
+
+  // Search index and UI
+  var index = []; // {idVal: string, layer: L.Layer, label: string}
+
+  function normalize(s) {
+    return String(s || '').trim().toLowerCase();
+  }
+
+  function getPossibleId(props) {
+    // Common property names for Unique ID / Mowing ID — try many
+    var keys = ['MowingID','Mowing Id','MOWINGID','Mowing_ID','Mowing_Id','MowingId','Mowingid','Mowing','MowingId','Unique ID','UniqueID','Unique_Id','UniqueId','Unique','name','Name','id','ID'];
+    for (var i=0;i<keys.length;i++){
+      var k = keys[i];
+      if (props.hasOwnProperty(k) && props[k]) return props[k];
+      // try case-insensitive search
+      for (var pk in props) {
+        if (!props.hasOwnProperty(pk)) continue;
+        if (pk.replace(/\s+/g,'').toLowerCase() === k.replace(/\s+/g,'').toLowerCase()) {
+          return props[pk];
+        }
+      }
+    }
+    return null;
+  }
+
+  function buildIndexFromLayer(group) {
+    index = [];
+    group.eachLayer(function(l) {
+      var props = l.feature && l.feature.properties ? l.feature.properties : {};
+      var idVal = getPossibleId(props) || props.name || props.Name || '';
+      var label = idVal || props.name || (props.description||'') || 'Feature';
+      index.push({ idVal: String(idVal), layer: l, label: String(label) });
+    });
+    // bind input events
+    setupSearchUI();
+  }
+
+  // UI handlers
+  var input = document.getElementById('searchInput');
+  var suggBox = document.getElementById('suggestions');
+
+  function setupSearchUI(){
+    input.addEventListener('input', onInput);
+    input.addEventListener('keydown', function(e){
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (suggBox.firstChild) { // pick first suggestion if exists
+          selectSuggestion(suggBox.firstChild.dataset.index);
+        } else {
+          performSearch(input.value);
+        }
+      }
+    });
+    document.addEventListener('click', function(e){
+      if (!document.getElementById('searchBox').contains(e.target)) {
+        suggBox.style.display = 'none';
+      }
+    });
+  }
+
+  function onInput(e) {
+    var q = normalize(e.target.value);
+    if (!q) { suggBox.style.display='none'; return; }
+    // find substring matches and fuzzy matches
+    var matches = [];
+    for (var i=0;i<index.length;i++){
+      var item = index[i];
+      var val = normalize(item.idVal || item.label || '');
+      if (!val) continue;
+      if (val.indexOf(q) !== -1) {
+        matches.push({score:0, idx:i});
+        continue;
+      }
+      // fuzzy via levenshtein
+      var dist = levenshtein(q, val);
+      var ratio = dist / Math.max(q.length, val.length);
+      if (ratio <= 0.5) { // tweakable threshold
+        matches.push({score: ratio, idx:i});
+      }
+    }
+    matches.sort(function(a,b){ return a.score - b.score; }); // best first
+    renderSuggestions(matches.slice(0,10));
+  }
+
+  function renderSuggestions(matches) {
+    suggBox.innerHTML = '';
+    if (!matches.length) { suggBox.style.display='none'; return; }
+    for (var i=0;i<matches.length;i++){
+      var it = index[matches[i].idx];
+      var div = document.createElement('div');
+      div.className = 'suggestion';
+      div.textContent = (it.idVal || it.label);
+      div.title = it.label;
+      div.dataset.index = matches[i].idx;
+      div.addEventListener('click', function(e){
+        selectSuggestion(this.dataset.index);
+      });
+      suggBox.appendChild(div);
+    }
+    suggBox.style.display='block';
+  }
+
+  function selectSuggestion(idx) {
+    var it = index[idx];
+    if (!it) return;
+    focusLayer(it.layer);
+    // set input to exact id for clarity
+    input.value = it.idVal || it.label;
+    suggBox.style.display='none';
+  }
+
+  function performSearch(q) {
+    q = normalize(q);
+    if (!q) return;
+    // exact match first
+    for (var i=0;i<index.length;i++){
+      var it = index[i];
+      if (normalize(it.idVal) === q || normalize(it.label) === q) {
+        selectSuggestion(i); return;
+      }
+    }
+    // otherwise pick best fuzzy candidate
+    var best = null, bestScore=999;
+    for (var i=0;i<index.length;i++){
+      var val = normalize(index[i].idVal || index[i].label || '');
+      var dist = levenshtein(q, val);
+      if (dist < bestScore) { bestScore = dist; best = i; }
+    }
+    if (best !== null) {
+      selectSuggestion(best);
+    } else {
+      alert('No match found');
+    }
+  }
+
+  function focusLayer(layer) {
+    if (!layer) return;
+    if (layer.getBounds) {
+      try {
+        map.fitBounds(layer.getBounds(), {maxZoom:18, padding:[30,30]});
+      } catch(e) {
+        if (layer.getLatLng) map.setView(layer.getLatLng(), 18);
+      }
+    } else if (layer.getLatLng) {
+      map.setView(layer.getLatLng(), 18);
+    }
+    if (layer.openPopup) layer.openPopup();
+  }
+  </script>
+</body>
+</html>
