@@ -1,12 +1,21 @@
-  
 (function() {
   const ADMIN_PASSWORD = "Fishing101!";
   const SIDEBAR_COLLAPSED_KEY = "sidebarCollapsed";
   const PARK_DATA_KEY = "parkData";
 
-  // Zones defined as newline-separated strings -> arrays (avoids comma/quote errors)
+  // Detect which site (Parks vs ParksSnipping)
+  const currentPage = window.location.pathname.includes("ParksSnipping.html") 
+    ? "Snipping" 
+    : "Parks";
+
+  // Load existing data
+  let parkData = JSON.parse(localStorage.getItem(PARK_DATA_KEY) || "{}");
+  let nameIndex = {}; // Maps MowingID -> Name
+
+  // --- ZONES ---
   const zoneStrings = {
-    "Zone 1": `M0123
+    "Zone 1": 
+M0123
 M0427
 M0402
 M0136
@@ -147,7 +156,8 @@ M0153
 M0148
 M0161
 M0401`,
-    "Zone 2": `M0504
+    "Zone 2": 
+M0504
 M0442
 M0170
 M0480
@@ -229,7 +239,8 @@ M0452
 M0192
 M0044
 M0176`,
-    "Zone 3": `M0221
+    "Zone 3": 
+M0221
 M0250
 M0559
 M0606
@@ -323,8 +334,9 @@ M0780
 M0220
 M0858
 M0252
-M0796`,
-    "Zone 4": `M0710
+M0796`
+    "Zone 4":
+M0710
 M0700
 M0677
 M0297
@@ -503,7 +515,8 @@ M0817
 M0750
 M0724
 M0679`,
-    "Zone 5": `M0766
+    "Zone 5": 
+M0766
 M0790
 M0791
 M0321
@@ -527,62 +540,34 @@ M0762
 M0753`
   };
 
-  // Convert to arrays
-  const zones = Object.fromEntries(Object.entries(zoneStrings).map(([k,v]) => [k, v.trim().split(/\s+/)]));
+  const zones = {};
+  for (const zone in zoneStrings) {
+    zones[zone] = zoneStrings[zone].split(/\s+/).filter(Boolean);
+  }
 
-  // Storage
-  let parkData = JSON.parse(localStorage.getItem(PARK_DATA_KEY) || "{}");
-  let nameIndex = {}; // MowingID -> Name
-
+  // --- Save & Load Helpers ---
   function saveData() {
     localStorage.setItem(PARK_DATA_KEY, JSON.stringify(parkData));
   }
 
-  // Extract a field either from direct property or from description HTML table
-  function extractField(props, field) {
-    if (!props) return "";
-    const direct = props[field] || props[field.toLowerCase()] || props[field.toUpperCase()];
-    if (direct) return direct;
-    let desc = props.description;
-    if (desc && typeof desc === "object" && desc.value) desc = desc.value;
-    if (typeof desc === "string") {
-      const rx = new RegExp("<td>"+field+"</td><td>(.*?)</td>", "i");
-      const m = rx.exec(desc);
-      if (m) return m[1].trim();
-    }
-    return "";
+  function __getParkData() {
+    try { return JSON.parse(localStorage.getItem(PARK_DATA_KEY) || '{}'); } catch(e) { return {}; }
   }
 
-  // Build index from all GeoJSON layers on the map
-  function buildNameIndex() {
-    if (!window.map || typeof map.eachLayer !== "function") return;
-    map.eachLayer(function(layer) {
-      if (layer && typeof layer.eachLayer === "function") {
-        try {
-          layer.eachLayer(function(fl) {
-            const f = fl.feature;
-            if (f && f.properties) {
-              const id = extractField(f.properties, "MowingID") || extractField(f.properties, "UniqueID") || f.properties.ID;
-              const nm = extractField(f.properties, "Name") || f.properties.name || "";
-              if (id) nameIndex[id] = nm || "";
-            }
-          });
-        } catch(e) { /* non-geojson layers */ }
-      }
-    });
-  }
-
+  // --- Sidebar Rendering ---
   function renderSidebar() {
     const sidebar = document.getElementById("sidebar-content");
     if (!sidebar) return;
     sidebar.innerHTML = "";
+
     Object.keys(zones).forEach(zone => {
       const zoneDiv = document.createElement("div");
       zoneDiv.className = "zone";
+
       const header = document.createElement("h3");
       header.innerText = zone;
       const list = document.createElement("div");
-      list.classList.add("hidden"); // collapsed by default
+      list.classList.add("hidden");
       header.onclick = () => list.classList.toggle("hidden");
       zoneDiv.appendChild(header);
 
@@ -590,30 +575,32 @@ M0753`
         const item = document.createElement("div");
         item.className = "park-item";
 
-        const label = document.createElement("span");
-        const nm = nameIndex[parkId] ? " - " + nameIndex[parkId] : "";
-        label.className = "park-label";
-        label.innerText = (idx + 1) + ". " + parkId + nm;
-        label.onclick = () => zoomToPark(parkId);
-
         const row = document.createElement("div");
         row.style.display = "flex";
         row.style.alignItems = "center";
         row.style.gap = "6px";
 
+        // ✅ Checkbox (independent per site)
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
-        checkbox.checked = parkData[parkId]?.done || false;
+        const tickField = currentPage === "Snipping" ? "doneSnipping" : "doneParks";
+        checkbox.checked = parkData[parkId]?.[tickField] || false;
         checkbox.onchange = () => {
           parkData[parkId] = parkData[parkId] || {};
-          parkData[parkId].done = checkbox.checked;
+          parkData[parkId][tickField] = checkbox.checked;
           parkData[parkId].time = new Date().toISOString();
           saveData();
         };
 
+        const label = document.createElement("span");
+        label.className = "park-label";
+        label.innerText = (idx + 1) + ". " + parkId;
+        label.onclick = () => zoomToPark(parkId);
+
         row.appendChild(checkbox);
         row.appendChild(label);
 
+        // 📝 Notes (shared)
         const note = document.createElement("input");
         note.type = "text";
         note.value = parkData[parkId]?.note || "";
@@ -645,7 +632,7 @@ M0753`
             if (done) return;
             const f = fl.feature;
             if (f && f.properties) {
-              const id = extractField(f.properties, "MowingID") || extractField(f.properties, "UniqueID") || f.properties.ID;
+              const id = f.properties.MowingID || f.properties.UniqueID || f.properties.ID;
               if (id === parkId) {
                 if (typeof fl.getBounds === "function") {
                   map.fitBounds(fl.getBounds());
@@ -661,7 +648,7 @@ M0753`
     });
   }
 
-  // Admin login (kept to avoid breaking the existing button)
+  // --- Admin Tools ---
   window.adminLogin = function() {
     const pwd = prompt("Enter admin password:");
     if (pwd === ADMIN_PASSWORD) {
@@ -672,201 +659,24 @@ M0753`
     }
   };
 
-  // Collapsible state persistence
+  // Sidebar toggle
   window.toggleSidebar = function() {
     const sb = document.getElementById("sidebar");
     sb.classList.toggle("collapsed");
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sb.classList.contains("collapsed"));
   };
 
+  // Init
   window.addEventListener("load", function() {
     const sb = document.getElementById("sidebar");
-    if (sb && localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true") sb.classList.add("collapsed");
-    // Build name index after map + layers load
+    if (sb && localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true") {
+      sb.classList.add("collapsed");
+    }
     setTimeout(() => {
-      buildNameIndex();
       renderSidebar();
-    }, 1200);
+    }, 500);
   });
+
+  // Expose data getter for PDF etc
+  window.__getParkData = __getParkData;
 })();
-
-// ---- Helpers to access stored data in global scope ----
-function __getParkData() {
-  try { return JSON.parse(localStorage.getItem('parkData') || '{}'); } catch(e) { return {}; }
-}
-
-
-
-// Expand / Collapse all zones
-function toggleAllZones() {
-  const button = document.getElementById("toggle-all");
-  const allLists = document.querySelectorAll(".zone > div");
-
-  // Check if any list is currently hidden
-  const anyHidden = Array.from(allLists).some(list => list.classList.contains("hidden"));
-
-  if (anyHidden) {
-    // Expand all
-    allLists.forEach(list => list.classList.remove("hidden"));
-    button.innerText = "Collapse All";
-  } else {
-    // Collapse all
-    allLists.forEach(list => list.classList.add("hidden"));
-    button.innerText = "Expand All";
-  }
-}
-
-// Attach listener once page loads
-window.addEventListener("load", function() {
-  const button = document.getElementById("toggle-all");
-  if (button) {
-    button.addEventListener("click", toggleAllZones);
-  }
-});
-
-
-
-// Sidebar expand/collapse toggle
-function toggleSidebar() {
-  const sb = document.getElementById("sidebar");
-  const btn = document.getElementById("sidebar-toggle");
-  if (!sb || !btn) return;
-
-  sb.classList.toggle("collapsed");
-
-  // Update button text depending on state
-  if (sb.classList.contains("collapsed")) {
-    btn.innerText = "Expand Sidebar";
-  } else {
-    btn.innerText = "Collapse Sidebar";
-  }
-
-  // Remember state
-  localStorage.setItem("sidebarCollapsed", sb.classList.contains("collapsed"));
-}
-
-// Attach listener on page load (sidebar toggle)
-window.addEventListener("load", function () {
-  const sb = document.getElementById("sidebar");
-  const btn = document.getElementById("sidebar-toggle");
-
-  if (btn) btn.addEventListener("click", toggleSidebar);
-
-  // Restore saved state
-  if (sb && localStorage.getItem("sidebarCollapsed") === "true") {
-    sb.classList.add("collapsed");
-    if (btn) btn.innerText = "Expand Sidebar";
-  }
-});
-
-
-
-// ---------------------------
-// Admin Utility Functions
-// ---------------------------
-
-// Export sidebar data to a real PDF
-function exportPDF() {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-
-  const pageWidth = doc.internal.pageSize.getWidth();
-
-  // --- Add Logo ---
-  const img = new Image();
-  img.src = "logo.png"; // Ensure logo.png is in the same folder as index.html
-  img.onload = function () {
-    const imgWidth = 50;  // adjust size if needed
-    const imgHeight = 20;
-    const x = (pageWidth - imgWidth) / 2; // center horizontally
-    doc.addImage(img, "PNG", x, 10, imgWidth, imgHeight);
-
-    // --- Title ---
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.text("Parks Report", pageWidth / 2, 40, { align: "center" });
-
-    // --- Table Header ---
-    let y = 55;
-    const col1 = pageWidth * 0.2; // Park Number
-    const col2 = pageWidth * 0.45; // Date Completed
-    const col3 = pageWidth * 0.7; // Notes
-
-    doc.setFontSize(12);
-    doc.text("Park Number", col1, y, { align: "center" });
-    doc.text("Date Completed", col2, y, { align: "center" });
-    doc.text("Notes", col3, y, { align: "center" });
-
-    y += 8;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-
-    // --- Helper for date formatting to AEST ---
-    function formatToAEST(isoString) {
-      if (!isoString) return "N/A";
-      try {
-        const date = new Date(isoString);
-        const aestDate = new Date(date.toLocaleString("en-US", { timeZone: "Australia/Brisbane" }));
-        const day = String(aestDate.getDate()).padStart(2, "0");
-        const month = String(aestDate.getMonth() + 1).padStart(2, "0");
-        const year = aestDate.getFullYear();
-        return `${day}/${month}/${year}`;
-      } catch {
-        return "N/A";
-      }
-    }
-
-    // --- Data Rows ---
-    const parks = __getParkData();
-    const keys = Object.keys(parks);
-
-    if (keys.length === 0) {
-      doc.text("No data available.", pageWidth / 2, y, { align: "center" });
-    } else {
-      keys.forEach(id => {
-        const dateFormatted = formatToAEST(parks[id].time);
-        const note = parks[id].note || "";
-
-        doc.text(id, col1, y, { align: "center" });
-        doc.text(dateFormatted, col2, y, { align: "center" });
-        doc.text(note, col3, y, { maxWidth: 60, align: "center" });
-
-        y += 7;
-        if (y > 280) { // page overflow
-          doc.addPage();
-          y = 20;
-        }
-      });
-    }
-
-    doc.save("parks_report.pdf");
-  };
-}
-
-// Clear all user data
-function clearUserData() {
-  if (confirm("Are you sure you want to clear all saved data?")) {
-    localStorage.setItem("parkData", JSON.stringify({}));
-    localStorage.removeItem("parkData");
-    alert("All user data cleared.");
-    location.reload();
-  }
-}
-
-// Show parks completed today
-function showToday() {
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  let completedToday = [];
-
-  Object.keys(__getParkData()).forEach(id => {
-    if (__getParkData()[id].done && __getParkData()[id].time && __getParkData()[id].time.startsWith(today)) {
-      completedToday.push(id);
-    }
-  });
-
-  if (completedToday.length === 0) {
-    alert("No parks completed today.");
-  } else {
-    alert("Completed Today:\n" + completedToday.join(", "));
-  }
-}
