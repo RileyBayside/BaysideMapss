@@ -16,6 +16,14 @@
   <style>
     #map { height: 100vh; }
   </style>
+  
+  <script>
+  if (localStorage.getItem("loggedIn") !== "true") {
+    // Not logged in -> redirect to login
+    window.location.href = "index.html";
+  }
+</script>
+  
 </head>
 <body>
   <!-- Sidebar toggle button -->
