@@ -22,16 +22,48 @@
       padding: 40px;
       border-radius: 12px;
       box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      width: 320px;
     }
     img.logo {
-      max-width: 280px;
+      max-width: 180px;
       margin-bottom: 20px;
     }
     h1 {
       margin-bottom: 20px;
       color: #333;
     }
-    a {
+    input {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 10px;
+      border: none;
+      border-radius: 6px;
+      background: #0078d7;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #005fa3;
+    }
+    .error {
+      color: red;
+      margin-top: 10px;
+      display: none;
+    }
+    .portal-links {
+      display: none;
+      margin-top: 20px;
+    }
+    .portal-links a {
       display: inline-block;
       margin: 10px;
       padding: 12px 20px;
@@ -41,7 +73,7 @@
       border-radius: 6px;
       transition: background 0.3s;
     }
-    a:hover {
+    .portal-links a:hover {
       background: #005fa3;
     }
   </style>
@@ -49,8 +81,39 @@
 <body>
   <div class="container">
     <img src="logo.png" alt="Bayside Logo" class="logo">
-    <h1>Maps Portal</h1>
-    <a href="Parks.html">Parks</a>
+    <h1>Login</h1>
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="pin" placeholder="PIN">
+    <button onclick="login()">Login</button>
+    <p class="error" id="error-msg">Invalid username or PIN.</p>
+
+    <!-- Portal links (hidden until login) -->
+    <div class="portal-links" id="portal-links">
+      <h1>Maps Portal</h1>
+      <a href="Parks.html">Parks</a>
+      <a href="Firebreaks.html">Firebreaks</a>
+    </div>
+  </div>
+
+<script>
+  function login() {
+    const username = document.getElementById("username").value;
+    const pin = document.getElementById("pin").value;
+    const errorMsg = document.getElementById("error-msg");
+
+    if (username === "Riley" && pin === "2455") {
+      // Set login flag
+      localStorage.setItem("loggedIn", "true");
+      // Redirect to portal
+      window.location.href = "Parks.html";
+    } else {
+      errorMsg.style.display = "block";
+    }
+  }
+</script>
+</body>
+</html>
+
     <a href="Firebreaks.html">Firebreaks</a>
   </div>
 </body>
