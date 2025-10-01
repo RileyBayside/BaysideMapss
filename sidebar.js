@@ -788,6 +788,22 @@ function exportPDF() {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
 
+  // --- Helper for date formatting to AEST ---
+  function formatToAEST(isoString) {
+    if (!isoString) return "N/A";
+    try {
+      const date = new Date(isoString);
+      // Force conversion to AEST (UTC+10, no daylight saving here)
+      const aestDate = new Date(date.toLocaleString("en-US", { timeZone: "Australia/Brisbane" }));
+      const day = String(aestDate.getDate()).padStart(2, "0");
+      const month = String(aestDate.getMonth() + 1).padStart(2, "0");
+      const year = aestDate.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch {
+      return "N/A";
+    }
+  }
+
   // --- Data Rows ---
   const parks = __getParkData();
   const keys = Object.keys(parks);
@@ -796,12 +812,12 @@ function exportPDF() {
     doc.text("No data available.", 20, y);
   } else {
     keys.forEach(id => {
-      const date = parks[id].time ? parks[id].time : "N/A";
+      const dateFormatted = formatToAEST(parks[id].time);
       const note = parks[id].note || "";
 
       doc.text(id, 20, y);
-      doc.text(date, 80, y);
-      doc.text(note, 140, y, { maxWidth: 60 }); // wrap long notes
+      doc.text(dateFormatted, 80, y);
+      doc.text(note, 140, y, { maxWidth: 60 });
 
       y += 7;
       if (y > 280) { // page overflow
