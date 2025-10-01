@@ -806,18 +806,53 @@ function clearUserData() {
 
 // Show parks completed today
 function showToday(data) {
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  let completedToday = [];
-
-  Object.keys(data).forEach(id => {
-    if (data[id].done && data[id].time && data[id].time.startsWith(today)) {
-      completedToday.push(id);
+    if (!data || !data.features) {
+        alert("No park data available");
+        return;
     }
-  });
 
-  if (completedToday.length === 0) {
-    alert("No parks completed today.");
-  } else {
-    alert("Completed Today:\n" + completedToday.join(", "));
-  }
+    // Example: filter features by a 'CompletedDate' property
+    const today = new Date().toISOString().split("T")[0];
+    const completedToday = data.features.filter(f => {
+        return f.properties && f.properties.CompletedDate === today;
+    });
+
+    if (completedToday.length === 0) {
+        alert("No parks completed today.");
+        return;
+    }
+
+    // Zoom to the first one (or could fit bounds of all)
+    const coords = completedToday[0].geometry.coordinates;
+    const latlng = [coords[1], coords[0]]; // GeoJSON [lng, lat]
+    map.setView(latlng, 16);
+
+    alert(completedToday.length + " park(s) completed today.");
 }
+
+// Export data to PDF
+function exportPDF(data) {
+    if (!data || !data.features) {
+        alert("No park data available to export");
+        return;
+    }
+
+    // Use jsPDF (ensure you have <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>)
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    doc.setFontSize(14);
+    doc.text("Parks Report", 10, 10);
+
+    let y = 20;
+    data.features.forEach((f, idx) => {
+        const name = f.properties.Name || `Park ${idx + 1}`;
+        doc.text(`${idx + 1}. ${name}`, 10, y);
+        y += 8;
+        if (y > 280) { // new page if overflow
+            doc.addPage();
+            y = 20;
+        }
+    });
+
+    doc.save("parks_report.pdf");
