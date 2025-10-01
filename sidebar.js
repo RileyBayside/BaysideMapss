@@ -1,4 +1,4 @@
-
+  
 (function() {
   const ADMIN_PASSWORD = "Fishing101!";
   const SIDEBAR_COLLAPSED_KEY = "sidebarCollapsed";
@@ -772,62 +772,75 @@ function exportPDF() {
 
   const pageWidth = doc.internal.pageSize.getWidth();
 
-  // --- Title ---
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.text("Parks Report", pageWidth / 2, 20, { align: "center" });
+  // --- Add Logo ---
+  const img = new Image();
+  img.src = "logo.png"; // Ensure logo.png is in the same folder as index.html
+  img.onload = function () {
+    const imgWidth = 50;  // adjust size if needed
+    const imgHeight = 20;
+    const x = (pageWidth - imgWidth) / 2; // center horizontally
+    doc.addImage(img, "PNG", x, 10, imgWidth, imgHeight);
 
-  // --- Table Header ---
-  let y = 35;
-  doc.setFontSize(12);
-  doc.text("Park Number", 20, y);
-  doc.text("Date Completed", 80, y);
-  doc.text("Notes", 140, y);
+    // --- Title ---
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("Parks Report", pageWidth / 2, 40, { align: "center" });
 
-  y += 8;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
+    // --- Table Header ---
+    let y = 55;
+    const col1 = pageWidth * 0.2; // Park Number
+    const col2 = pageWidth * 0.45; // Date Completed
+    const col3 = pageWidth * 0.7; // Notes
 
-  // --- Helper for date formatting to AEST ---
-  function formatToAEST(isoString) {
-    if (!isoString) return "N/A";
-    try {
-      const date = new Date(isoString);
-      // Force conversion to AEST (UTC+10, no daylight saving here)
-      const aestDate = new Date(date.toLocaleString("en-US", { timeZone: "Australia/Brisbane" }));
-      const day = String(aestDate.getDate()).padStart(2, "0");
-      const month = String(aestDate.getMonth() + 1).padStart(2, "0");
-      const year = aestDate.getFullYear();
-      return `${day}/${month}/${year}`;
-    } catch {
-      return "N/A";
-    }
-  }
+    doc.setFontSize(12);
+    doc.text("Park Number", col1, y, { align: "center" });
+    doc.text("Date Completed", col2, y, { align: "center" });
+    doc.text("Notes", col3, y, { align: "center" });
 
-  // --- Data Rows ---
-  const parks = __getParkData();
-  const keys = Object.keys(parks);
+    y += 8;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
 
-  if (keys.length === 0) {
-    doc.text("No data available.", 20, y);
-  } else {
-    keys.forEach(id => {
-      const dateFormatted = formatToAEST(parks[id].time);
-      const note = parks[id].note || "";
-
-      doc.text(id, 20, y);
-      doc.text(dateFormatted, 80, y);
-      doc.text(note, 140, y, { maxWidth: 60 });
-
-      y += 7;
-      if (y > 280) { // page overflow
-        doc.addPage();
-        y = 20;
+    // --- Helper for date formatting to AEST ---
+    function formatToAEST(isoString) {
+      if (!isoString) return "N/A";
+      try {
+        const date = new Date(isoString);
+        const aestDate = new Date(date.toLocaleString("en-US", { timeZone: "Australia/Brisbane" }));
+        const day = String(aestDate.getDate()).padStart(2, "0");
+        const month = String(aestDate.getMonth() + 1).padStart(2, "0");
+        const year = aestDate.getFullYear();
+        return `${day}/${month}/${year}`;
+      } catch {
+        return "N/A";
       }
-    });
-  }
+    }
 
-  doc.save("parks_report.pdf");
+    // --- Data Rows ---
+    const parks = __getParkData();
+    const keys = Object.keys(parks);
+
+    if (keys.length === 0) {
+      doc.text("No data available.", pageWidth / 2, y, { align: "center" });
+    } else {
+      keys.forEach(id => {
+        const dateFormatted = formatToAEST(parks[id].time);
+        const note = parks[id].note || "";
+
+        doc.text(id, col1, y, { align: "center" });
+        doc.text(dateFormatted, col2, y, { align: "center" });
+        doc.text(note, col3, y, { maxWidth: 60, align: "center" });
+
+        y += 7;
+        if (y > 280) { // page overflow
+          doc.addPage();
+          y = 20;
+        }
+      });
+    }
+
+    doc.save("parks_report.pdf");
+  };
 }
 
 // Clear all user data
