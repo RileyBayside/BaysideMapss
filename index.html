@@ -89,32 +89,47 @@
 
     <!-- Portal links (hidden until login) -->
     <div class="portal-links" id="portal-links">
-      <h1>Maps Portal</h1>
+      <h2>Welcome, Riley!</h2>
       <a href="Parks.html">Parks</a>
       <a href="Firebreaks.html">Firebreaks</a>
     </div>
   </div>
 
-<script>
-  function login() {
-    const username = document.getElementById("username").value;
-    const pin = document.getElementById("pin").value;
-    const errorMsg = document.getElementById("error-msg");
+  <script>
+    function login() {
+      const username = document.getElementById("username").value;
+      const pin = document.getElementById("pin").value;
+      const errorMsg = document.getElementById("error-msg");
+      const portalLinks = document.getElementById("portal-links");
 
-    if (username === "Riley" && pin === "2455") {
-      // Set login flag
-      localStorage.setItem("loggedIn", "true");
-      // Redirect to portal
-      window.location.href = "Parks.html";
-    } else {
-      errorMsg.style.display = "block";
+      if (username === "Riley" && pin === "2455") {
+        // Set login flag
+        localStorage.setItem("loggedIn", "true");
+
+        // Hide login form
+        document.getElementById("username").style.display = "none";
+        document.getElementById("pin").style.display = "none";
+        document.querySelector("button").style.display = "none";
+        document.querySelector("h1").style.display = "none";
+        errorMsg.style.display = "none";
+
+        // Show portal choices
+        portalLinks.style.display = "block";
+      } else {
+        errorMsg.style.display = "block";
+      }
     }
-  }
-</script>
-</body>
-</html>
 
-    <a href="Firebreaks.html">Firebreaks</a>
-  </div>
+    // Auto-redirect if already logged in
+    window.onload = function() {
+      if (localStorage.getItem("loggedIn") === "true") {
+        document.getElementById("username").style.display = "none";
+        document.getElementById("pin").style.display = "none";
+        document.querySelector("button").style.display = "none";
+        document.querySelector("h1").style.display = "none";
+        document.getElementById("portal-links").style.display = "block";
+      }
+    }
+  </script>
 </body>
-</html>
+<
