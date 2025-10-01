@@ -1,21 +1,19 @@
-(function() {
+(function () {
   const ADMIN_PASSWORD = "Fishing101!";
-  const SIDEBAR_COLLAPSED_KEY = "sidebarCollapsed";
   const PARK_DATA_KEY = "parkData";
+  const SIDEBAR_COLLAPSED_KEY = "sidebarCollapsed";
 
-  // Detect which site (Parks vs ParksSnipping)
-  const currentPage = window.location.pathname.includes("ParksSnipping.html") 
-    ? "Snipping" 
+  // Detect which page we’re on (Parks vs ParksSnipping)
+  const currentPage = window.location.pathname.includes("ParksSnipping.html")
+    ? "Snipping"
     : "Parks";
 
-  // Load existing data
+  // Load saved data
   let parkData = JSON.parse(localStorage.getItem(PARK_DATA_KEY) || "{}");
-  let nameIndex = {}; // Maps MowingID -> Name
 
-  // --- ZONES ---
+  // --- ZONES (from your pasted lists) ---
   const zoneStrings = {
-    "Zone 1": 
-M0123
+    "Zone 1": `M0123
 M0427
 M0402
 M0136
@@ -156,8 +154,7 @@ M0153
 M0148
 M0161
 M0401`,
-    "Zone 2": 
-M0504
+    "Zone 2": `M0504
 M0442
 M0170
 M0480
@@ -239,8 +236,7 @@ M0452
 M0192
 M0044
 M0176`,
-    "Zone 3": 
-M0221
+    "Zone 3": `M0221
 M0250
 M0559
 M0606
@@ -334,9 +330,8 @@ M0780
 M0220
 M0858
 M0252
-M0796`
-    "Zone 4":
-M0710
+M0796`,
+    "Zone 4": `M0710
 M0700
 M0677
 M0297
@@ -515,8 +510,7 @@ M0817
 M0750
 M0724
 M0679`,
-    "Zone 5": 
-M0766
+    "Zone 5": `M0766
 M0790
 M0791
 M0321
@@ -541,20 +535,16 @@ M0753`
   };
 
   const zones = {};
-  for (const zone in zoneStrings) {
-    zones[zone] = zoneStrings[zone].split(/\s+/).filter(Boolean);
+  for (const z in zoneStrings) {
+    zones[z] = zoneStrings[z].split(/\s+/).filter(Boolean);
   }
 
-  // --- Save & Load Helpers ---
+  // Save helper
   function saveData() {
     localStorage.setItem(PARK_DATA_KEY, JSON.stringify(parkData));
   }
 
-  function __getParkData() {
-    try { return JSON.parse(localStorage.getItem(PARK_DATA_KEY) || '{}'); } catch(e) { return {}; }
-  }
-
-  // --- Sidebar Rendering ---
+  // Render Sidebar
   function renderSidebar() {
     const sidebar = document.getElementById("sidebar-content");
     if (!sidebar) return;
@@ -580,7 +570,7 @@ M0753`
         row.style.alignItems = "center";
         row.style.gap = "6px";
 
-        // ✅ Checkbox (independent per site)
+        // Checkbox (independent per page)
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         const tickField = currentPage === "Snipping" ? "doneSnipping" : "doneParks";
@@ -595,12 +585,10 @@ M0753`
         const label = document.createElement("span");
         label.className = "park-label";
         label.innerText = (idx + 1) + ". " + parkId;
-        label.onclick = () => zoomToPark(parkId);
-
         row.appendChild(checkbox);
         row.appendChild(label);
 
-        // 📝 Notes (shared)
+        // Notes (shared across pages)
         const note = document.createElement("input");
         note.type = "text";
         note.value = parkData[parkId]?.note || "";
@@ -621,35 +609,8 @@ M0753`
     });
   }
 
-  function zoomToPark(parkId) {
-    if (!window.map) return;
-    let done = false;
-    map.eachLayer(function(layer) {
-      if (done) return;
-      if (layer && typeof layer.eachLayer === "function") {
-        try {
-          layer.eachLayer(function(fl) {
-            if (done) return;
-            const f = fl.feature;
-            if (f && f.properties) {
-              const id = f.properties.MowingID || f.properties.UniqueID || f.properties.ID;
-              if (id === parkId) {
-                if (typeof fl.getBounds === "function") {
-                  map.fitBounds(fl.getBounds());
-                } else if (typeof fl.getLatLng === "function") {
-                  map.setView(fl.getLatLng(), 18);
-                }
-                done = true;
-              }
-            }
-          });
-        } catch(e) {}
-      }
-    });
-  }
-
-  // --- Admin Tools ---
-  window.adminLogin = function() {
+  // Admin Login
+  window.adminLogin = function () {
     const pwd = prompt("Enter admin password:");
     if (pwd === ADMIN_PASSWORD) {
       const tools = document.getElementById("admin-tools");
@@ -659,15 +620,15 @@ M0753`
     }
   };
 
-  // Sidebar toggle
-  window.toggleSidebar = function() {
+  // Sidebar toggle state
+  window.toggleSidebar = function () {
     const sb = document.getElementById("sidebar");
     sb.classList.toggle("collapsed");
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sb.classList.contains("collapsed"));
   };
 
   // Init
-  window.addEventListener("load", function() {
+  window.addEventListener("load", function () {
     const sb = document.getElementById("sidebar");
     if (sb && localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true") {
       sb.classList.add("collapsed");
@@ -677,6 +638,12 @@ M0753`
     }, 500);
   });
 
-  // Expose data getter for PDF etc
-  window.__getParkData = __getParkData;
+  // Expose getter for PDF
+  window.__getParkData = function () {
+    try {
+      return JSON.parse(localStorage.getItem(PARK_DATA_KEY) || "{}");
+    } catch (e) {
+      return {};
+    }
+  };
 })();
