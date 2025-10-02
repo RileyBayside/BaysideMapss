@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Enter PIN | Bayside Maps</title>
+  <script src="auth.js"></script>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #475569;
+      --ring: #d7dbe7;
+      --primary: #2563eb;
+      --primary-pressed: #1e4fc7;
+      --radius: 18px;
+      --shadow: 0 10px 30px rgba(2,6,23,0.08);
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji"; }
+    .wrap { min-height: 100dvh; display: grid; place-items: center; padding: 24px; }
+    .card {
+      width: 100%; max-width: 520px; background: var(--card); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 28px 28px 32px; text-align: center;
+    }
+    .logo { display:block; width: 220px; max-width: 70%; margin: 4px auto 16px; height: auto; }
+    h1 { margin: 4px 0 6px; font-size: 26px; letter-spacing: 0.2px; }
+    .sub { margin: 0 0 18px; color: var(--muted); font-size: 15px; }
+    label { display:block; text-align: left; font-weight: 600; margin: 14px 0 8px; }
+    .pin {
+      width: 100%; padding: 14px 16px; border: 1px solid var(--ring); border-radius: 14px;
+      font-size: 26px; letter-spacing: 10px; text-align: center; transition: box-shadow .15s ease, border-color .15s ease; outline: none; background: #fff;
+    }
+    .pin:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(37,99,235,0.12); }
+    .actions { margin-top: 16px; }
+    button {
+      width: 100%; padding: 13px 16px; border: 0; border-radius: 12px; font-weight: 700; cursor: pointer;
+      background: var(--primary); color: #fff; font-size: 16px; transition: background .15s ease, transform .02s ease;
+    }
+    button:active { background: var(--primary-pressed); transform: translateY(1px); }
+    .error { color:#b00020; margin-top:12px; display:none; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card" role="dialog" aria-labelledby="title" aria-describedby="subtitle">
+      <img class="logo" src="logo.png" alt="Bayside Slashing & Maintenance logo">
+      <h1 id="title">Enter PIN</h1>
+      <p id="subtitle" class="sub">Please enter the 4‑digit PIN to continue.</p>
+
+      <form id="loginForm" autocomplete="off" novalidate>
+        <label for="pin">PIN</label>
+        <input id="pin" class="pin" type="tel" inputmode="numeric" pattern="\d{4}" maxlength="4" minlength="4" placeholder="••••" aria-label="4 digit PIN" autofocus />
+        <div class="actions">
+          <button type="submit">Continue</button>
+        </div>
+        <div class="error" id="err" role="alert">Incorrect PIN. Please try again.</div>
+      </form>
+    </section>
+  </main>
+
+  <script>
+    (function(){
+      const form = document.getElementById("loginForm");
+      const err = document.getElementById("err");
+      const input = document.getElementById("pin");
+      input.addEventListener("input", ()=>{ input.value = input.value.replace(/\D/g, '').slice(0,4); });
+      form.addEventListener("submit", function(e){
+        e.preventDefault();
+        err.style.display = "none";
+        const val = input.value;
+        if (val === (window.__auth && window.__auth.PIN)) {
+          window.__auth.setAuthed();
+          const params = new URLSearchParams(window.location.search);
+          const next = params.get("next") || "index.html";
+          window.location.replace(next);
+        } else {
+          err.style.display = "block";
+          input.select();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
