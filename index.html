@@ -24,7 +24,7 @@
       box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     }
     img.logo {
-      max-width: 200px;
+      max-width: 280px;
       margin-bottom: 20px;
     }
     h1 {
@@ -44,44 +44,15 @@
     a:hover {
       background: #005fa3;
     }
-    button {
-      margin-top: 20px;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 6px;
-      background: #dc3545;
-      color: white;
-      font-size: 14px;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #b02a37;
-    }
   </style>
-  <script>
-    // Check login status
-    if (localStorage.getItem("loggedIn") !== "true") {
-      window.location.href = "login.html";
-    }
-
-    function logout() {
-      localStorage.removeItem("loggedIn");
-      window.location.href = "login.html";
-    }
-  </script>
 </head>
 <body>
   <div class="container">
     <img src="logo.png" alt="Bayside Logo" class="logo">
-    <h1>Welcome to the Maps Portal</h1>
-    
-    <!-- Portal Links -->
+    <h1>Maps Portal</h1>
     <a href="Parks.html">Parks</a>
-    <a href="Firebreaks.html">Firebreaks</a>
     <a href="ParksSnipping.html">Parks Snipping</a>
-    
-    <br>
-    <button onclick="logout()">Logout</button>
+    <a href="Firebreaks.html">Firebreaks</a>
   </div>
 </body>
 </html>
