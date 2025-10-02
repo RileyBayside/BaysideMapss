@@ -771,77 +771,77 @@ function exportPDF() {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
 
-  // --- Add Logo ---
-  const img = new Image();
-  img.src = "logo.png"; // Ensure logo.png is in the same folder as index.html
-  img.onload = function () {
-    const imgWidth = 50;
-    const imgHeight = 20;
-    const x = (pageWidth - imgWidth) / 2;
-    doc.addImage(img, "PNG", x, 10, imgWidth, imgHeight);
+  // --- Add Logo (synchronously, requires logo.png in root) ---
+  try {
+    const img = new Image();
+    img.src = "logo.png";
+    doc.addImage(img, "PNG", (pageWidth - 50) / 2, 10, 50, 20);
+  } catch (e) {
+    console.warn("Logo not found or could not be loaded.");
+  }
 
-    // --- Title ---
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.text("Parks Report", pageWidth / 2, 40, { align: "center" });
+  // --- Title ---
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text("Parks Report", pageWidth / 2, 40, { align: "center" });
 
-    let y = 55;
+  let y = 55;
 
-    // Date formatting helper (AEST)
-    function formatToAEST(isoString) {
-      if (!isoString) return "N/A";
-      try {
-        const date = new Date(isoString);
-        const aestDate = new Date(date.toLocaleString("en-US", { timeZone: "Australia/Brisbane" }));
-        const day = String(aestDate.getDate()).padStart(2, "0");
-        const month = String(aestDate.getMonth() + 1).padStart(2, "0");
-        const year = aestDate.getFullYear();
-        return `${day}/${month}/${year}`;
-      } catch {
-        return "N/A";
-      }
+  // Date formatting helper (AEST)
+  function formatToAEST(isoString) {
+    if (!isoString) return "N/A";
+    try {
+      const date = new Date(isoString);
+      const aestDate = new Date(date.toLocaleString("en-US", { timeZone: "Australia/Brisbane" }));
+      const day = String(aestDate.getDate()).padStart(2, "0");
+      const month = String(aestDate.getMonth() + 1).padStart(2, "0");
+      const year = aestDate.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch {
+      return "N/A";
     }
+  }
 
-    const parks = __getParkData();
+  const parks = __getParkData();
 
-    // Loop through Zones
-    Object.keys(zones).forEach(zone => {
-      const rows = [];
-      zones[zone].forEach(id => {
-        if (parks[id] && parks[id].done) {
-          rows.push([id, formatToAEST(parks[id].time), parks[id].note || ""]);
-        }
-      });
-
-      if (rows.length > 0) {
-        // Zone header
-        doc.setFontSize(14);
-        doc.text(zone, 20, y);
-        y += 6;
-
-        // Draw table for this zone
-        doc.autoTable({
-          head: [["Park Number", "Date Completed", "Notes"]],
-          body: rows,
-          startY: y,
-          theme: "grid",
-          styles: { fontSize: 10, cellPadding: 2 },
-          headStyles: { fillColor: [220, 220, 220] },
-          columnStyles: {
-            0: { halign: "center" },
-            1: { halign: "center" },
-            2: { halign: "left" }
-          },
-          margin: { left: 15, right: 15 },
-        });
-
-        y = doc.lastAutoTable.finalY + 10;
+  // Loop through Zones
+  Object.keys(zones).forEach(zone => {
+    const rows = [];
+    zones[zone].forEach(id => {
+      if (parks[id] && parks[id].done) {
+        rows.push([id, formatToAEST(parks[id].time), parks[id].note || ""]);
       }
     });
 
-    doc.save("parks_report.pdf");
-  };
+    if (rows.length > 0) {
+      // Zone header
+      doc.setFontSize(14);
+      doc.text(zone, 20, y);
+      y += 6;
+
+      // Draw table for this zone
+      doc.autoTable({
+        head: [["Park Number", "Date Completed", "Notes"]],
+        body: rows,
+        startY: y,
+        theme: "grid",
+        styles: { fontSize: 10, cellPadding: 2 },
+        headStyles: { fillColor: [220, 220, 220] },
+        columnStyles: {
+          0: { halign: "center" },
+          1: { halign: "center" },
+          2: { halign: "left" }
+        },
+        margin: { left: 15, right: 15 },
+      });
+
+      y = doc.lastAutoTable.finalY + 10;
+    }
+  });
+
+  doc.save("parks_report.pdf");
 }
+
 
 // Clear all user data
 function clearUserData() {
