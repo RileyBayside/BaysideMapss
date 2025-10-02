@@ -1,4 +1,3 @@
-
 (function() {
   const ADMIN_PASSWORD = "Fishing101!";
   const SIDEBAR_COLLAPSED_KEY = "sidebarCollapsed";
@@ -770,76 +769,79 @@ function exportPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
 
-  // Title
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(18);
-  doc.text("Parks Report", 105, 20, { align: "center" });
+  const pageWidth = doc.internal.pageSize.getWidth();
 
-  // Column headers (SWAPPED ORDER: Date first, Park Number second, Notes third)
-  const colDateX = 20;
-  const colParkX = 80;
-  const colNotesX = 140;
+  // --- Add Logo ---
+  const img = new Image();
+  img.src = "logo.png"; // Ensure logo.png is in the same folder as index.html
+  img.onload = function () {
+    const imgWidth = 50;  // adjust size if needed
+    const imgHeight = 20;
+    const x = (pageWidth - imgWidth) / 2; // center horizontally
+    doc.addImage(img, "PNG", x, 10, imgWidth, imgHeight);
 
-  let y = 35;
-  doc.setFontSize(12);
-  doc.text("Date Completed", colDateX, y);
-  doc.text("Park Number", colParkX, y);
-  doc.text("Notes", colNotesX, y);
+    // --- Title ---
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("Parks Report", pageWidth / 2, 40, { align: "center" });
 
-  y += 8;
-  doc.setLineWidth(0.2);
-  doc.line(15, y, 195, y);
-  y += 6;
+    // --- Table Header ---
+    let y = 55;
+    const col1 = pageWidth * 0.2; // (LEFT)  now Date Completed
+    const col2 = pageWidth * 0.45; // (MIDDLE) now Park Number
+    const col3 = pageWidth * 0.7; // Notes
 
-  // Helper for AEST date in DD/MM/YYYY from stored time
-  function formatAESTDate(iso) {
-    if (!iso) return "";
-    try {
-      const dt = new Date(iso);
-      // Format in Australia/Brisbane (AEST/AEDT as applicable) as DD/MM/YYYY
-      const fmt = new Intl.DateTimeFormat("en-AU", {
-        timeZone: "Australia/Brisbane",
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric"
-      });
-      return fmt.format(dt);
-    } catch (e) {
-      return "";
-    }
-  }
-
-  const data = __getParkData();
-  const keys = Object.keys(data);
-
-  if (keys.length === 0) {
     doc.setFontSize(12);
-    doc.text("No data available.", 20, y);
-  } else {
+    // SWAPPED LABELS ONLY
+    doc.text("Date Completed", col1, y, { align: "center" });
+    doc.text("Park Number",    col2, y, { align: "center" });
+    doc.text("Notes",          col3, y, { align: "center" });
+
+    y += 8;
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    keys.forEach((id) => {
-      const note = data[id].note || "";
-      // Prefer explicit 'date' if present; otherwise derive from ISO timestamp 'time'
-      const dateStr = data[id].date || formatAESTDate(data[id].time);
 
-      // Write in swapped order
-      doc.text(dateStr || "", colDateX, y);
-      doc.text(id, colParkX, y);
-      if (note) {
-        const wrapped = doc.splitTextToSize(note, 60);
-        doc.text(wrapped, colNotesX, y);
+    // --- Helper for date formatting to AEST ---
+    function formatToAEST(isoString) {
+      if (!isoString) return "N/A";
+      try {
+        const date = new Date(isoString);
+        const aestDate = new Date(date.toLocaleString("en-US", { timeZone: "Australia/Brisbane" }));
+        const day = String(aestDate.getDate()).padStart(2, "0");
+        const month = String(aestDate.getMonth() + 1).padStart(2, "0");
+        const year = aestDate.getFullYear();
+        return `${day}/${month}/${year}`;
+      } catch {
+        return "N/A";
       }
+    }
 
-      // Row advance
-      y += 7;
-      if (y > 280) {
-        doc.addPage();
-        y = 20;
-      }
-    });
-  }
+    // --- Data Rows ---
+    const parks = __getParkData();
+    const keys = Object.keys(parks);
 
-  doc.save("parks_report.pdf");
+    if (keys.length === 0) {
+      doc.text("No data available.", pageWidth / 2, y, { align: "center" });
+    } else {
+      keys.forEach(id => {
+        const dateFormatted = formatToAEST(parks[id].time);
+        const note = parks[id].note || "";
+
+        // SWAPPED COLUMNS ONLY
+        doc.text(dateFormatted, col1, y, { align: "center" }); // Date on left
+        doc.text(id,            col2, y, { align: "center" }); // Park in middle
+        doc.text(note,          col3, y, { maxWidth: 60, align: "center" });
+
+        y += 7;
+        if (y > 280) { // page overflow
+          doc.addPage();
+          y = 20;
+        }
+      });
+    }
+
+    doc.save("parks_report.pdf");
+  };
 }
 
 // Clear all user data
