@@ -805,50 +805,50 @@ function exportPDF() {
       }
     }
 
-    const parks = __getParkData();
-    const zoneNames = Object.keys(zones);
+  const parks = __getParkData();
+const zoneNames = Object.keys(window.zones || {}); // use global zones
 
-    if (Object.keys(parks).length === 0) {
-      doc.text("No data available.", pageWidth / 2, y, { align: "center" });
-    } else {
-      zoneNames.forEach(zone => {
-        const zoneParks = zones[zone].filter(id => parks[id]);
-        if (zoneParks.length === 0) return;
+if (Object.keys(parks).length === 0) {
+  doc.text("No data available.", pageWidth / 2, y, { align: "center" });
+} else {
+  zoneNames.forEach(zone => {
+    const zoneParks = window.zones[zone].filter(id => parks[id]);
+    if (zoneParks.length === 0) return;
 
-        // --- Zone Header ---
-        doc.setFontSize(14);
-        doc.setFont("helvetica", "bold");
-        y += 10;
-        doc.text(zone, 15, y);
+    // --- Zone Header ---
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    y += 10;
+    doc.text(zone, 15, y);
 
-        // --- Table Header ---
-        y += 7;
-        doc.setFontSize(11);
-        doc.text("Park Number", col1, y, { align: "center" });
-        doc.text("Date Completed", col2, y, { align: "center" });
-        doc.text("Notes", col3, y, { align: "center" });
+    // --- Table Header ---
+    y += 7;
+    doc.setFontSize(11);
+    doc.text("Park Number", col1, y, { align: "center" });
+    doc.text("Date Completed", col2, y, { align: "center" });
+    doc.text("Notes", col3, y, { align: "center" });
 
-        // --- Rows ---
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "normal");
-        y += 8;
+    // --- Rows ---
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    y += 8;
 
-        zoneParks.forEach(id => {
-          const dateFormatted = formatToAEST(parks[id].time);
-          const note = parks[id].note || "";
+    zoneParks.forEach(id => {
+      const dateFormatted = formatToAEST(parks[id].time);
+      const note = parks[id].note || "";
 
-          doc.text(id, col1, y, { align: "center" });
-          doc.text(dateFormatted, col2, y, { align: "center" });
-          doc.text(note, col3, y, { maxWidth: 60, align: "center" });
+      doc.text(id, col1, y, { align: "center" });
+      doc.text(dateFormatted, col2, y, { align: "center" });
+      doc.text(note, col3, y, { maxWidth: 60, align: "center" });
 
-          y += 7;
-          if (y > 280) {
-            doc.addPage();
-            y = 20;
-          }
-        });
-      });
-    }
+      y += 7;
+      if (y > 280) {
+        doc.addPage();
+        y = 20;
+      }
+    });
+  });
+}
 
     doc.save("parks_report.pdf");
   };
