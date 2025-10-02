@@ -765,20 +765,19 @@ window.addEventListener("load", function () {
 // Admin Utility Functions
 // ---------------------------
 
-// Export sidebar data to a real PDF
+// Export sidebar data to a PDF, grouped by Zones
 function exportPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
-
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // --- Add Logo ---
   const img = new Image();
   img.src = "logo.png"; // Ensure logo.png is in the same folder as index.html
   img.onload = function () {
-    const imgWidth = 50;  // adjust size if needed
+    const imgWidth = 50;
     const imgHeight = 20;
-    const x = (pageWidth - imgWidth) / 2; // center horizontally
+    const x = (pageWidth - imgWidth) / 2;
     doc.addImage(img, "PNG", x, 10, imgWidth, imgHeight);
 
     // --- Title ---
@@ -786,22 +785,9 @@ function exportPDF() {
     doc.setFontSize(16);
     doc.text("Parks Report", pageWidth / 2, 40, { align: "center" });
 
-    // --- Table Header ---
     let y = 55;
-    const col1 = pageWidth * 0.2; // Park Number
-    const col2 = pageWidth * 0.45; // Date Completed
-    const col3 = pageWidth * 0.7; // Notes
 
-    doc.setFontSize(12);
-    doc.text("Park Number", col1, y, { align: "center" });
-    doc.text("Date Completed", col2, y, { align: "center" });
-    doc.text("Notes", col3, y, { align: "center" });
-
-    y += 8;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-
-    // --- Helper for date formatting to AEST ---
+    // Date formatting helper (AEST)
     function formatToAEST(isoString) {
       if (!isoString) return "N/A";
       try {
@@ -816,28 +802,42 @@ function exportPDF() {
       }
     }
 
-    // --- Data Rows ---
     const parks = __getParkData();
-    const keys = Object.keys(parks);
 
-    if (keys.length === 0) {
-      doc.text("No data available.", pageWidth / 2, y, { align: "center" });
-    } else {
-      keys.forEach(id => {
-        const dateFormatted = formatToAEST(parks[id].time);
-        const note = parks[id].note || "";
-
-        doc.text(id, col1, y, { align: "center" });
-        doc.text(dateFormatted, col2, y, { align: "center" });
-        doc.text(note, col3, y, { maxWidth: 60, align: "center" });
-
-        y += 7;
-        if (y > 280) { // page overflow
-          doc.addPage();
-          y = 20;
+    // Loop through Zones
+    Object.keys(zones).forEach(zone => {
+      const rows = [];
+      zones[zone].forEach(id => {
+        if (parks[id] && parks[id].done) {
+          rows.push([id, formatToAEST(parks[id].time), parks[id].note || ""]);
         }
       });
-    }
+
+      if (rows.length > 0) {
+        // Zone header
+        doc.setFontSize(14);
+        doc.text(zone, 20, y);
+        y += 6;
+
+        // Draw table for this zone
+        doc.autoTable({
+          head: [["Park Number", "Date Completed", "Notes"]],
+          body: rows,
+          startY: y,
+          theme: "grid",
+          styles: { fontSize: 10, cellPadding: 2 },
+          headStyles: { fillColor: [220, 220, 220] },
+          columnStyles: {
+            0: { halign: "center" },
+            1: { halign: "center" },
+            2: { halign: "left" }
+          },
+          margin: { left: 15, right: 15 },
+        });
+
+        y = doc.lastAutoTable.finalY + 10;
+      }
+    });
 
     doc.save("parks_report.pdf");
   };
