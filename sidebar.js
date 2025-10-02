@@ -787,16 +787,21 @@ function exportPDF() {
 
     let y = 55;
 
-    // --- Helper for date formatting ---
+    // Column positions
+    const col1 = pageWidth * 0.2; // Park Number
+    const col2 = pageWidth * 0.45; // Date Completed
+    const col3 = pageWidth * 0.7; // Notes
+
+    // Helper: format ISO to dd/mm/yyyy AEST
     function formatToAEST(isoString) {
       if (!isoString) return "N/A";
       try {
         const date = new Date(isoString);
         const aestDate = new Date(date.toLocaleString("en-US", { timeZone: "Australia/Brisbane" }));
-        const day = String(aestDate.getDate()).padStart(2, "0");
-        const month = String(aestDate.getMonth() + 1).padStart(2, "0");
-        const year = aestDate.getFullYear();
-        return `${day}/${month}/${year}`;
+        const d = String(aestDate.getDate()).padStart(2, "0");
+        const m = String(aestDate.getMonth() + 1).padStart(2, "0");
+        const yyy = aestDate.getFullYear();
+        return `${d}/${m}/${yyy}`;
       } catch {
         return "N/A";
       }
@@ -804,30 +809,24 @@ function exportPDF() {
 
     const parks = __getParkData();
 
-    // --- Column positions ---
-    const col1 = pageWidth * 0.2; 
-    const col2 = pageWidth * 0.45; 
-    const col3 = pageWidth * 0.7; 
-
-    // --- Loop Zones ---
+    // Loop through each zone
     Object.keys(zones).forEach(zone => {
-      // Zone Header
+      // Zone header
       doc.setFont("helvetica", "bold");
       doc.setFontSize(14);
       doc.text(zone, pageWidth / 2, y, { align: "center" });
       y += 10;
 
-      // Table Header
+      // Table header for this zone
       doc.setFontSize(12);
       doc.text("Park Number", col1, y, { align: "center" });
       doc.text("Date Completed", col2, y, { align: "center" });
       doc.text("Notes", col3, y, { align: "center" });
       y += 8;
 
+      // Table rows
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
-
-      // Parks in this Zone
       zones[zone].forEach(parkId => {
         const data = parks[parkId] || {};
         const dateFormatted = formatToAEST(data.time);
@@ -835,7 +834,7 @@ function exportPDF() {
 
         doc.text(parkId, col1, y, { align: "center" });
         doc.text(dateFormatted, col2, y, { align: "center" });
-        doc.text(note, col3, { maxWidth: 60, align: "center" , baseline: "top", lineHeightFactor: 1.2, y });
+        doc.text(note, col3, { maxWidth: 60, align: "center" });
 
         y += 7;
         if (y > 280) { // page overflow
@@ -844,7 +843,7 @@ function exportPDF() {
         }
       });
 
-      y += 10; // gap between zones
+      y += 10; // space between zones
     });
 
     doc.save("parks_report.pdf");
