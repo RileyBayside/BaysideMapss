@@ -529,6 +529,8 @@ M0753`
 
   // Convert to arrays
   const zones = Object.fromEntries(Object.entries(zoneStrings).map(([k,v]) => [k, v.trim().split(/\s+/)]));
+}
+window.zones = zones;
 
   // Storage
   let parkData = JSON.parse(localStorage.getItem(PARK_DATA_KEY) || "{}");
