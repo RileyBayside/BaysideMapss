@@ -765,20 +765,19 @@ window.addEventListener("load", function () {
 // Admin Utility Functions
 // ---------------------------
 
-// Export sidebar data to a real PDF
+// Export sidebar data to a PDF grouped by Zone
 function exportPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
-
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // --- Add Logo ---
   const img = new Image();
-  img.src = "logo.png"; // Ensure logo.png is in the same folder as index.html
+  img.src = "logo.png"; 
   img.onload = function () {
-    const imgWidth = 50;  // adjust size if needed
+    const imgWidth = 50;
     const imgHeight = 20;
-    const x = (pageWidth - imgWidth) / 2; // center horizontally
+    const x = (pageWidth - imgWidth) / 2;
     doc.addImage(img, "PNG", x, 10, imgWidth, imgHeight);
 
     // --- Title ---
@@ -786,56 +785,68 @@ function exportPDF() {
     doc.setFontSize(16);
     doc.text("Parks Report", pageWidth / 2, 40, { align: "center" });
 
-    // --- Table Header ---
     let y = 55;
-    const col1 = pageWidth * 0.2; // Park Number
-    const col2 = pageWidth * 0.45; // Date Completed
-    const col3 = pageWidth * 0.7; // Notes
+    const col1 = pageWidth * 0.2; 
+    const col2 = pageWidth * 0.45; 
+    const col3 = pageWidth * 0.7; 
 
-    doc.setFontSize(12);
-    doc.text("Park Number", col1, y, { align: "center" });
-    doc.text("Date Completed", col2, y, { align: "center" });
-    doc.text("Notes", col3, y, { align: "center" });
-
-    y += 8;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-
-    // --- Helper for date formatting to AEST ---
+    // --- Helper for date formatting ---
     function formatToAEST(isoString) {
       if (!isoString) return "N/A";
       try {
         const date = new Date(isoString);
         const aestDate = new Date(date.toLocaleString("en-US", { timeZone: "Australia/Brisbane" }));
-        const day = String(aestDate.getDate()).padStart(2, "0");
-        const month = String(aestDate.getMonth() + 1).padStart(2, "0");
-        const year = aestDate.getFullYear();
-        return `${day}/${month}/${year}`;
+        const d = String(aestDate.getDate()).padStart(2, "0");
+        const m = String(aestDate.getMonth() + 1).padStart(2, "0");
+        const y = aestDate.getFullYear();
+        return `${d}/${m}/${y}`;
       } catch {
         return "N/A";
       }
     }
 
-    // --- Data Rows ---
     const parks = __getParkData();
-    const keys = Object.keys(parks);
+    const zoneNames = Object.keys(zones);
 
-    if (keys.length === 0) {
+    if (Object.keys(parks).length === 0) {
       doc.text("No data available.", pageWidth / 2, y, { align: "center" });
     } else {
-      keys.forEach(id => {
-        const dateFormatted = formatToAEST(parks[id].time);
-        const note = parks[id].note || "";
+      zoneNames.forEach(zone => {
+        const zoneParks = zones[zone].filter(id => parks[id]);
+        if (zoneParks.length === 0) return;
 
-        doc.text(id, col1, y, { align: "center" });
-        doc.text(dateFormatted, col2, y, { align: "center" });
-        doc.text(note, col3, y, { maxWidth: 60, align: "center" });
+        // --- Zone Header ---
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        y += 10;
+        doc.text(zone, 15, y);
 
+        // --- Table Header ---
         y += 7;
-        if (y > 280) { // page overflow
-          doc.addPage();
-          y = 20;
-        }
+        doc.setFontSize(11);
+        doc.text("Park Number", col1, y, { align: "center" });
+        doc.text("Date Completed", col2, y, { align: "center" });
+        doc.text("Notes", col3, y, { align: "center" });
+
+        // --- Rows ---
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        y += 8;
+
+        zoneParks.forEach(id => {
+          const dateFormatted = formatToAEST(parks[id].time);
+          const note = parks[id].note || "";
+
+          doc.text(id, col1, y, { align: "center" });
+          doc.text(dateFormatted, col2, y, { align: "center" });
+          doc.text(note, col3, y, { maxWidth: 60, align: "center" });
+
+          y += 7;
+          if (y > 280) {
+            doc.addPage();
+            y = 20;
+          }
+        });
       });
     }
 
