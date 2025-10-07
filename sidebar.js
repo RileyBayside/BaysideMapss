@@ -990,7 +990,6 @@ function exportPDFBayside() {
   };
 }
 
-
 function adminLogin(){
   const pwd = prompt('Enter admin password:');
   if (pwd === ADMIN_PASSWORD) {
