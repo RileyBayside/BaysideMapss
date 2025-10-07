@@ -6,6 +6,7 @@
   <title>Bayside — Dashboard</title>
   <link rel="icon" href="logo.png">
   <link rel="stylesheet" href="index.css">
+
   <script src="auth.js"></script>
   <script>window.BaysideAuth && BaysideAuth.enforceGate && BaysideAuth.enforceGate();</script>
 
@@ -13,7 +14,13 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-functions-compat.js"></script>
   <script src="firebase-init.js"></script>
+
+  <!-- App Check -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-check-compat.js"></script>
+  <script src="appcheck.js"></script>
+
   <script src="data.js"></script>
 </head>
 <body>
@@ -47,41 +54,30 @@
   </div>
 
   <script>
-    // --- Logout: Firebase signOut + clear local gate + redirect to login ---
+    // Logout
     document.getElementById('logoutBtn').addEventListener('click', async () => {
+      try { await firebase.auth().signOut().catch(()=>{}); } catch(_) {}
       try {
-        // Firebase sign out if initialized
-        if (firebase && firebase.auth) {
-          await firebase.auth().signOut().catch(()=>{});
-        }
-      } catch (_) {}
-      try {
-        // Clear your local auth token (if your helper exposes a method, use it; otherwise remove the key)
-        if (window.BaysideAuth && BaysideAuth.clearAuth) {
-          BaysideAuth.clearAuth();
-        } else {
-          localStorage.removeItem('bayside.auth');
-        }
-      } catch (_) {}
-      // Finally, go to login
+        if (window.BaysideAuth && BaysideAuth.clearAuth) BaysideAuth.clearAuth();
+        else localStorage.removeItem('bayside.auth');
+      } catch(_) {}
       window.location.replace('login.html');
     });
 
     (async function () {
-      // Greeting
-      var name = (window.BaysideAuth && BaysideAuth.getUserName && BaysideAuth.getUserName()) || "Operator";
-      var who = document.getElementById("who"); if (who) who.textContent = name;
+      const name = (window.BaysideAuth && BaysideAuth.getUserName && BaysideAuth.getUserName()) || "Operator";
+      const who = document.getElementById("who"); if (who) who.textContent = name;
 
-      // Admin link visibility
       const role = await BaysideData.getMyRole();
       if (role === 'admin') document.getElementById('adminLink').style.display = 'inline-flex';
 
-      // Load assignments
       const u = await new Promise(res => firebase.auth().onAuthStateChanged(x => res(x)));
       if (!u) return;
+
       const items = await BaysideData.listAssignmentsFor(u.uid, true);
       const box = document.getElementById('assignments');
       if (!items.length) { box.innerHTML = '<div class="empty">No assigned work yet.</div>'; return; }
+
       box.innerHTML = items.map(it => `
         <div class="acard">
           <div class="row"><div><strong>Zone:</strong> ${it.zone || '-'}</div><div><strong>Status:</strong> ${it.status}</div></div>
@@ -93,6 +89,7 @@
           </div>
         </div>
       `).join('');
+
       box.querySelectorAll('button[data-id]').forEach(btn => {
         btn.addEventListener('click', async () => {
           const id = btn.getAttribute('data-id');
@@ -106,7 +103,7 @@
       });
     })();
 
-    // --- Set my display name (Auth + Firestore + DOM) ---
+    // Set my display name
     (function () {
       const btn = document.getElementById('setNameBtn');
       if (!btn) return;
