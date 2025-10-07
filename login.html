@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bayside Slashing — Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b1220;
+      --card: #ffffff;
+      --text: #0d1726;
+      --muted: #6b7280;
+      --primary: #0ea5e9;
+      --ring: rgba(14,165,233,0.35);
+      --radius: 1.25rem;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: radial-gradient(1200px 800px at 50% -10%, #0b5fa81a, transparent 60%), var(--bg);
+      display: grid;
+      place-items: center;
+      color: var(--text);
+    }
+    .wrap { width: min(92vw, 440px); }
+    .logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 18px;
+      user-select: none;
+    }
+    .logo img {
+      width: 52px;
+      height: 52px;
+      object-fit: contain;
+      border-radius: 12px;
+      background: #fff;
+      padding: 6px;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.15);
+    }
+    .logo h1 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: 0.4px;
+      font-weight: 700;
+      color: #e5f2ff;
+      text-shadow: 0 1px 0 rgba(0,0,0,0.15);
+    }
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 28px;
+      box-shadow: 0 20px 60px rgba(2, 6, 23, 0.35), 0 4px 16px rgba(2, 6, 23, 0.2);
+      border: 1px solid rgba(2,6,23,0.05);
+    }
+    .card h2 { margin: 0 0 6px; font-size: 22px; }
+    .card p.sub { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+    label { display: block; font-weight: 600; margin: 14px 0 8px; font-size: 14px; }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 16px;
+      transition: box-shadow .15s ease, border-color .15s ease;
+      outline: none;
+    }
+    input:focus { border-color: var(--primary); box-shadow: 0 0 0 5px var(--ring); }
+    .actions { margin-top: 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    button {
+      appearance: none; border: 0; background: var(--primary); color: white; font-weight: 700;
+      border-radius: 12px; padding: 12px 16px; font-size: 16px; cursor: pointer; width: 100%;
+      box-shadow: 0 10px 24px rgba(14,165,233,0.35);
+      transition: transform .06s ease, box-shadow .15s ease, filter .15s ease;
+    }
+    button:hover { filter: brightness(1.05); box-shadow: 0 16px 30px rgba(14,165,233,0.5); }
+    button:active { transform: translateY(1px); }
+    .error {
+      display: none; margin-top: 10px; background: #fee2e2; color: #7f1d1d;
+      border: 1px solid #fecaca; border-radius: 10px; padding: 10px 12px; font-size: 14px;
+    }
+    .footer { margin-top: 14px; color: #93a3b8; text-align: center; font-size: 12px; }
+  </style>
+  <script>
+    (function() {
+      try {
+        const raw = localStorage.getItem('bs_auth');
+        if (raw) {
+          const data = JSON.parse(raw);
+          if (data && data.exp && Date.now() < data.exp) {
+            const url = new URL(window.location.href);
+            const next = url.searchParams.get('next') || 'index.html';
+            window.location.replace(next);
+          }
+        }
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo">
+      <img src="logo.png" alt="Bayside Slashing logo" />
+      <h1>Bayside Slashing</h1>
+    </div>
+
+    <div class="card">
+      <h2>Welcome</h2>
+      <p class="sub">Please sign in to continue.</p>
+
+      <form id="loginForm" autocomplete="off">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" inputmode="text" placeholder="Enter username" required />
+
+        <label for="pin">PIN</label>
+        <input id="pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="4-digit PIN" maxlength="4" required />
+
+        <div class="actions">
+          <button type="submit" id="submitBtn">Sign in</button>
+        </div>
+
+        <div class="error" id="errorBox">Incorrect username or PIN. Please try again.</div>
+      </form>
+    </div>
+
+    <div class="footer">© Bayside Slashing</div>
+  </div>
+
+  <script src="auth.js"></script>
+  <script>
+    (function() {
+      const form = document.getElementById('loginForm');
+      const errorBox = document.getElementById('errorBox');
+
+      function authenticate(username, pin) {
+        const validUser = 'Riley';
+        const validPin = '2455';
+        const ok = (username || '').trim().toLowerCase() === validUser.toLowerCase()
+                  && (pin || '').trim() === validPin;
+        return ok;
+      }
+
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const u = document.getElementById('username').value;
+        const p = document.getElementById('pin').value;
+
+        if (authenticate(u, p)) { localStorage.setItem('bs_user', (u || '').trim());
+          window.BaysideAuth.setAuth(12);
+          const url = new URL(window.location.href);
+          const next = url.searchParams.get('next') || 'index.html';
+          window.location.replace(next);
+        } else {
+          errorBox.style.display = 'block';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
