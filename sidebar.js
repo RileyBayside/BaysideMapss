@@ -1,6 +1,7 @@
 
 (function() {
   const ADMIN_PASSWORD = "Fishing101!";
+  const ADMIN_PASSWORD = "Fishing101!";
   const SIDEBAR_COLLAPSED_KEY = "sidebarCollapsed";
   const PARK_DATA_KEY = "parkData";
   // Identify page for per-page checkbox storage
@@ -692,7 +693,12 @@ checkData[parkId].done = checkbox.checked;
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sb.classList.contains("collapsed"));
   };
 
-  window.addEventListener("load", function() {
+  window.addEventListener("load", function () {
+  try {
+    const box = document.getElementById("admin-tools");
+    if (box) box.style.display = (localStorage.getItem("bs_admin")==="true") ? "block" : "none";
+  } catch (e) {}
+
     const sb = document.getElementById("sidebar");
     if (sb && localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true") sb.classList.add("collapsed");
     // Build name index after map + layers load
@@ -983,4 +989,17 @@ function exportPDFBayside() {
 
     doc.save("parks_report_bayside.pdf");
   };
+}
+
+
+// Admin login toggles admin tools visibility
+function adminLogin() {
+  const pwd = prompt('Enter admin password:');
+  if (pwd === ADMIN_PASSWORD) {
+    localStorage.setItem('bs_admin', 'true');
+    const box = document.getElementById('admin-tools');
+    if (box) box.style.display = 'block';
+  } else {
+    alert('Wrong password!');
+  }
 }
