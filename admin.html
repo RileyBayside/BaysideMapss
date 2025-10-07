@@ -6,7 +6,6 @@
   <title>Bayside — Admin Dashboard</title>
   <link rel="icon" href="logo.png">
 
-  <!-- Minimal styles (compatible with your existing CSS) -->
   <style>
     :root{--card:#fff;--bg:#f6f7f9;--muted:#6b7280;--black:#0f172a}
     *{box-sizing:border-box}
@@ -28,7 +27,7 @@
     .toast .t.err{border-left-color:#ef4444}.toast .title{font-weight:800;margin-bottom:4px}.toast .sub{color:#6b7280;font-size:13px}
   </style>
 
-  <!-- Your auth gate (keep) -->
+  <!-- Auth gate (keep) -->
   <script src="auth.js"></script>
   <script>window.BaysideAuth && BaysideAuth.enforceGate && BaysideAuth.enforceGate();</script>
 
@@ -41,7 +40,7 @@
   <!-- Your Firebase config -->
   <script src="firebase-init.js"></script>
 
-  <!-- App Check SDK + bootstrap -->
+  <!-- App Check SDK + your bootstrap -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-check-compat.js"></script>
   <script src="appcheck.js"></script>
 
@@ -117,7 +116,7 @@
       if (role !== 'admin') { document.getElementById('roleGate').style.display = 'block'; return; }
       document.getElementById('app').style.display = 'block';
 
-      // Filter-only query (no composite index required) + client-side sort
+      // Filter-only query (no composite index needed) and client-side sort
       async function listOperatorsSafe() {
         const db = firebase.firestore();
         const snap = await db.collection('users').where('role', '==', 'operator').get();
@@ -156,7 +155,7 @@
         }
       });
 
-      // Callable function (set your region)
+      // Cloud Functions callable (set region to your deployed region)
       const FUNCTIONS_REGION = 'australia-southeast1';
       const createOp = firebase.app().functions(FUNCTIONS_REGION).httpsCallable('adminCreateOperator');
 
