@@ -26,6 +26,7 @@
       <div class="left">
         <div class="kicker">DASHBOARD</div>
         <h1>Welcome, <span id="who" class="name">Operator</span></h1>
+        <button id="setNameBtn" title="Update the name shown here and in admin lists">Set my display name</button>
         <p>Choose a workspace to get started, or view your assigned work below.</p>
         <div class="quick">
           <a href="ParksMowing.html">Parks Mowing</a>
@@ -70,6 +71,27 @@
             if (s === 'done') btn.closest('.acard').style.opacity = .6;
           }catch(e){ alert('Failed: ' + (e.message||e)); }
         });
+      });
+    })();
+    (function () {
+      const btn = document.getElementById('setNameBtn');
+      if (!btn) return;
+      btn.addEventListener('click', async () => {
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const u = auth.currentUser;
+        if (!u) { alert('Please sign in first.'); return; }
+        const current = u.displayName || (document.getElementById('who')?.textContent || '');
+        const name = (prompt('Enter your display name:', current) || '').trim();
+        if (!name) return;
+        try {
+          await u.updateProfile({ displayName: name });
+          await db.collection('users').doc(u.uid).set({ name }, { merge: true });
+          const who = document.getElementById('who'); if (who) who.textContent = name;
+          alert('Name updated. It will be used on future logins.');
+        } catch (err) {
+          alert('Could not update name: ' + (err.message || err));
+        }
       });
     })();
   </script>
