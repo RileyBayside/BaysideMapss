@@ -69,7 +69,11 @@
         document.getElementById(t.dataset.tab).classList.add('active');
       });
     });
-
+    } catch (err) {
+      console.log('Operator sign-in error:', err.code, err.message);
+      document.getElementById('opErr').textContent = (err.code || '') + ' ' + (err.message || 'Sign-in failed.');
+     }
+  
     const $ = (s) => document.querySelector(s);
     const auth = firebase.auth();
 
