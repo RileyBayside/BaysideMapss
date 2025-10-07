@@ -6,6 +6,7 @@
   <title>Bayside — Sign in</title>
   <link rel="icon" href="logo.png">
   <link rel="stylesheet" href="login.css">
+
   <script src="auth.js"></script>
 
   <!-- Firebase SDKs -->
@@ -13,6 +14,11 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-init.js"></script>
+
+  <!-- (Optional) App Check for consistency -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-check-compat.js"></script>
+  <script src="appcheck.js"></script>
+
   <script src="auth-bridge.js"></script>
 </head>
 <body>
@@ -28,7 +34,6 @@
         <div class="tab" data-tab="adminTab">Admin (Email + Password)</div>
       </div>
 
-      <!-- Operator: Username + Password (maps to username@bayside.local) -->
       <div id="opTab" class="panel active">
         <form id="opForm" autocomplete="on">
           <label for="opUser">Username</label>
@@ -44,7 +49,6 @@
         <div class="note">If you forget your password, ask an admin to reset it in Firebase.</div>
       </div>
 
-      <!-- Admin: Email + Password -->
       <div id="adminTab" class="panel">
         <form id="adminForm">
           <label for="adminEmail">Email</label>
@@ -60,7 +64,6 @@
   </div>
 
   <script>
-    // Tabs
     document.querySelectorAll('.tab').forEach((t) => {
       t.addEventListener('click', () => {
         document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
@@ -73,7 +76,7 @@
     const $ = (s) => document.querySelector(s);
     const auth = firebase.auth();
 
-    // OPERATOR SIGN-IN (username -> username@bayside.local)
+    // OPERATOR: username -> username@bayside.local
     $('#opForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       $('#opErr').textContent = '';
@@ -87,14 +90,12 @@
         const cred = await auth.signInWithEmailAndPassword(email, pass);
         await window.BaysideAuthBridge.onFirebaseLogin(cred.user);
       } catch (err) {
-        // >>> Added detailed operator catch block
         console.log('Operator sign-in error:', err.code, err.message);
         $('#opErr').textContent = (err.code || '') + ' ' + (err.message || 'Sign-in failed.');
-        // <<<
       }
     });
 
-    // ADMIN SIGN-IN (email + password) — unchanged
+    // ADMIN: email + password
     $('#adminForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       $('#adminErr').textContent = '';
@@ -104,7 +105,7 @@
         const cred = await auth.signInWithEmailAndPassword(email, pass);
         await window.BaysideAuthBridge.onFirebaseLogin(cred.user);
       } catch (err) {
-        $('#adminErr').textContent = err.message || 'Admin sign-in failed.';
+        $('#adminErr').textContent = (err.code || '') + ' ' + (err.message || 'Admin sign-in failed.');
       }
     });
 
