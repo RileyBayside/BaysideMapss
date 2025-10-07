@@ -33,6 +33,14 @@
     .muted{color:#6b7280}.alert{padding:14px;border:1px solid #f3d1d4;background:#fff7f7;border-radius:12px;color:#991b1b;margin-top:14px}
     .msg{margin-top:10px;font-size:14px}
     .ok{color:#065f46}.err{color:#991b1b}
+
+    /* Toast */
+    .toast{position:fixed;top:16px;right:16px;z-index:9999;display:none}
+    .toast .t{min-width:280px;max-width:420px;background:#ffffff;border:1px solid #e5e7eb;border-left:6px solid #10b981;border-radius:12px;
+      box-shadow:0 14px 32px rgba(0,0,0,.12);padding:12px 14px;margin-top:8px}
+    .toast .t.err{border-left-color:#ef4444}
+    .toast .title{font-weight:800;margin-bottom:4px}
+    .toast .sub{color:#6b7280;font-size:13px}
   </style>
 </head>
 <body>
@@ -42,6 +50,9 @@
     <div class="spacer"></div>
     <a class="link" href="index.html">Back to Dashboard</a>
   </div>
+
+  <!-- Toast container -->
+  <div id="toast" class="toast" aria-live="polite" aria-atomic="true"></div>
 
   <div class="container">
     <div id="roleGate" class="alert" style="display:none">You must be an admin to view this page.</div>
@@ -81,14 +92,23 @@
             <button class="btn" type="submit">Create Operator</button>
             <div id="co_msg" class="msg"></div>
           </form>
-          <p class="muted">This securely creates an Auth user <code>username@bayside.local</code> and a Firestore
-          <code>/users/{uid}</code> doc with <code>role: "operator"</code>. Only admins can call it.</p>
+          <p class="muted">Creates Auth user <code>username@bayside.local</code> and Firestore <code>/users/{uid}</code> with <code>role: "operator"</code>.</p>
         </div>
       </div>
     </div>
   </div>
 
   <script>
+    function toast(type, title, sub){
+      const box = document.getElementById('toast');
+      const t = document.createElement('div');
+      t.className = 't ' + (type === 'error' ? 'err' : '');
+      t.innerHTML = '<div class="title">'+ title +'</div>' + (sub ? '<div class="sub">'+ sub +'</div>' : '');
+      box.appendChild(t);
+      box.style.display = 'block';
+      setTimeout(() => { t.remove(); if (!box.children.length) box.style.display='none'; }, 4000);
+    }
+
     (async function(){
       const role = await BaysideData.getMyRole();
       if (role !== 'admin') { document.getElementById('roleGate').style.display = 'block'; return; }
@@ -113,14 +133,17 @@
         const msg = document.getElementById('msg'); msg.textContent = '';
         try{
           const id = await BaysideData.createAssignment({ assigneeUid: uid, assigneeName: name, zone, parksSpec, notes });
-          msg.className = 'msg ok'; msg.textContent = 'Assignment created: ' + id; e.target.reset();
+          msg.className = 'msg ok'; msg.textContent = 'Assignment created: ' + id;
+          toast('ok', 'Assignment created', 'ID: ' + id);
+          e.target.reset();
         }catch(err){
           msg.className = 'msg err'; msg.textContent = err.message || 'Failed to create assignment';
+          toast('error', 'Assignment failed', err.message || 'Unknown error');
         }
       });
 
       // Create operator via Callable Cloud Function
-      const functions = firebase.app().functions('australia-southeast1'); // set your region if needed
+      const functions = firebase.app().functions('australia-southeast1'); // adjust region if needed
       const createOp = functions.httpsCallable('adminCreateOperator');
 
       document.getElementById('createOpForm').addEventListener('submit', async (e) => {
@@ -132,10 +155,16 @@
         if (!/^[a-z0-9._-]{3,}$/.test(u)) { out.className='msg err'; out.textContent='Invalid username'; return; }
         try{
           const res = await createOp({ username: u, password: p, displayName: d || null });
-          out.className='msg ok'; out.textContent = 'Created operator: ' + res.data.email + ' (uid ' + res.data.uid + ')';
+          out.className='msg ok';
+          out.textContent = 'Created operator: ' + res.data.email + ' (uid ' + res.data.uid + ')';
+          toast('ok', 'Operator created', res.data.email + ' • uid ' + res.data.uid);
           e.target.reset();
         }catch(err){
-          out.className='msg err'; out.textContent = (err.message || 'Failed') + (err.details ? (' — ' + JSON.stringify(err.details)) : '');
+          out.className='msg err';
+          const message = (err.message || (err.data && err.data.message) || 'Failed');
+          out.textContent = message;
+          toast('error', 'Create operator failed', message);
+          console.error('Create operator error:', err);
         }
       });
     })();
