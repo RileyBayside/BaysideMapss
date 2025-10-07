@@ -1,25 +1,22 @@
-<!-- appcheck.js -->
-<script>
-// Firebase App Check (reCAPTCHA v3)
-// - Keep this file AFTER firebase-init.js and AFTER the App Check SDK.
-// - DEV ONLY: the debug token line prints once to your console so you can
-//   register it in Firebase Console → App Check → Web app → Debug tokens.
+// appcheck.js
+
+// DEV ONLY: prints a debug token once in the console.
+// Add it in Firebase Console → App Check → (your Web app) → Debug tokens → Add token.
+self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+
+// Your reCAPTCHA v3 App Check **site key**
+const APPCHECK_SITE_KEY = '6LfDGeIrAAAAAH8bc8-SZHLy1fNZNI6bvyoRO7LL';
 
 (function () {
-  if (!window.firebase || !firebase.app) {
-    console.error('[AppCheck] Firebase not initialized before appcheck.js');
-    return;
-  }
-
-  // Dev-only helper (remove for production if you prefer)
-  self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-
-  const SITE_KEY = '6LfDGeIrAAAAAH8bc8-SZHLy1fNZNI6bvyoRO7LL'; // your site key
   try {
-    firebase.appCheck().activate(SITE_KEY, true); // autoRefresh = true
+    if (!window.firebase || !firebase.app) {
+      console.error('[AppCheck] Firebase not initialized before appcheck.js');
+      return;
+    }
+    // Start App Check (autoRefresh = true)
+    firebase.appCheck().activate(APPCHECK_SITE_KEY, true);
     console.log('[AppCheck] reCAPTCHA v3 activated');
   } catch (e) {
     console.error('[AppCheck] activation error:', e);
   }
 })();
-</script>
