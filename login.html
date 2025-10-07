@@ -7,6 +7,8 @@
   <link rel="icon" href="logo.png">
   <link rel="stylesheet" href="login.css">
   <script src="auth.js"></script>
+
+  <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
@@ -17,77 +19,33 @@
   <div class="wrap">
     <div class="card">
       <img class="logo" src="logo.png" alt="Bayside Slashing logo">
-      <div class="center"><span class="badge">Secure Sign-in</span></div>
+      <span class="badge">Secure Sign-in</span>
       <h1>Welcome</h1>
-      <p class="sub">Choose how you’d like to sign in</p>
-      <div class="tabs">
-        <div class="tab active" data-tab="emailTab">Email</div>
-        <div class="tab" data-tab="userTab">Username</div>
+      <p class="sub">Sign in with your username and password</p>
+
+      <form id="userForm">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" placeholder="e.g. alex" required />
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" placeholder="Your password" required />
+
+        <button class="btn" type="submit">Sign in</button>
+        <div id="userErr" class="err"></div>
+      </form>
+
+      <div class="note">
+        Your username signs in as <code>username@bayside.local</code>.<br/>
+        Having trouble? Contact your admin.
       </div>
-      <div id="emailTab" class="panel active">
-        <form id="emailForm">
-          <label for="email">Work email</label>
-          <input id="email" name="email" type="email" placeholder="name@example.com" required />
-          <button class="btn" type="submit">Send magic link</button>
-          <div id="emailErr" class="err"></div>
-          <div class="hint">We’ll email you a sign-in link. Open it on this device to finish.</div>
-        </form>
-      </div>
-      <div id="userTab" class="panel">
-        <form id="userForm">
-          <label for="username">Username</label>
-          <input id="username" name="username" type="text" placeholder="e.g. alex" required />
-          <label for="password">Password</label>
-          <input id="password" name="password" type="password" placeholder="Your password" required />
-          <button class="btn" type="submit">Sign in</button>
-          <div id="userErr" class="err"></div>
-          <div class="hint">Your username signs in as <code>username@bayside.local</code> behind the scenes.</div>
-        </form>
-      </div>
-      <div class="note center">Having trouble? Contact your admin to reset access.</div>
     </div>
   </div>
+
   <script>
-    document.querySelectorAll('.tab').forEach((t) => {
-      t.addEventListener('click', () => {
-        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-        document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
-        t.classList.add('active');
-        document.getElementById(t.dataset.tab).classList.add('active');
-      });
-    });
     const qs = (s) => document.querySelector(s);
     const auth = firebase.auth();
-    const actionCodeSettings = {
-      url: window.location.origin + window.location.pathname.replace(/login\.html$/, 'index.html'),
-      handleCodeInApp: true
-    };
-    qs('#emailForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      qs('#emailErr').textContent = '';
-      const email = (qs('#email').value || '').trim();
-      try {
-        await auth.sendSignInLinkToEmail(email, actionCodeSettings);
-        window.localStorage.setItem('emailForSignIn', email);
-        qs('#emailErr').style.color = '#065f46';
-        qs('#emailErr').textContent = 'Magic link sent. Check your inbox.';
-      } catch (err) {
-        qs('#emailErr').style.color = '#b91c1c';
-        qs('#emailErr').textContent = err.message || 'Failed to send link.';
-      }
-    });
-    (async function () {
-      try {
-        if (auth.isSignInWithEmailLink(window.location.href)) {
-          let email = window.localStorage.getItem('emailForSignIn');
-          if (!email) email = prompt('Confirm your email for sign-in:');
-          const cred = await auth.signInWithEmailLink(email, window.location.href);
-          await window.BaysideAuthBridge.onFirebaseLogin(cred.user);
-        }
-      } catch (err) {
-        console.warn(err);
-      }
-    })();
+
+    // Username + password (username maps to username@bayside.local)
     qs('#userForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       qs('#userErr').textContent = '';
