@@ -1,14 +1,1 @@
-:root{--card:#fff;--bg:#f6f7f9;--muted:#6b7280;--black:#0f172a}
-*{box-sizing:border-box}
-html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--black)}
-.header{display:flex;align-items:center;gap:12px;padding:14px 22px;background:#fff;border-bottom:1px solid #e5e7eb}
-.header img{height:40px}.header .brand{font-weight:800}.header .spacer{flex:1}
-.header .link{text-decoration:none;color:#0f172a;border:1px solid #e5e7eb;padding:8px 12px;border-radius:10px}
-.container{max-width:1100px;margin:22px auto;padding:0 22px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
-.card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px;box-shadow:0 8px 24px rgba(0,0,0,.06)}
-label{display:block;font-weight:700;margin:10px 0 6px}
-input,select,textarea{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px}
-.btn{margin-top:12px;padding:10px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;cursor:pointer;font-weight:800}
-.muted{color:#6b7280}.alert{padding:14px;border:1px solid #f3d1d4;background:#fff7f7;border-radius:12px;color:#991b1b;margin-top:14px}
-.msg{margin-top:10px;font-size:14px}
+/* using inline styles in admin.html; keep your existing admin.css if you prefer */
