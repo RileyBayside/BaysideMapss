@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="index.css">
   <script src="auth.js"></script>
   <script>window.BaysideAuth && BaysideAuth.enforceGate && BaysideAuth.enforceGate();</script>
+
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
@@ -19,8 +21,10 @@
     <img src="logo.png" alt="Bayside Slashing & Maintenance">
     <div class="brand">Bayside Slashing &amp; Maintenance</div>
     <div class="spacer"></div>
-    <a id="adminLink" class="adminlink" href="admin.html" style="display:none">Admin Dashboard</a>
+    <a id="adminLink" class="btn" href="admin.html" style="display:none">Admin Dashboard</a>
+    <button id="logoutBtn" class="btn" title="Sign out and return to login">Logout</button>
   </div>
+
   <div class="container">
     <div class="hero">
       <div class="left">
@@ -35,16 +39,44 @@
         </div>
       </div>
     </div>
+
     <h2 class="section">Your Assigned Work</h2>
     <div id="assignments" class="assignments"></div>
+
     <div class="footer">© Bayside Slashing & Maintenance</div>
   </div>
+
   <script>
+    // --- Logout: Firebase signOut + clear local gate + redirect to login ---
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      try {
+        // Firebase sign out if initialized
+        if (firebase && firebase.auth) {
+          await firebase.auth().signOut().catch(()=>{});
+        }
+      } catch (_) {}
+      try {
+        // Clear your local auth token (if your helper exposes a method, use it; otherwise remove the key)
+        if (window.BaysideAuth && BaysideAuth.clearAuth) {
+          BaysideAuth.clearAuth();
+        } else {
+          localStorage.removeItem('bayside.auth');
+        }
+      } catch (_) {}
+      // Finally, go to login
+      window.location.replace('login.html');
+    });
+
     (async function () {
+      // Greeting
       var name = (window.BaysideAuth && BaysideAuth.getUserName && BaysideAuth.getUserName()) || "Operator";
       var who = document.getElementById("who"); if (who) who.textContent = name;
+
+      // Admin link visibility
       const role = await BaysideData.getMyRole();
       if (role === 'admin') document.getElementById('adminLink').style.display = 'inline-flex';
+
+      // Load assignments
       const u = await new Promise(res => firebase.auth().onAuthStateChanged(x => res(x)));
       if (!u) return;
       const items = await BaysideData.listAssignmentsFor(u.uid, true);
@@ -73,6 +105,8 @@
         });
       });
     })();
+
+    // --- Set my display name (Auth + Firestore + DOM) ---
     (function () {
       const btn = document.getElementById('setNameBtn');
       if (!btn) return;
