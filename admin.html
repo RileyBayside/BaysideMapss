@@ -5,25 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bayside — Admin Dashboard</title>
   <link rel="icon" href="logo.png">
-  <link rel="stylesheet" href="admin.css">
-  <script src="auth.js"></script>
-  <script>window.BaysideAuth && BaysideAuth.enforceGate && BaysideAuth.enforceGate();</script>
 
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-functions-compat.js"></script>
-  <script src="firebase-init.js"></script>
-  <script src="data.js"></script>
-
+  <!-- Minimal styles (works with or without your existing admin.css) -->
   <style>
     :root{--card:#fff;--bg:#f6f7f9;--muted:#6b7280;--black:#0f172a}
     *{box-sizing:border-box}
     html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--black)}
     .header{display:flex;align-items:center;gap:12px;padding:14px 22px;background:#fff;border-bottom:1px solid #e5e7eb}
     .header img{height:40px}.header .brand{font-weight:800}.header .spacer{flex:1}
-    .header .link{text-decoration:none;color:#0f172a;border:1px solid #e5e7eb;padding:8px 12px;border-radius:10px}
+    .header .link{text-decoration:none;color:#0f172a;border:1px solid #e5e7eb;padding:8px 12px;border-radius:10px;background:#fff}
     .container{max-width:1100px;margin:22px auto;padding:0 22px}
     .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
     .card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px;box-shadow:0 8px 24px rgba(0,0,0,.06)}
@@ -31,8 +21,7 @@
     input,select,textarea{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px}
     .btn{margin-top:12px;padding:10px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;cursor:pointer;font-weight:800}
     .muted{color:#6b7280}.alert{padding:14px;border:1px solid #f3d1d4;background:#fff7f7;border-radius:12px;color:#991b1b;margin-top:14px}
-    .msg{margin-top:10px;font-size:14px}
-    .ok{color:#065f46}.err{color:#991b1b}
+    .msg{margin-top:10px;font-size:14px}.ok{color:#065f46}.err{color:#991b1b}
 
     /* Toast */
     .toast{position:fixed;top:16px;right:16px;z-index:9999;display:none}
@@ -42,6 +31,31 @@
     .toast .title{font-weight:800;margin-bottom:4px}
     .toast .sub{color:#6b7280;font-size:13px}
   </style>
+
+  <script src="auth.js"></script>
+  <script>window.BaysideAuth && BaysideAuth.enforceGate && BaysideAuth.enforceGate();</script>
+
+  <!-- Firebase SDKs (Compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-functions-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-check-compat.js"></script>
+
+  <!-- Your Firebase config (keep your real values in this file) -->
+  <script src="firebase-init.js"></script>
+
+  <!-- App Check activation (IMPORTANT: replace the site key) -->
+  <script>
+    // Debug token helps while testing; remove or set via console variable in production
+    self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+
+    // Activate App Check for this page (autoRefresh true)
+    firebase.appCheck().activate('YOUR_RECAPTCHA_V3_SITE_KEY', true);
+  </script>
+
+  <!-- Your data helpers -->
+  <script src="data.js"></script>
 </head>
 <body>
   <div class="header">
@@ -66,7 +80,7 @@
 
         <div class="card">
           <h3>Create Assignment</h3>
-          <form id="assignForm">
+          <form id="assignForm" autocomplete="off">
             <label>Operator</label>
             <select id="assignee"></select>
             <label>Zone</label>
@@ -82,11 +96,11 @@
 
         <div class="card">
           <h3>Create Operator (Username + Password)</h3>
-          <form id="createOpForm">
+          <form id="createOpForm" autocomplete="off">
             <label>Username (lowercase, no spaces)</label>
             <input id="co_username" type="text" placeholder="e.g., riley" required />
             <label>Password (6+ characters)</label>
-            <input id="co_password" type="password" placeholder="e.g., 123456" minlength="6" required />
+            <input id="co_password" type="password" placeholder="e.g., 123456" minlength="6" required autocomplete="new-password" />
             <label>Display name (optional)</label>
             <input id="co_display" type="text" placeholder="e.g., Riley" />
             <button class="btn" type="submit">Create Operator</button>
@@ -99,6 +113,7 @@
   </div>
 
   <script>
+    // --- tiny toast helper ---
     function toast(type, title, sub){
       const box = document.getElementById('toast');
       const t = document.createElement('div');
@@ -106,23 +121,33 @@
       t.innerHTML = '<div class="title">'+ title +'</div>' + (sub ? '<div class="sub">'+ sub +'</div>' : '');
       box.appendChild(t);
       box.style.display = 'block';
-      setTimeout(() => { t.remove(); if (!box.children.length) box.style.display='none'; }, 4000);
+      setTimeout(() => { t.remove(); if (!box.children.length) box.style.display='none'; }, 4500);
     }
 
+    // --- main ---
     (async function(){
+      // Gate by admin role
       const role = await BaysideData.getMyRole();
       if (role !== 'admin') { document.getElementById('roleGate').style.display = 'block'; return; }
       document.getElementById('app').style.display = 'block';
 
-      // Load existing operators
-      const ops = await BaysideData.listOperators();
+      // List operators (no composite index required: filter only, sort client-side)
+      async function listOperatorsSafe() {
+        const db = firebase.firestore();
+        const snap = await db.collection('users').where('role', '==', 'operator').get();
+        const rows = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+        rows.sort((a, b) => (a.name || a.email || '').localeCompare(b.name || b.email || ''));
+        return rows;
+      }
+
+      const ops = await listOperatorsSafe();
       const list = document.getElementById('operators');
       list.innerHTML = ops.length ? ('<ul>' + ops.map(o => '<li>'+ (o.name||o.email||o.uid) +'</li>').join('') + '</ul>')
                                   : '<div class="muted">No operators found yet.</div>';
       const sel = document.getElementById('assignee');
       sel.innerHTML = ops.map(o => `<option value="${o.uid}">${o.name || o.email || o.uid}</option>`).join('');
 
-      // Create assignment workflow
+      // Create assignment
       document.getElementById('assignForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const uid = sel.value;
@@ -137,37 +162,64 @@
           toast('ok', 'Assignment created', 'ID: ' + id);
           e.target.reset();
         }catch(err){
-          msg.className = 'msg err'; msg.textContent = err.message || 'Failed to create assignment';
-          toast('error', 'Assignment failed', err.message || 'Unknown error');
+          const code = err.code || (err.details && err.details.code) || 'unknown';
+          const message = err.message || (err.details && err.details.message) || 'Failed';
+          msg.className = 'msg err'; msg.textContent = code + ' — ' + message;
+          toast('error', 'Assignment failed', code + ' — ' + message);
+          console.error('Create assignment error:', err);
         }
       });
 
-      // Create operator via Callable Cloud Function
-      const functions = firebase.app().functions('australia-southeast1'); // adjust region if needed
+      // Callable function (set your functions REGION)
+      const FUNCTIONS_REGION = 'australia-southeast1';
+      const functions = firebase.app().functions(FUNCTIONS_REGION);
       const createOp = functions.httpsCallable('adminCreateOperator');
 
+      // Create operator (better errors + toasts)
       document.getElementById('createOpForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const u = (document.getElementById('co_username').value || '').trim().toLowerCase();
         const p = (document.getElementById('co_password').value || '').trim();
         const d = (document.getElementById('co_display').value || '').trim();
         const out = document.getElementById('co_msg'); out.textContent = ''; out.className = 'msg';
-        if (!/^[a-z0-9._-]{3,}$/.test(u)) { out.className='msg err'; out.textContent='Invalid username'; return; }
+
+        if (!/^[a-z0-9._-]{3,}$/.test(u)) {
+          out.className='msg err'; out.textContent='invalid-argument — Username must be 3+ chars [a-z, 0-9, . _ -]';
+          toast('error', 'Create operator failed', out.textContent); return;
+        }
+        if (!p || p.length < 6) {
+          out.className='msg err'; out.textContent='invalid-argument — Password must be at least 6 characters';
+          toast('error', 'Create operator failed', out.textContent); return;
+        }
+
         try{
           const res = await createOp({ username: u, password: p, displayName: d || null });
           out.className='msg ok';
           out.textContent = 'Created operator: ' + res.data.email + ' (uid ' + res.data.uid + ')';
           toast('ok', 'Operator created', res.data.email + ' • uid ' + res.data.uid);
           e.target.reset();
+
+          // refresh list
+          const newOps = await listOperatorsSafe();
+          const list2 = document.getElementById('operators');
+          list2.innerHTML = newOps.length ? ('<ul>' + newOps.map(o => '<li>'+ (o.name||o.email||o.uid) +'</li>').join('') + '</ul>')
+                                          : '<div class="muted">No operators found yet.</div>';
+          sel.innerHTML = newOps.map(o => `<option value="${o.uid}">${o.name || o.email || o.uid}</option>`).join('');
         }catch(err){
+          const code = err.code || (err.details && err.details.code) || 'unknown';
+          // If App Check is enforced but not set up, Functions often returns "internal" and CORS fails on the raw endpoint.
+          // Now that App Check is enabled above, you should see a more specific code (e.g., permission-denied, unauthenticated).
+          const message = err.message || (err.details && err.details.message) || 'Failed';
           out.className='msg err';
-          const message = (err.message || (err.data && err.data.message) || 'Failed');
-          out.textContent = message;
-          toast('error', 'Create operator failed', message);
+          out.textContent = code + ' — ' + message;
+          toast('error', 'Create operator failed', code + ' — ' + message);
           console.error('Create operator error:', err);
         }
       });
     })();
   </script>
+</body>
+</html>
+
 </body>
 </html>
