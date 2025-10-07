@@ -14,13 +14,11 @@
     h1 { text-align:center; margin:8px 0 4px; font-size:22px; }
     p.sub { text-align:center; margin:0 0 20px; color:#6b7280; font-size:14px; }
     label { display:block; font-weight:600; margin:14px 0 6px; }
-    input[type="text"], input[type="password"], input[type="number"] {
+    input[type="text"], input[type="password"] {
       width:100%; box-sizing:border-box; padding:12px 14px; border:1px solid #e5e7eb; border-radius:10px; font-size:16px; outline:none;
     }
     input:focus { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.15); }
     .btn { width:100%; margin-top:18px; padding:12px 16px; border:0; border-radius:12px; font-weight:700; font-size:16px; cursor:pointer; background:#111827; color:#fff; }
-    .row { display:flex; gap:12px; }
-    .row > div { flex:1; }
     .err { margin-top:12px; color:#b91c1c; font-size:14px; min-height:18px; }
     .footer { margin-top:18px; text-align:center; color:#9ca3af; font-size:12px; }
   </style>
@@ -36,16 +34,8 @@
         <label for="name">Your name</label>
         <input id="name" name="name" type="text" placeholder="e.g. Alex Smith" required autofocus />
 
-        <div class="row">
-          <div>
-            <label for="pin">PIN</label>
-            <input id="pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="4 digits" required />
-          </div>
-          <div>
-            <label for="remember">Hours</label>
-            <input id="remember" name="remember" type="number" min="1" max="72" value="12" />
-          </div>
-        </div>
+        <label for="pin">PIN</label>
+        <input id="pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="4 digits" required />
 
         <button class="btn" type="submit">Continue</button>
         <div id="err" class="err"></div>
@@ -56,7 +46,9 @@
   </div>
 
   <script>
-    const ADMIN_PIN = "2455";
+    const ADMIN_PIN = "2455";   // unchanged
+    const DEFAULT_TTL_HOURS = 12; // keep same session length as before
+
     const $ = (s) => document.querySelector(s);
     const err = $("#err");
     const form = $("#loginForm");
@@ -67,18 +59,18 @@
 
       const name = ($("#name").value || "").trim();
       const pin = ($("#pin").value || "").trim();
-      const ttl = Math.max(1, Math.min(72, parseInt($("#remember").value || "12", 10)));
 
       if (!name) { err.textContent = "Please enter your name."; return; }
       if (pin !== ADMIN_PIN) { err.textContent = "Incorrect PIN."; return; }
 
       if (!window.BaysideAuth) { err.textContent = "Auth script not loaded."; return; }
-      window.BaysideAuth.setAuth({ name, ttlHours: ttl });
+      window.BaysideAuth.setAuth({ name, ttlHours: DEFAULT_TTL_HOURS });
 
       const next = window.BaysideAuth.nextUrlAfterLogin("ParksMowing.html");
       window.location.replace(next);
     });
 
+    // If already authed, bounce to the intended page
     document.addEventListener("DOMContentLoaded", () => {
       if (window.BaysideAuth && BaysideAuth.isAuthed()) {
         window.location.replace(BaysideAuth.nextUrlAfterLogin("ParksMowing.html"));
