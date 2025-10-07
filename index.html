@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bayside — Dashboard</title>
   <link rel="icon" href="logo.png">
-  <link rel="stylesheet" href="index.css">
 
   <script src="auth.js"></script>
   <script>window.BaysideAuth && BaysideAuth.enforceGate && BaysideAuth.enforceGate();</script>
@@ -22,51 +21,50 @@
   <script src="appcheck.js"></script>
 
   <script src="data.js"></script>
+
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#f6f7f9}
+    .header{display:flex;align-items:center;gap:12px;padding:14px 22px;background:#fff;border-bottom:1px solid #e5e7eb}
+    .header img{height:40px}.brand{font-weight:800}.spacer{flex:1}
+    .btn{padding:8px 12px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;cursor:pointer}
+    .container{max-width:1100px;margin:22px auto;padding:0 22px}
+    .quick a{display:inline-block;margin:6px 10px 0 0;padding:10px 12px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;text-decoration:none;color:#0f172a}
+    .acard{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:14px;margin:10px 0}
+    .row{display:flex;justify-content:space-between;gap:12px}
+  </style>
 </head>
 <body>
   <div class="header">
-    <img src="logo.png" alt="Bayside Slashing & Maintenance">
+    <img src="logo.png" alt="Bayside">
     <div class="brand">Bayside Slashing &amp; Maintenance</div>
     <div class="spacer"></div>
     <a id="adminLink" class="btn" href="admin.html" style="display:none">Admin Dashboard</a>
-    <button id="logoutBtn" class="btn" title="Sign out and return to login">Logout</button>
+    <button id="logoutBtn" class="btn">Logout</button>
   </div>
 
   <div class="container">
-    <div class="hero">
-      <div class="left">
-        <div class="kicker">DASHBOARD</div>
-        <h1>Welcome, <span id="who" class="name">Operator</span></h1>
-        <button id="setNameBtn" title="Update the name shown here and in admin lists">Set my display name</button>
-        <p>Choose a workspace to get started, or view your assigned work below.</p>
-        <div class="quick">
-          <a href="ParksMowing.html">Parks Mowing</a>
-          <a href="ParksSnipping.html">Parks Snipping</a>
-          <a href="Firebreaks.html">Firebreaks</a>
-        </div>
-      </div>
+    <h1>Welcome, <span id="who">Operator</span></h1>
+    <div class="quick">
+      <a href="ParksMowing.html">Parks Mowing</a>
+      <a href="ParksSnipping.html">Parks Snipping</a>
+      <a href="Firebreaks.html">Firebreaks</a>
     </div>
 
-    <h2 class="section">Your Assigned Work</h2>
-    <div id="assignments" class="assignments"></div>
-
-    <div class="footer">© Bayside Slashing & Maintenance</div>
+    <h2>Your Assigned Work</h2>
+    <div id="assignments"></div>
   </div>
 
   <script>
     // Logout
     document.getElementById('logoutBtn').addEventListener('click', async () => {
       try { await firebase.auth().signOut().catch(()=>{}); } catch(_) {}
-      try {
-        if (window.BaysideAuth && BaysideAuth.clearAuth) BaysideAuth.clearAuth();
-        else localStorage.removeItem('bayside.auth');
-      } catch(_) {}
+      try { if (window.BaysideAuth?.clearAuth) BaysideAuth.clearAuth(); else localStorage.removeItem('bayside.auth'); } catch(_){}
       window.location.replace('login.html');
     });
 
     (async function () {
-      const name = (window.BaysideAuth && BaysideAuth.getUserName && BaysideAuth.getUserName()) || "Operator";
-      const who = document.getElementById("who"); if (who) who.textContent = name;
+      const name = (window.BaysideAuth?.getUserName?.() ) || "Operator";
+      document.getElementById("who").textContent = name;
 
       const role = await BaysideData.getMyRole();
       if (role === 'admin') document.getElementById('adminLink').style.display = 'inline-flex';
@@ -76,14 +74,14 @@
 
       const items = await BaysideData.listAssignmentsFor(u.uid, true);
       const box = document.getElementById('assignments');
-      if (!items.length) { box.innerHTML = '<div class="empty">No assigned work yet.</div>'; return; }
+      if (!items.length) { box.innerHTML = '<div>No assigned work yet.</div>'; return; }
 
       box.innerHTML = items.map(it => `
         <div class="acard">
           <div class="row"><div><strong>Zone:</strong> ${it.zone || '-'}</div><div><strong>Status:</strong> ${it.status}</div></div>
           <div><strong>Parks:</strong> ${it.parksSpec || '-'}</div>
-          ${it.notes ? `<div class="notes"><strong>Notes:</strong> ${it.notes}</div>` : ''}
-          <div class="row actions">
+          ${it.notes ? `<div><strong>Notes:</strong> ${it.notes}</div>` : ''}
+          <div class="row">
             <button data-id="${it.id}" data-s="in_progress">Mark In Progress</button>
             <button data-id="${it.id}" data-s="done">Mark Done</button>
           </div>
@@ -100,29 +98,6 @@
             if (s === 'done') btn.closest('.acard').style.opacity = .6;
           }catch(e){ alert('Failed: ' + (e.message||e)); }
         });
-      });
-    })();
-
-    // Set my display name
-    (function () {
-      const btn = document.getElementById('setNameBtn');
-      if (!btn) return;
-      btn.addEventListener('click', async () => {
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-        const u = auth.currentUser;
-        if (!u) { alert('Please sign in first.'); return; }
-        const current = u.displayName || (document.getElementById('who')?.textContent || '');
-        const name = (prompt('Enter your display name:', current) || '').trim();
-        if (!name) return;
-        try {
-          await u.updateProfile({ displayName: name });
-          await db.collection('users').doc(u.uid).set({ name }, { merge: true });
-          const who = document.getElementById('who'); if (who) who.textContent = name;
-          alert('Name updated. It will be used on future logins.');
-        } catch (err) {
-          alert('Could not update name: ' + (err.message || err));
-        }
       });
     })();
   </script>
