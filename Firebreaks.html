@@ -1,51 +1,62 @@
-<script src="auth.js"></script>
-   <script>window.BaysideAuth.enforceGate();</script>
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Firebreaks</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="icon" href="logo.png" type="image/png">
-  <link rel="stylesheet" href="style.css" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bayside — Firebreaks</title>
+  <link rel="icon" href="logo.png">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="sidebar.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="auth.js"></script>
+  <script>window.BaysideAuth && BaysideAuth.enforceGate();</script>
   <style>
-    #map { height: 100vh; }
-    button.logout {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      padding: 6px 12px;
-      border: none;
-      border-radius: 6px;
-      background: #dc3545;
-      color: white;
-      cursor: pointer;
-    }
-    button.logout:hover {
-      background: #b02a37;
-    }
+    html,body,#map { height:100%; margin:0; }
+    .sidebar { position:absolute; top:10px; left:10px; background:#fff; border-radius:12px; padding:12px; box-shadow:0 6px 20px rgba(0,0,0,.12); width:300px; z-index:1000; }
+    .sidebar h2 { margin:0 0 8px; font-size:18px; }
+    .sidebar button { display:block; width:100%; margin:6px 0; padding:10px; border-radius:10px; border:1px solid #e5e7eb; background:#fff; cursor:pointer; }
+    .small { font-size:12px; color:#6b7280; }
   </style>
-
-  <script>
-    // Redirect to login if not authenticated
-    if (localStorage.getItem("loggedIn") !== "true") {
-      window.location.href = "login.html";
-    }
-    function logout() {
-      localStorage.removeItem("loggedIn");
-      window.location.href = "login.html";
-    }
-  </script>
 </head>
 <body>
-  <!-- Logout Button -->
-  <button class="logout" onclick="logout()">Logout</button>
-
   <div id="map"></div>
 
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="firebreaks.js"></script>
+  <div class="sidebar">
+    <img src="logo.png" alt="Bayside" style="height:40px; display:block; margin-bottom:8px;">
+    <h2>Firebreaks</h2>
+
+    <input id="search" type="text" placeholder="Search e.g. FB001" style="width:100%; padding:10px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:8px;">
+    <button onclick="performSearch()">Search</button>
+
+    <button onclick="adminLogin()">Admin Login</button>
+    <div id="admin-tools" style="display:none">
+      <button onclick="exportPDFCouncil()">PDF report for Council</button>
+      <button onclick="exportPDFBayside()">PDF Report for Bayside</button>
+      <button onclick="clearUserData()">Clear All User Data</button>
+      <button onclick="showToday()">Show Completed Today</button>
+      <div class="small">Operator: <span id="opName">Unknown</span></div>
+    </div>
+
+    <hr/>
+    <a href="index.html">Back to Dashboard</a>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="sidebar.js"></script>
+  <script src="script.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const name = (window.BaysideAuth && BaysideAuth.getUserName()) || 'Unknown';
+      const op = document.getElementById('opName');
+      if (op) op.textContent = name;
+      const tools = document.getElementById('admin-tools');
+      if (tools && window.BaysideAuth && BaysideAuth.isAuthed()) {
+        tools.style.display = 'block';
+      }
+    });
+    function getOperatorName(){ return (window.BaysideAuth && BaysideAuth.getUserName()) || 'Unknown'; }
+    function performSearch(){ const q=(document.getElementById('search').value||'').trim(); if (window.doSearch) doSearch(q); }
+    function clearUserData(){ try{localStorage.clear();}catch{} if (window.BaysideAuth) BaysideAuth.clear(); location.href='login.html'; }
+  </script>
 </body>
 </html>
