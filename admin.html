@@ -6,7 +6,7 @@
   <title>Bayside — Admin Dashboard</title>
   <link rel="icon" href="logo.png">
 
-  <!-- Minimal styles (works with or without your existing admin.css) -->
+  <!-- Minimal styles (compatible with your existing CSS) -->
   <style>
     :root{--card:#fff;--bg:#f6f7f9;--muted:#6b7280;--black:#0f172a}
     *{box-sizing:border-box}
@@ -22,37 +22,28 @@
     .btn{margin-top:12px;padding:10px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;cursor:pointer;font-weight:800}
     .muted{color:#6b7280}.alert{padding:14px;border:1px solid #f3d1d4;background:#fff7f7;border-radius:12px;color:#991b1b;margin-top:14px}
     .msg{margin-top:10px;font-size:14px}.ok{color:#065f46}.err{color:#991b1b}
-
-    /* Toast */
     .toast{position:fixed;top:16px;right:16px;z-index:9999;display:none}
-    .toast .t{min-width:280px;max-width:420px;background:#ffffff;border:1px solid #e5e7eb;border-left:6px solid #10b981;border-radius:12px;
+    .toast .t{min-width:280px;max-width:420px;background:#fff;border:1px solid #e5e7eb;border-left:6px solid #10b981;border-radius:12px;
       box-shadow:0 14px 32px rgba(0,0,0,.12);padding:12px 14px;margin-top:8px}
-    .toast .t.err{border-left-color:#ef4444}
-    .toast .title{font-weight:800;margin-bottom:4px}
-    .toast .sub{color:#6b7280;font-size:13px}
+    .toast .t.err{border-left-color:#ef4444}.toast .title{font-weight:800;margin-bottom:4px}.toast .sub{color:#6b7280;font-size:13px}
   </style>
 
+  <!-- Your auth gate (keep) -->
   <script src="auth.js"></script>
   <script>window.BaysideAuth && BaysideAuth.enforceGate && BaysideAuth.enforceGate();</script>
 
-  <!-- Firebase SDKs (Compat) -->
+  <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-functions-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-check-compat.js"></script>
 
-  <!-- Your Firebase config (keep your real values in this file) -->
+  <!-- Your Firebase config -->
   <script src="firebase-init.js"></script>
 
-  <!-- App Check activation (IMPORTANT: replace the site key) -->
-  <script>
-    // Debug token helps while testing; remove or set via console variable in production
-    self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-
-    // Activate App Check for this page (autoRefresh true)
-    firebase.appCheck().activate('YOUR_RECAPTCHA_V3_SITE_KEY', true);
-  </script>
+  <!-- App Check SDK + bootstrap -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-check-compat.js"></script>
+  <script src="appcheck.js"></script>
 
   <!-- Your data helpers -->
   <script src="data.js"></script>
@@ -65,7 +56,6 @@
     <a class="link" href="index.html">Back to Dashboard</a>
   </div>
 
-  <!-- Toast container -->
   <div id="toast" class="toast" aria-live="polite" aria-atomic="true"></div>
 
   <div class="container">
@@ -113,25 +103,21 @@
   </div>
 
   <script>
-    // --- tiny toast helper ---
     function toast(type, title, sub){
       const box = document.getElementById('toast');
       const t = document.createElement('div');
       t.className = 't ' + (type === 'error' ? 'err' : '');
       t.innerHTML = '<div class="title">'+ title +'</div>' + (sub ? '<div class="sub">'+ sub +'</div>' : '');
-      box.appendChild(t);
-      box.style.display = 'block';
+      box.appendChild(t); box.style.display = 'block';
       setTimeout(() => { t.remove(); if (!box.children.length) box.style.display='none'; }, 4500);
     }
 
-    // --- main ---
     (async function(){
-      // Gate by admin role
       const role = await BaysideData.getMyRole();
       if (role !== 'admin') { document.getElementById('roleGate').style.display = 'block'; return; }
       document.getElementById('app').style.display = 'block';
 
-      // List operators (no composite index required: filter only, sort client-side)
+      // Filter-only query (no composite index required) + client-side sort
       async function listOperatorsSafe() {
         const db = firebase.firestore();
         const snap = await db.collection('users').where('role', '==', 'operator').get();
@@ -140,7 +126,7 @@
         return rows;
       }
 
-      const ops = await listOperatorsSafe();
+      let ops = await listOperatorsSafe();
       const list = document.getElementById('operators');
       list.innerHTML = ops.length ? ('<ul>' + ops.map(o => '<li>'+ (o.name||o.email||o.uid) +'</li>').join('') + '</ul>')
                                   : '<div class="muted">No operators found yet.</div>';
@@ -170,12 +156,11 @@
         }
       });
 
-      // Callable function (set your functions REGION)
+      // Callable function (set your region)
       const FUNCTIONS_REGION = 'australia-southeast1';
-      const functions = firebase.app().functions(FUNCTIONS_REGION);
-      const createOp = functions.httpsCallable('adminCreateOperator');
+      const createOp = firebase.app().functions(FUNCTIONS_REGION).httpsCallable('adminCreateOperator');
 
-      // Create operator (better errors + toasts)
+      // Create operator with strong feedback
       document.getElementById('createOpForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const u = (document.getElementById('co_username').value || '').trim().toLowerCase();
@@ -199,16 +184,13 @@
           toast('ok', 'Operator created', res.data.email + ' • uid ' + res.data.uid);
           e.target.reset();
 
-          // refresh list
-          const newOps = await listOperatorsSafe();
-          const list2 = document.getElementById('operators');
-          list2.innerHTML = newOps.length ? ('<ul>' + newOps.map(o => '<li>'+ (o.name||o.email||o.uid) +'</li>').join('') + '</ul>')
-                                          : '<div class="muted">No operators found yet.</div>';
-          sel.innerHTML = newOps.map(o => `<option value="${o.uid}">${o.name || o.email || o.uid}</option>`).join('');
+          // refresh operator list
+          ops = await listOperatorsSafe();
+          list.innerHTML = ops.length ? ('<ul>' + ops.map(o => '<li>'+ (o.name||o.email||o.uid) +'</li>').join('') + '</ul>')
+                                      : '<div class="muted">No operators found yet.</div>';
+          sel.innerHTML = ops.map(o => `<option value="${o.uid}">${o.name || o.email || o.uid}</option>`).join('');
         }catch(err){
           const code = err.code || (err.details && err.details.code) || 'unknown';
-          // If App Check is enforced but not set up, Functions often returns "internal" and CORS fails on the raw endpoint.
-          // Now that App Check is enabled above, you should see a more specific code (e.g., permission-denied, unauthenticated).
           const message = err.message || (err.details && err.details.message) || 'Failed';
           out.className='msg err';
           out.textContent = code + ' — ' + message;
@@ -218,8 +200,5 @@
       });
     })();
   </script>
-</body>
-</html>
-
 </body>
 </html>
