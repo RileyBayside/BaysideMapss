@@ -15,19 +15,36 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-init.js"></script>
 
-  <!-- (Optional) App Check for consistency -->
+  <!-- Optional App Check for consistency -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-check-compat.js"></script>
   <script src="appcheck.js"></script>
 
   <script src="auth-bridge.js"></script>
+
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f6f7f9;margin:0}
+    .wrap{display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:22px;max-width:460px;width:100%}
+    .logo{height:48px;display:block;margin:0 auto 10px}
+    .badge{display:block;text-align:center;margin:4px auto 8px;color:#6b7280}
+    .tabs{display:flex;margin:12px 0;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden}
+    .tab{flex:1;text-align:center;padding:10px 12px;cursor:pointer;background:#fff}
+    .tab.active{background:#0f172a;color:#fff}
+    .panel{display:none}.panel.active{display:block}
+    label{font-weight:700;margin-top:10px;display:block}
+    input{width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:10px}
+    .btn{margin-top:12px;width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:12px;background:#0f172a;color:#fff;cursor:pointer}
+    .err{color:#991b1b;margin-top:8px}
+    .small{color:#6b7280}
+  </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
       <img class="logo" src="logo.png" alt="Bayside Slashing logo">
       <span class="badge">Secure Sign-in</span>
-      <h1>Welcome</h1>
-      <p class="sub">Choose how you’d like to sign in</p>
+      <h1 style="text-align:center;margin:8px 0 0">Welcome</h1>
+      <p class="small" style="text-align:center;margin:4px 0 12px">Choose how you’d like to sign in</p>
 
       <div class="tabs">
         <div class="tab active" data-tab="opTab">Operator (Username + Password)</div>
@@ -40,17 +57,14 @@
           <input id="opUser" name="opUser" type="text" placeholder="e.g. riley" required />
           <label for="opPass">Password</label>
           <input id="opPass" name="opPass" type="password" placeholder="6+ characters or digits" minlength="6" required />
-          <div class="util">
-            <div class="small">We sign you in as <code>username@bayside.local</code>.</div>
-          </div>
+          <div class="small" style="margin-top:6px">We sign you in as <code>username@bayside.local</code>.</div>
           <button class="btn" type="submit">Sign in</button>
           <div id="opErr" class="err"></div>
         </form>
-        <div class="note">If you forget your password, ask an admin to reset it in Firebase.</div>
       </div>
 
       <div id="adminTab" class="panel">
-        <form id="adminForm">
+        <form id="adminForm" autocomplete="on">
           <label for="adminEmail">Email</label>
           <input id="adminEmail" name="adminEmail" type="email" placeholder="name@example.com" required />
           <label for="adminPass">Password</label>
@@ -58,12 +72,12 @@
           <button class="btn" type="submit">Sign in</button>
           <div id="adminErr" class="err"></div>
         </form>
-        <div class="note">Admins are verified by server-side rules.</div>
       </div>
     </div>
   </div>
 
   <script>
+    // Tabs
     document.querySelectorAll('.tab').forEach((t) => {
       t.addEventListener('click', () => {
         document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
@@ -76,7 +90,7 @@
     const $ = (s) => document.querySelector(s);
     const auth = firebase.auth();
 
-    // OPERATOR: username -> username@bayside.local
+    // OPERATOR: username → username@bayside.local
     $('#opForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       $('#opErr').textContent = '';
@@ -111,10 +125,11 @@
 
     // If already authed locally, bounce to index
     document.addEventListener('DOMContentLoaded', () => {
-      if (window.BaysideAuth && BaysideAuth.isAuthed && BaysideAuth.isAuthed()) {
+      if (window.BaysideAuth?.isAuthed?.()) {
         window.location.replace(BaysideAuth.nextUrlAfterLogin("index.html"));
       }
     });
   </script>
 </body>
 </html>
+
