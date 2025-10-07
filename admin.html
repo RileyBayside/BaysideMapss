@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bayside — Admin Dashboard</title>
+  <link rel="icon" href="logo.png">
+  <link rel="stylesheet" href="admin.css">
+  <script src="auth.js"></script>
+  <script>window.BaysideAuth && BaysideAuth.enforceGate && BaysideAuth.enforceGate();</script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="firebase-init.js"></script>
+  <script src="data.js"></script>
+</head>
+<body>
+  <div class="header">
+    <img src="logo.png" alt="Bayside">
+    <div class="brand">Admin Dashboard</div>
+    <div class="spacer"></div>
+    <a class="link" href="index.html">Back to Dashboard</a>
+  </div>
+  <div class="container">
+    <div id="roleGate" class="alert" style="display:none">You must be an admin to view this page.</div>
+    <div id="app" style="display:none">
+      <div class="grid">
+        <div class="card">
+          <h3>Operators</h3>
+          <div id="operators"></div>
+        </div>
+        <div class="card">
+          <h3>Create Assignment</h3>
+          <form id="assignForm">
+            <label>Operator</label>
+            <select id="assignee"></select>
+            <label>Zone</label>
+            <input id="zone" type="text" placeholder="e.g., Zone 1" />
+            <label>Parks (range or list)</label>
+            <input id="parksSpec" type="text" placeholder="e.g., 1-50 or M0001-M0050" />
+            <label>Notes (optional)</label>
+            <textarea id="notes" rows="3" placeholder="Any extra details"></textarea>
+            <button class="btn" type="submit">Assign Work</button>
+            <div id="msg" class="msg"></div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (async function(){
+      const role = await BaysideData.getMyRole();
+      if (role !== 'admin') { document.getElementById('roleGate').style.display = 'block'; return; }
+      document.getElementById('app').style.display = 'block';
+      const ops = await BaysideData.listOperators();
+      const list = document.getElementById('operators');
+      list.innerHTML = ops.length ? ('<ul>' + ops.map(o => '<li>'+ (o.name||o.email||o.uid) +'</li>').join('') + '</ul>')
+                                  : '<div class="muted">No operators found yet.</div>';
+      const sel = document.getElementById('assignee');
+      sel.innerHTML = ops.map(o => `<option value="${o.uid}">${o.name || o.email || o.uid}</option>`).join('');
+      document.getElementById('assignForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const uid = sel.value;
+        const name = (ops.find(x => x.uid === uid) || {}).name || 'Operator';
+        const zone = document.getElementById('zone').value;
+        const parksSpec = document.getElementById('parksSpec').value;
+        const notes = document.getElementById('notes').value;
+        const msg = document.getElementById('msg'); msg.textContent = '';
+        try{
+          const id = await BaysideData.createAssignment({ assigneeUid: uid, assigneeName: name, zone, parksSpec, notes });
+          msg.style.color = '#065f46'; msg.textContent = 'Assignment created: ' + id; e.target.reset();
+        }catch(err){
+          msg.style.color = '#b91c1c'; msg.textContent = err.message || 'Failed to create assignment';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

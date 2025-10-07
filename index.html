@@ -8,65 +8,69 @@
   <link rel="stylesheet" href="index.css">
   <script src="auth.js"></script>
   <script>window.BaysideAuth && BaysideAuth.enforceGate && BaysideAuth.enforceGate();</script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="firebase-init.js"></script>
+  <script src="data.js"></script>
 </head>
 <body>
-  <!-- Header -->
   <div class="header">
     <img src="logo.png" alt="Bayside Slashing & Maintenance">
     <div class="brand">Bayside Slashing &amp; Maintenance</div>
+    <div class="spacer"></div>
+    <a id="adminLink" class="adminlink" href="admin.html" style="display:none">Admin Dashboard</a>
   </div>
-
   <div class="container">
-    <!-- Hero / Greeting -->
     <div class="hero">
       <div class="left">
         <div class="kicker">DASHBOARD</div>
         <h1>Welcome, <span id="who" class="name">Operator</span></h1>
-        <p>Choose a workspace to get started.</p>
+        <p>Choose a workspace to get started, or view your assigned work below.</p>
         <div class="quick">
           <a href="ParksMowing.html">Parks Mowing</a>
           <a href="ParksSnipping.html">Parks Snipping</a>
           <a href="Firebreaks.html">Firebreaks</a>
         </div>
       </div>
-      <div class="right">
-        <span class="badge" title="Logged in user">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a5 5 0 0 0-1 9.9V14H7a5 5 0 1 0 0 10h10a5 5 0 1 0 0-10h-4v-2.1A5 5 0 0 0 12 2z"/></svg>
-          <span id="whoBadge">Operator</span>
-        </span>
-      </div>
     </div>
-
-    <!-- App cards -->
-    <div class="grid">
-      <a class="card" href="ParksMowing.html">
-        <h3>Parks Mowing</h3>
-        <p>Map, search and reporting for parks mowing.</p>
-        <span class="pill">Go →</span>
-      </a>
-      <a class="card" href="ParksSnipping.html">
-        <h3>Parks Snipping</h3>
-        <p>Map, search and reporting for snipping operations.</p>
-        <span class="pill">Go →</span>
-      </a>
-      <a class="card" href="Firebreaks.html">
-        <h3>Firebreaks</h3>
-        <p>Firebreak mapping and reporting.</p>
-        <span class="pill">Go →</span>
-      </a>
-    </div>
-
+    <h2 class="section">Your Assigned Work</h2>
+    <div id="assignments" class="assignments"></div>
     <div class="footer">© Bayside Slashing & Maintenance</div>
   </div>
-
   <script>
-    // Show logged-in name in two places
-    (function () {
+    (async function () {
       var name = (window.BaysideAuth && BaysideAuth.getUserName && BaysideAuth.getUserName()) || "Operator";
-      var who = document.getElementById("who");
-      var whoBadge = document.getElementById("whoBadge");
-      if (who) who.textContent = name;
-      if (whoBadge) whoBadge.textContent = name;
+      var who = document.getElementById("who"); if (who) who.textContent = name;
+      const role = await BaysideData.getMyRole();
+      if (role === 'admin') document.getElementById('adminLink').style.display = 'inline-flex';
+      const u = await new Promise(res => firebase.auth().onAuthStateChanged(x => res(x)));
+      if (!u) return;
+      const items = await BaysideData.listAssignmentsFor(u.uid, true);
+      const box = document.getElementById('assignments');
+      if (!items.length) { box.innerHTML = '<div class="empty">No assigned work yet.</div>'; return; }
+      box.innerHTML = items.map(it => `
+        <div class="acard">
+          <div class="row"><div><strong>Zone:</strong> ${it.zone || '-'}</div><div><strong>Status:</strong> ${it.status}</div></div>
+          <div><strong>Parks:</strong> ${it.parksSpec || '-'}</div>
+          ${it.notes ? `<div class="notes"><strong>Notes:</strong> ${it.notes}</div>` : ''}
+          <div class="row actions">
+            <button data-id="${it.id}" data-s="in_progress">Mark In Progress</button>
+            <button data-id="${it.id}" data-s="done">Mark Done</button>
+          </div>
+        </div>
+      `).join('');
+      box.querySelectorAll('button[data-id]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-id');
+          const s  = btn.getAttribute('data-s');
+          try{
+            await BaysideData.updateAssignmentStatus(id, s);
+            btn.closest('.acard').querySelectorAll('.row div')[1].innerHTML = '<strong>Status:</strong> ' + s;
+            if (s === 'done') btn.closest('.acard').style.opacity = .6;
+          }catch(e){ alert('Failed: ' + (e.message||e)); }
+        });
+      });
     })();
   </script>
 </body>

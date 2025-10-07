@@ -5,75 +5,100 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bayside — Sign in</title>
   <link rel="icon" href="logo.png">
+  <link rel="stylesheet" href="login.css">
   <script src="auth.js"></script>
-  <style>
-    html,body { height:100%; margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:#f3f4f6; }
-    .wrap { min-height:100%; display:flex; align-items:center; justify-content:center; padding:32px; }
-    .card { width:100%; max-width:420px; background:#fff; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,.08); padding:28px; }
-    .logo { display:block; margin:0 auto 8px auto; height:64px; object-fit:contain; }
-    h1 { text-align:center; margin:8px 0 4px; font-size:22px; }
-    p.sub { text-align:center; margin:0 0 20px; color:#6b7280; font-size:14px; }
-    label { display:block; font-weight:600; margin:14px 0 6px; }
-    input[type="text"], input[type="password"] {
-      width:100%; box-sizing:border-box; padding:12px 14px; border:1px solid #e5e7eb; border-radius:10px; font-size:16px; outline:none;
-    }
-    input:focus { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.15); }
-    .btn { width:100%; margin-top:18px; padding:12px 16px; border:0; border-radius:12px; font-weight:700; font-size:16px; cursor:pointer; background:#111827; color:#fff; }
-    .err { margin-top:12px; color:#b91c1c; font-size:14px; min-height:18px; }
-    .footer { margin-top:18px; text-align:center; color:#9ca3af; font-size:12px; }
-  </style>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="firebase-init.js"></script>
+  <script src="auth-bridge.js"></script>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
       <img class="logo" src="logo.png" alt="Bayside Slashing logo">
-      <h1>Sign in</h1>
-      <p class="sub">Enter your name and PIN to continue</p>
-
-      <form id="loginForm" autocomplete="on">
-        <label for="name">Your name</label>
-        <input id="name" name="name" type="text" placeholder="e.g. Alex Smith" required autofocus />
-
-        <label for="pin">PIN</label>
-        <input id="pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="4 digits" required />
-
-        <button class="btn" type="submit">Continue</button>
-        <div id="err" class="err"></div>
-      </form>
-
-      <div class="footer">For Bayside team members only.</div>
+      <div class="center"><span class="badge">Secure Sign-in</span></div>
+      <h1>Welcome</h1>
+      <p class="sub">Choose how you’d like to sign in</p>
+      <div class="tabs">
+        <div class="tab active" data-tab="emailTab">Email</div>
+        <div class="tab" data-tab="userTab">Username</div>
+      </div>
+      <div id="emailTab" class="panel active">
+        <form id="emailForm">
+          <label for="email">Work email</label>
+          <input id="email" name="email" type="email" placeholder="name@example.com" required />
+          <button class="btn" type="submit">Send magic link</button>
+          <div id="emailErr" class="err"></div>
+          <div class="hint">We’ll email you a sign-in link. Open it on this device to finish.</div>
+        </form>
+      </div>
+      <div id="userTab" class="panel">
+        <form id="userForm">
+          <label for="username">Username</label>
+          <input id="username" name="username" type="text" placeholder="e.g. alex" required />
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" placeholder="Your password" required />
+          <button class="btn" type="submit">Sign in</button>
+          <div id="userErr" class="err"></div>
+          <div class="hint">Your username signs in as <code>username@bayside.local</code> behind the scenes.</div>
+        </form>
+      </div>
+      <div class="note center">Having trouble? Contact your admin to reset access.</div>
     </div>
   </div>
-
   <script>
-    const ADMIN_PIN = "2455";   // unchanged
-    const DEFAULT_TTL_HOURS = 12; // keep same session length as before
-
-    const $ = (s) => document.querySelector(s);
-    const err = $("#err");
-    const form = $("#loginForm");
-
-    form.addEventListener("submit", function (e) {
-      e.preventDefault();
-      err.textContent = "";
-
-      const name = ($("#name").value || "").trim();
-      const pin = ($("#pin").value || "").trim();
-
-      if (!name) { err.textContent = "Please enter your name."; return; }
-      if (pin !== ADMIN_PIN) { err.textContent = "Incorrect PIN."; return; }
-
-      if (!window.BaysideAuth) { err.textContent = "Auth script not loaded."; return; }
-      window.BaysideAuth.setAuth({ name, ttlHours: DEFAULT_TTL_HOURS });
-
-      const next = window.BaysideAuth.nextUrlAfterLogin("ParksMowing.html");
-      window.location.replace(next);
+    document.querySelectorAll('.tab').forEach((t) => {
+      t.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        document.getElementById(t.dataset.tab).classList.add('active');
+      });
     });
-
-    // If already authed, bounce to the intended page
-    document.addEventListener("DOMContentLoaded", () => {
-      if (window.BaysideAuth && BaysideAuth.isAuthed()) {
-        window.location.replace(BaysideAuth.nextUrlAfterLogin("ParksMowing.html"));
+    const qs = (s) => document.querySelector(s);
+    const auth = firebase.auth();
+    const actionCodeSettings = {
+      url: window.location.origin + window.location.pathname.replace(/login\.html$/, 'index.html'),
+      handleCodeInApp: true
+    };
+    qs('#emailForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      qs('#emailErr').textContent = '';
+      const email = (qs('#email').value || '').trim();
+      try {
+        await auth.sendSignInLinkToEmail(email, actionCodeSettings);
+        window.localStorage.setItem('emailForSignIn', email);
+        qs('#emailErr').style.color = '#065f46';
+        qs('#emailErr').textContent = 'Magic link sent. Check your inbox.';
+      } catch (err) {
+        qs('#emailErr').style.color = '#b91c1c';
+        qs('#emailErr').textContent = err.message || 'Failed to send link.';
+      }
+    });
+    (async function () {
+      try {
+        if (auth.isSignInWithEmailLink(window.location.href)) {
+          let email = window.localStorage.getItem('emailForSignIn');
+          if (!email) email = prompt('Confirm your email for sign-in:');
+          const cred = await auth.signInWithEmailLink(email, window.location.href);
+          await window.BaysideAuthBridge.onFirebaseLogin(cred.user);
+        }
+      } catch (err) {
+        console.warn(err);
+      }
+    })();
+    qs('#userForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      qs('#userErr').textContent = '';
+      const username = (qs('#username').value || '').trim();
+      const password = (qs('#password').value || '').trim();
+      const email = username + '@bayside.local';
+      try {
+        const cred = await auth.signInWithEmailAndPassword(email, password);
+        await window.BaysideAuthBridge.onFirebaseLogin(cred.user);
+      } catch (err) {
+        qs('#userErr').textContent = err.message || 'Sign-in failed.';
       }
     });
   </script>
