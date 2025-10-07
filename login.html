@@ -44,7 +44,7 @@
         <div class="note">If you forget your password, ask an admin to reset it in Firebase.</div>
       </div>
 
-      <!-- Admin: Email + Password (Firebase Auth) -->
+      <!-- Admin: Email + Password -->
       <div id="adminTab" class="panel">
         <form id="adminForm">
           <label for="adminEmail">Email</label>
@@ -54,7 +54,7 @@
           <button class="btn" type="submit">Sign in</button>
           <div id="adminErr" class="err"></div>
         </form>
-        <div class="note">Admins are verified by server-side rules. Use a strong password and enable MFA if desired.</div>
+        <div class="note">Admins are verified by server-side rules.</div>
       </div>
     </div>
   </div>
@@ -69,15 +69,11 @@
         document.getElementById(t.dataset.tab).classList.add('active');
       });
     });
-    } catch (err) {
-      console.log('Operator sign-in error:', err.code, err.message);
-      document.getElementById('opErr').textContent = (err.code || '') + ' ' + (err.message || 'Sign-in failed.');
-     }
-  
+
     const $ = (s) => document.querySelector(s);
     const auth = firebase.auth();
 
-    // OPERATOR SIGN-IN (maps username -> username@bayside.local)
+    // OPERATOR SIGN-IN (username -> username@bayside.local)
     $('#opForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       $('#opErr').textContent = '';
@@ -91,11 +87,14 @@
         const cred = await auth.signInWithEmailAndPassword(email, pass);
         await window.BaysideAuthBridge.onFirebaseLogin(cred.user);
       } catch (err) {
-        $('#opErr').textContent = err.message || 'Sign-in failed.';
+        // >>> Added detailed operator catch block
+        console.log('Operator sign-in error:', err.code, err.message);
+        $('#opErr').textContent = (err.code || '') + ' ' + (err.message || 'Sign-in failed.');
+        // <<<
       }
     });
 
-    // ADMIN SIGN-IN (email + password)
+    // ADMIN SIGN-IN (email + password) — unchanged
     $('#adminForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       $('#adminErr').textContent = '';
