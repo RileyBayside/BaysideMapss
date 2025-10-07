@@ -1,167 +1,89 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bayside Slashing — Login</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bayside — Sign in</title>
+  <link rel="icon" href="logo.png">
+  <script src="auth.js"></script>
   <style>
-    :root {
-      --bg: #0b1220;
-      --card: #ffffff;
-      --text: #0d1726;
-      --muted: #6b7280;
-      --primary: #0ea5e9;
-      --ring: rgba(14,165,233,0.35);
-      --radius: 1.25rem;
+    html,body { height:100%; margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:#f3f4f6; }
+    .wrap { min-height:100%; display:flex; align-items:center; justify-content:center; padding:32px; }
+    .card { width:100%; max-width:420px; background:#fff; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,.08); padding:28px; }
+    .logo { display:block; margin:0 auto 8px auto; height:64px; object-fit:contain; }
+    h1 { text-align:center; margin:8px 0 4px; font-size:22px; }
+    p.sub { text-align:center; margin:0 0 20px; color:#6b7280; font-size:14px; }
+    label { display:block; font-weight:600; margin:14px 0 6px; }
+    input[type="text"], input[type="password"], input[type="number"] {
+      width:100%; box-sizing:border-box; padding:12px 14px; border:1px solid #e5e7eb; border-radius:10px; font-size:16px; outline:none;
     }
-    * { box-sizing: border-box; }
-    html, body { height: 100%; }
-    body {
-      margin: 0;
-      font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      background: radial-gradient(1200px 800px at 50% -10%, #0b5fa81a, transparent 60%), var(--bg);
-      display: grid;
-      place-items: center;
-      color: var(--text);
-    }
-    .wrap { width: min(92vw, 440px); }
-    .logo {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      margin-bottom: 18px;
-      user-select: none;
-    }
-    .logo img {
-      width: 52px;
-      height: 52px;
-      object-fit: contain;
-      border-radius: 12px;
-      background: #fff;
-      padding: 6px;
-      box-shadow: 0 6px 24px rgba(0,0,0,0.15);
-    }
-    .logo h1 {
-      margin: 0;
-      font-size: 20px;
-      letter-spacing: 0.4px;
-      font-weight: 700;
-      color: #e5f2ff;
-      text-shadow: 0 1px 0 rgba(0,0,0,0.15);
-    }
-    .card {
-      background: var(--card);
-      border-radius: var(--radius);
-      padding: 28px;
-      box-shadow: 0 20px 60px rgba(2, 6, 23, 0.35), 0 4px 16px rgba(2, 6, 23, 0.2);
-      border: 1px solid rgba(2,6,23,0.05);
-    }
-    .card h2 { margin: 0 0 6px; font-size: 22px; }
-    .card p.sub { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
-    label { display: block; font-weight: 600; margin: 14px 0 8px; font-size: 14px; }
-    input[type="text"], input[type="password"] {
-      width: 100%;
-      border: 1px solid #e5e7eb;
-      border-radius: 12px;
-      padding: 12px 14px;
-      font-size: 16px;
-      transition: box-shadow .15s ease, border-color .15s ease;
-      outline: none;
-    }
-    input:focus { border-color: var(--primary); box-shadow: 0 0 0 5px var(--ring); }
-    .actions { margin-top: 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    button {
-      appearance: none; border: 0; background: var(--primary); color: white; font-weight: 700;
-      border-radius: 12px; padding: 12px 16px; font-size: 16px; cursor: pointer; width: 100%;
-      box-shadow: 0 10px 24px rgba(14,165,233,0.35);
-      transition: transform .06s ease, box-shadow .15s ease, filter .15s ease;
-    }
-    button:hover { filter: brightness(1.05); box-shadow: 0 16px 30px rgba(14,165,233,0.5); }
-    button:active { transform: translateY(1px); }
-    .error {
-      display: none; margin-top: 10px; background: #fee2e2; color: #7f1d1d;
-      border: 1px solid #fecaca; border-radius: 10px; padding: 10px 12px; font-size: 14px;
-    }
-    .footer { margin-top: 14px; color: #93a3b8; text-align: center; font-size: 12px; }
+    input:focus { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.15); }
+    .btn { width:100%; margin-top:18px; padding:12px 16px; border:0; border-radius:12px; font-weight:700; font-size:16px; cursor:pointer; background:#111827; color:#fff; }
+    .row { display:flex; gap:12px; }
+    .row > div { flex:1; }
+    .err { margin-top:12px; color:#b91c1c; font-size:14px; min-height:18px; }
+    .footer { margin-top:18px; text-align:center; color:#9ca3af; font-size:12px; }
   </style>
-  <script>
-    (function() {
-      try {
-        const raw = localStorage.getItem('bs_auth');
-        if (raw) {
-          const data = JSON.parse(raw);
-          if (data && data.exp && Date.now() < data.exp) {
-            const url = new URL(window.location.href);
-            const next = url.searchParams.get('next') || 'index.html';
-            window.location.replace(next);
-          }
-        }
-      } catch (e) {}
-    })();
-  </script>
 </head>
 <body>
   <div class="wrap">
-    <div class="logo">
-      <img src="logo.png" alt="Bayside Slashing logo" />
-      <h1>Bayside Slashing</h1>
-    </div>
-
     <div class="card">
-      <h2>Welcome</h2>
-      <p class="sub">Please sign in to continue.</p>
+      <img class="logo" src="logo.png" alt="Bayside Slashing logo">
+      <h1>Sign in</h1>
+      <p class="sub">Enter your name and PIN to continue</p>
 
-      <form id="loginForm" autocomplete="off">
-        <label for="username">Username</label>
-        <input id="username" name="username" type="text" inputmode="text" placeholder="Enter username" required />
+      <form id="loginForm" autocomplete="on">
+        <label for="name">Your name</label>
+        <input id="name" name="name" type="text" placeholder="e.g. Alex Smith" required autofocus />
 
-        <label for="pin">PIN</label>
-        <input id="pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="4-digit PIN" maxlength="4" required />
-
-        <div class="actions">
-          <button type="submit" id="submitBtn">Sign in</button>
+        <div class="row">
+          <div>
+            <label for="pin">PIN</label>
+            <input id="pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="4 digits" required />
+          </div>
+          <div>
+            <label for="remember">Hours</label>
+            <input id="remember" name="remember" type="number" min="1" max="72" value="12" />
+          </div>
         </div>
 
-        <div class="error" id="errorBox">Incorrect username or PIN. Please try again.</div>
+        <button class="btn" type="submit">Continue</button>
+        <div id="err" class="err"></div>
       </form>
-    </div>
 
-    <div class="footer">© Bayside Slashing</div>
+      <div class="footer">For Bayside team members only.</div>
+    </div>
   </div>
 
-  <script src="auth.js"></script>
   <script>
-    (function() {
-      const form = document.getElementById('loginForm');
-      const errorBox = document.getElementById('errorBox');
+    const ADMIN_PIN = "2455";
+    const $ = (s) => document.querySelector(s);
+    const err = $("#err");
+    const form = $("#loginForm");
 
-      function authenticate(username, pin) {
-        const validUser = 'Riley';
-        const validPin = '2455';
-        const ok = (username || '').trim().toLowerCase() === validUser.toLowerCase()
-                  && (pin || '').trim() === validPin;
-        return ok;
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      err.textContent = "";
+
+      const name = ($("#name").value || "").trim();
+      const pin = ($("#pin").value || "").trim();
+      const ttl = Math.max(1, Math.min(72, parseInt($("#remember").value || "12", 10)));
+
+      if (!name) { err.textContent = "Please enter your name."; return; }
+      if (pin !== ADMIN_PIN) { err.textContent = "Incorrect PIN."; return; }
+
+      if (!window.BaysideAuth) { err.textContent = "Auth script not loaded."; return; }
+      window.BaysideAuth.setAuth({ name, ttlHours: ttl });
+
+      const next = window.BaysideAuth.nextUrlAfterLogin("ParksMowing.html");
+      window.location.replace(next);
+    });
+
+    document.addEventListener("DOMContentLoaded", () => {
+      if (window.BaysideAuth && BaysideAuth.isAuthed()) {
+        window.location.replace(BaysideAuth.nextUrlAfterLogin("ParksMowing.html"));
       }
-
-      form.addEventListener('submit', function(e) {
-        e.preventDefault();
-        const u = document.getElementById('username').value;
-        const p = document.getElementById('pin').value;
-
-        if (authenticate(u, p)) { localStorage.setItem('bs_user', (u || '').trim());
-          window.BaysideAuth.setAuth(12);
-          const url = new URL(window.location.href);
-          const next = url.searchParams.get('next') || 'index.html';
-          window.location.replace(next);
-        } else {
-          errorBox.style.display = 'block';
-        }
-      });
-    })();
+    });
   </script>
 </body>
 </html>

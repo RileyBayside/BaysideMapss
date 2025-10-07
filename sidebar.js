@@ -1,4 +1,40 @@
 
+// === Operator helper: reads login name from bayside.auth or legacy keys ===
+function __getOperatorName(){
+  try{
+    const raw = localStorage.getItem('bayside.auth');
+    if (raw){
+      const obj = JSON.parse(raw);
+      if (obj && obj.name && (!obj.exp || Date.now() < +obj.exp)) return (''+obj.name).trim();
+    }
+  }catch(e){}
+  for (const k of ['operator','user','username']){
+    const v = localStorage.getItem(k);
+    if (v && v.trim()) return v.trim();
+  }
+  return 'Unknown';
+}
+
+
+// Inject a visible Operator label directly under the 'PDF Report for Bayside' button
+document.addEventListener('DOMContentLoaded', function(){
+  var btns = document.querySelectorAll('button[onclick="exportPDFBayside()"]');
+  if (btns && btns.length){
+    var btn = btns[0];
+    var next = btn.nextElementSibling;
+    var already = next && /Operator:/i.test(next.textContent||'');
+    if (!already){
+      var div = document.createElement('div');
+      div.className = 'small';
+      div.style.marginTop = '4px';
+      var name = __getOperatorName();
+      div.textContent = 'Operator: ' + name;
+      btn.insertAdjacentElement('afterend', div);
+    }
+  }
+});
+
+
 (function() {
   const ADMIN_PASSWORD = "Fishing101!";
   const SIDEBAR_COLLAPSED_KEY = "sidebarCollapsed";
@@ -975,7 +1011,7 @@ function exportPDFBayside() {
         doc.text(id, col1, y, { align: "center" });
         doc.text(dateFormatted, col2, y, { align: "center" });
         doc.text(note, col3, y, { maxWidth: 60, align: "center" });
-        const operator = (parks[id].operator || "").toString();
+        const operator = __getOperatorName();
         doc.text(operator, col4, y, { align: "center" });
 
         y += 7;
