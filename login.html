@@ -20,24 +20,27 @@
       background:var(--bg); color:var(--ink);
       display:flex; align-items:center; justify-content:center; padding:24px;
     }
-    .panel{ width:min(880px,100%); background:var(--card); border:1px solid var(--muted);
-      border-radius:18px; box-shadow:0 20px 48px rgba(16,24,40,.12); padding:22px 22px 26px; }
+    .panel{
+      width:min(880px,100%); background:var(--card); border:1px solid var(--muted);
+      border-radius:18px; box-shadow:0 20px 48px rgba(16,24,40,.12); padding:22px 22px 26px;
+    }
     .panel-head{ display:flex; align-items:center; gap:14px; margin-bottom:12px;}
     .panel-head img{ height:64px; display:block }
     .panel-title{ font-size:22px; font-weight:800 }
+
     .tabs{ display:flex; gap:10px; margin:10px 0 16px;}
     .tab{ flex:1; padding:12px 10px; text-align:center; font-weight:800; border-radius:12px;
       border:1px solid var(--muted); background:#f8fafc; color:#334155; cursor:pointer; user-select:none; }
     .tab.active{ background:var(--ink); color:#fff; border-color:var(--ink); }
+
     .form{ margin-top:6px; display:flex; flex-direction:column; align-items:center; gap:12px;}
     .row{ width:100%; display:flex; justify-content:center }
     .half{ width:min(440px,92%); display:flex; flex-direction:column; gap:6px;}
     label{ font-size:13px; color:#475569; font-weight:700 }
-    input{ width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--muted);
-      font-size:15px; background:#fff; }
+    input{ width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--muted); font-size:15px; background:#fff; }
     input:focus{ outline:3px solid #e6f0ff; border-color:#94a3b8 }
-    .submit{ width:min(440px,92%); border:0; border-radius:12px; padding:12px 14px; font-weight:800;
-      cursor:pointer; color:#fff; background:#0f172a; margin-top:4px; }
+    .submit{ width:min(440px,92%); border:0; border-radius:12px; padding:12px 14px; font-weight:800; cursor:pointer; color:#fff;
+      background:#0f172a; margin-top:4px; }
     .submit:hover{ background:#1f2937 }
     .hint{ text-align:center; color:#64748b; font-size:13px; margin-top:2px }
     .hidden{ display:none !important; }
@@ -56,7 +59,7 @@
       <div id="tabAdmin" class="tab">Admin</div>
     </div>
 
-    <!-- Operator form -->
+    <!-- Operator -->
     <form id="formOperator" class="form" autocomplete="on">
       <div class="row"><div class="half">
         <label for="op_user">Username</label>
@@ -70,7 +73,7 @@
       <div class="hint">Operators sign in with <b>username + password</b>.</div>
     </form>
 
-    <!-- Admin form -->
+    <!-- Admin -->
     <form id="formAdmin" class="form hidden" autocomplete="on">
       <div class="row"><div class="half">
         <label for="ad_email">Email</label>
@@ -90,6 +93,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="firebase-init.js"></script>
 
+  <!-- Local session helper -->
+  <script src="auth.js"></script>
+
   <script>
     // Tabs
     const tabOp = document.getElementById('tabOperator');
@@ -103,6 +109,8 @@
     tabOp.addEventListener('click', ()=>show(true));
     tabAd.addEventListener('click', ()=>show(false));
 
+    const TTL_HOURS = 12;
+
     // Operator → index.html
     formOp.addEventListener('submit', async (e)=>{
       e.preventDefault();
@@ -111,37 +119,31 @@
       if(!u || !p){ alert('Enter username and password'); return; }
       const email = `${u}@bayside.local`;
       try{
-        await firebase.auth().signInWithEmailAndPassword(email, p);
+        const cred = await firebase.auth().signInWithEmailAndPassword(email, p);
+        // set Bayside local session
+        if (window.BaysideAuth?.setAuth) BaysideAuth.setAuth({ name: u.charAt(0).toUpperCase()+u.slice(1), ttlHours: TTL_HOURS });
+        try { localStorage.setItem('bayside:userEmail', cred.user?.email || email); } catch(_) {}
         window.location.replace('index.html');
-      }catch(err){
-        console.warn(err); alert(err.message || 'Sign in failed');
-      }
+      }catch(err){ console.warn(err); alert(err.message || 'Sign in failed'); }
     });
 
-    // Admin → admin.html (force target + redirect)
+    // Admin → admin.html
     formAd.addEventListener('submit', async (e)=>{
       e.preventDefault();
       const email = document.getElementById('ad_email').value.trim();
       const pass  = document.getElementById('ad_pass').value;
       if(!email || !pass){ alert('Enter email and password'); return; }
-
-      // set a post-login target for any auth-bridge that might run
-      try {
-        sessionStorage.setItem('bayside_next', 'admin.html');
-        localStorage.setItem('bayside_next', 'admin.html'); // fallback
-      } catch(_) {}
-
       try{
-        await firebase.auth().signInWithEmailAndPassword(email, pass);
-        // force navigation immediately
+        const cred = await firebase.auth().signInWithEmailAndPassword(email, pass);
+        // set Bayside local session
+        if (window.BaysideAuth?.setAuth) {
+          const pretty = (email.split('@')[0]||'Admin').replace(/\./g,' ').replace(/(^|\s)\S/g, c=>c.toUpperCase());
+          BaysideAuth.setAuth({ name: pretty, ttlHours: TTL_HOURS });
+        }
+        try { localStorage.setItem('bayside:userEmail', cred.user?.email || email); } catch(_) {}
         window.location.replace('admin.html');
-      }catch(err){
-        console.warn(err); alert(err.message || 'Sign in failed');
-      }
+      }catch(err){ console.warn(err); alert(err.message || 'Sign in failed'); }
     });
-
-    // (Optional) If someone is already signed in and opens login.html,
-    // we do nothing to avoid loops. If you prefer auto-redirect, we can add it.
   </script>
 </body>
 </html>
