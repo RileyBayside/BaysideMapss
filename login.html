@@ -31,9 +31,9 @@
       display:flex;align-items:center;justify-content:center;
       padding:24px;
     }
+
     .wrap{max-width:760px;width:100%}
-    .brand{display:flex;justify-content:center;margin-bottom:16px}
-    .brand img{height:60px;display:block}
+
     .card{
       background:var(--card);
       border-radius:20px;
@@ -41,7 +41,21 @@
       box-shadow:0 10px 34px rgba(16,24,40,.10);
       overflow:hidden;
     }
-    .tabs{display:flex;gap:8px;padding:16px 18px;border-bottom:1px solid var(--muted)}
+
+    /* Logo lives INSIDE the panel header now */
+    .card-head{
+      padding: 18px 18px 6px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .brand img{
+      height: 90px;                     /* bigger logo */
+      max-width: 100%;
+      display:block;
+    }
+
+    .tabs{display:flex;gap:8px;padding:14px 18px 16px;border-top:1px solid var(--muted);border-bottom:1px solid var(--muted)}
     .tab{
       flex:1;
       border:1px solid var(--muted);
@@ -55,31 +69,53 @@
     }
     .tab:hover{filter:brightness(.98)}
     .tab.active{background:var(--ink);border-color:var(--ink);color:#fff}
+
     .accent{height:3px;background:linear-gradient(90deg,var(--accent),var(--accent-600))}
+
     .body{padding:18px}
-    label{display:block;font-weight:600;margin:10px 0 6px}
-    input,button{width:100%;padding:12px 14px;border-radius:12px;font-size:16px}
-    input{border:1px solid var(--muted);background:#fff}
+
+    /* Center the form and make inputs half the panel width */
+    .form-inner{
+      width:50%;
+      min-width:280px;     /* guardrail for smaller desktops */
+      max-width:420px;     /* keeps it nicely compact */
+      margin: 0 auto;
+    }
+
+    label{display:block;font-weight:600;margin:10px 0 6px;text-align:left}
+    input,button{
+      width:100%;padding:12px 14px;border-radius:12px;font-size:16px
+    }
+    input{
+      border:1px solid var(--muted);background:#fff;
+    }
     input:focus{outline:3px solid var(--focus);border-color:#94a3b8}
     .btn{margin-top:16px;border:0;background:var(--ink);color:#fff;font-weight:800;cursor:pointer}
     .btn:hover{background:#1f2937}
+
     .err{
       display:none;margin-top:12px;color:#7f1d1d;background:#fee2e2;border:1px solid #fecaca;
       padding:10px 12px;border-radius:10px;font-weight:600
     }
+
+    /* Mobile: inputs go full width for usability */
     @media (max-width:560px){
+      .form-inner{width:100%;min-width:0;max-width:none}
       .tab{font-size:14px;padding:10px 12px}
+      .brand img{height:78px}
     }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="brand">
-      <!-- Logo lives at the repo root -->
-      <img src="logo.png" alt="Bayside Slashing & Maintenance" onerror="this.style.display='none'">
-    </div>
-
     <div class="card">
+      <div class="card-head">
+        <div class="brand">
+          <!-- Logo at repo root -->
+          <img src="logo.png" alt="Bayside Slashing & Maintenance" onerror="this.style.display='none'">
+        </div>
+      </div>
+
       <div class="tabs" role="tablist" aria-label="Sign in method">
         <button id="tab-operator" class="tab active" type="button">Operator</button>
         <button id="tab-admin" class="tab" type="button">Admin</button>
@@ -87,7 +123,7 @@
       <div class="accent"></div>
 
       <div class="body">
-        <form id="loginForm" autocomplete="on">
+        <form id="loginForm" autocomplete="on" class="form-inner">
           <label id="lbl-email" for="email">Username</label>
           <input id="email" name="email" type="text" autocomplete="username" placeholder="e.g., riley" required />
 
@@ -162,3 +198,4 @@
   </script>
 </body>
 </html>
+
