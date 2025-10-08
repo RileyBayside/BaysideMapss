@@ -1,4 +1,5 @@
-// Initialized with your Firebase SDK config
+
+/* firebase-init.js */
 (function(){
   const firebaseConfig = {
     apiKey: "AIzaSyDSuG2VGa6-8RRyTYyy05oXqCTXIvS2RJI",
@@ -7,9 +8,7 @@
     storageBucket: "bayside-maps.firebasestorage.app",
     messagingSenderId: "204164908023",
     appId: "1:204164908023:web:c8644566317c5b1c80264a",
-    measurementId: "G-BZ6SYPX49P"
+    measurementId: "G-BZG5XPX49P"
   };
-  if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-  }
+  if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
 })();
