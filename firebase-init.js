@@ -1,5 +1,5 @@
 
-/* firebase-init.js */
+/* firebase-init.js — project config only (no App Check, no Firestore on login) */
 (function(){
   const firebaseConfig = {
     apiKey: "AIzaSyDSuG2VGa6-8RRyTYyy05oXqCTXIvS2RJI",
