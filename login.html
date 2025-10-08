@@ -37,7 +37,7 @@
       <div class="badge">Secure Sign-in</div>
       <h1>Welcome</h1>
 
-      <!-- Show only if already signed in. No auto-redirect. -->
+      <!-- Shown only if already signed in (no auto-redirect). -->
       <div id="signedInBox" class="info">
         You’re already signed in. Choose:
         <div class="row mt12">
@@ -91,26 +91,25 @@
           email.dataset.mode='admin';
         }
       }
-
       opTab.onclick = () => setMode('operator');
       adTab.onclick = () => setMode('admin');
       setMode('operator');
 
-      // Type '@' → switch to admin mode
+      // If '@' typed, switch to admin mode automatically
       email.addEventListener('input', () => {
         if (email.value.includes('@')) setMode('admin');
       });
 
-      // Show/hide the "already signed in" box (no auto-redirect)
+      // Show “already signed in” box; do NOT auto-redirect
       firebase.auth().onAuthStateChanged(u => {
         signedInBox.style.display = u ? 'block' : 'none';
       });
 
-      signOutBtn.onclick = async () => {
+      signOutBtn && (signOutBtn.onclick = async () => {
         try { await firebase.auth().signOut(); } finally { location.reload(); }
-      };
+      });
 
-      // Submit → sign in → hard navigate to index.html (no other targets)
+      // Submit → sign in → hard navigate to index.html
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
         errBox.style.display='none'; errBox.textContent='';
@@ -124,7 +123,6 @@
 
         try{
           await firebase.auth().signInWithEmailAndPassword(signinEmail, pass);
-          // Single, hard navigation — prevents loops
           window.location.href = 'index.html';
         }catch(err){
           console.warn(err);
