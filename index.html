@@ -4,102 +4,65 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bayside — Dashboard</title>
-  <link rel="icon" href="logo.png">
+  <!-- Hide content until auth status is known -->
+  <style>
+    html{visibility:hidden}
+    body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#f6f7fb;color:#0f172a}
+    .topbar{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#fff;border-bottom:1px solid #e5e7eb}
+    .btn{background:#0f172a;color:#fff;border:0;border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer}
+    .wrap{max-width:1000px;margin:24px auto;padding:0 16px}
+    .card{background:#fff;border-radius:14px;box-shadow:0 6px 22px rgba(16,24,40,.08);padding:20px}
+    h1{margin:0;font-size:22px}
+  </style>
 
-  <script src="auth.js"></script>
-  <script>window.BaysideAuth && BaysideAuth.enforceGate && BaysideAuth.enforceGate();</script>
-
-  <!-- Firebase -->
+  <!-- Firebase SDK + your config -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-functions-compat.js"></script>
   <script src="firebase-init.js"></script>
 
-  <!-- App Check -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-check-compat.js"></script>
-  <script src="appcheck.js"></script>
-
-  <script src="data.js"></script>
-
-  <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#f6f7f9}
-    .header{display:flex;align-items:center;gap:12px;padding:14px 22px;background:#fff;border-bottom:1px solid #e5e7eb}
-    .header img{height:40px}.brand{font-weight:800}.spacer{flex:1}
-    .btn{padding:8px 12px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;cursor:pointer}
-    .container{max-width:1100px;margin:22px auto;padding:0 22px}
-    .quick a{display:inline-block;margin:6px 10px 0 0;padding:10px 12px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;text-decoration:none;color:#0f172a}
-    .acard{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:14px;margin:10px 0}
-    .row{display:flex;justify-content:space-between;gap:12px}
-  </style>
+  <script>
+    // Gate: only show if signed-in; else go to login
+    (function(){
+      firebase.auth().onAuthStateChanged(function(user){
+        if (user) {
+          // Show page
+          document.documentElement.style.visibility = 'visible';
+          // Optionally display the user's email/name
+          const el = document.getElementById('whoami');
+          if (el) el.textContent = user.email || 'Signed in';
+        } else {
+          // Not signed in → login with safe next back to index
+          const next = encodeURIComponent(location.pathname + location.search + location.hash);
+          location.replace('login.html?next=' + next);
+        }
+      });
+    })();
+  </script>
 </head>
 <body>
-  <div class="header">
-    <img src="logo.png" alt="Bayside">
-    <div class="brand">Bayside Slashing &amp; Maintenance</div>
-    <div class="spacer"></div>
-    <a id="adminLink" class="btn" href="admin.html" style="display:none">Admin Dashboard</a>
-    <button id="logoutBtn" class="btn">Logout</button>
+  <div class="topbar">
+    <h1>Bayside Dashboard</h1>
+    <div>
+      <span id="whoami" style="margin-right:12px;color:#334155;"></span>
+      <button class="btn" id="logoutBtn">Sign out</button>
+    </div>
   </div>
 
-  <div class="container">
-    <h1>Welcome, <span id="who">Operator</span></h1>
-    <div class="quick">
-      <a href="ParksMowing.html">Parks Mowing</a>
-      <a href="ParksSnipping.html">Parks Snipping</a>
-      <a href="Firebreaks.html">Firebreaks</a>
+  <div class="wrap">
+    <div class="card">
+      <p>Welcome to the dashboard. Replace this content with your actual app UI.</p>
+      <ul>
+        <li>If you need to load Firestore here, we can add it next (step by step).</li>
+        <li>If App Check is enforced, we’ll wire that in carefully after this works.</li>
+      </ul>
     </div>
-
-    <h2>Your Assigned Work</h2>
-    <div id="assignments"></div>
   </div>
 
   <script>
-    // Logout
+    // Sign out button
     document.getElementById('logoutBtn').addEventListener('click', async () => {
-      try { await firebase.auth().signOut().catch(()=>{}); } catch(_) {}
-      try { if (window.BaysideAuth?.clearAuth) BaysideAuth.clearAuth(); else localStorage.removeItem('bayside.auth'); } catch(_){}
-      window.location.replace('login.html');
+      try { await firebase.auth().signOut(); } finally { location.href = 'login.html'; }
     });
-
-    (async function () {
-      const name = (window.BaysideAuth?.getUserName?.() ) || "Operator";
-      document.getElementById("who").textContent = name;
-
-      const role = await BaysideData.getMyRole();
-      if (role === 'admin') document.getElementById('adminLink').style.display = 'inline-flex';
-
-      const u = await new Promise(res => firebase.auth().onAuthStateChanged(x => res(x)));
-      if (!u) return;
-
-      const items = await BaysideData.listAssignmentsFor(u.uid, true);
-      const box = document.getElementById('assignments');
-      if (!items.length) { box.innerHTML = '<div>No assigned work yet.</div>'; return; }
-
-      box.innerHTML = items.map(it => `
-        <div class="acard">
-          <div class="row"><div><strong>Zone:</strong> ${it.zone || '-'}</div><div><strong>Status:</strong> ${it.status}</div></div>
-          <div><strong>Parks:</strong> ${it.parksSpec || '-'}</div>
-          ${it.notes ? `<div><strong>Notes:</strong> ${it.notes}</div>` : ''}
-          <div class="row">
-            <button data-id="${it.id}" data-s="in_progress">Mark In Progress</button>
-            <button data-id="${it.id}" data-s="done">Mark Done</button>
-          </div>
-        </div>
-      `).join('');
-
-      box.querySelectorAll('button[data-id]').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const id = btn.getAttribute('data-id');
-          const s  = btn.getAttribute('data-s');
-          try{
-            await BaysideData.updateAssignmentStatus(id, s);
-            btn.closest('.acard').querySelectorAll('.row div')[1].innerHTML = '<strong>Status:</strong> ' + s;
-            if (s === 'done') btn.closest('.acard').style.opacity = .6;
-          }catch(e){ alert('Failed: ' + (e.message||e)); }
-        });
-      });
-    })();
   </script>
 </body>
 </html>
