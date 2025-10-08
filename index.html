@@ -3,117 +3,159 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Bayside – Dashboard</title>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="dashboard.css">
+  <title>Bayside — Dashboard</title>
 
-  <!-- If you have an existing global style file, include it after this line -->
-  <!-- <link rel="stylesheet" href="styles.css"> -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root{ --ink:#0f172a; --ink-2:#111827; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff; --shadow:0 8px 26px rgba(16,24,40,.08);}
+    *{box-sizing:border-box} html,body{height:100%}
+    body{ margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink); }
+    .header{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px 22px; background:#fff; border-bottom:1px solid var(--muted); position:sticky; top:0; z-index:10; box-shadow:var(--shadow);}
+    .brand{ display:flex; align-items:center; gap:14px; min-width:0; }
+    .brand img{ height:56px; display:block }
+    .brand .title{ font-size:22px; font-weight:800; color:var(--ink-2); letter-spacing:.2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .userbox{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    .email{ font-weight:600; color:#334155; background:#f1f5f9; border:1px solid #e2e8f0; padding:8px 10px; border-radius:10px; max-width:52vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .btn{ border:0; border-radius:10px; padding:10px 14px; font-weight:800; cursor:pointer; color:#fff; background:var(--ink); }
+    .btn:hover{ background:#1f2937 }
+    .container{ max-width:1120px; margin: 24px auto; padding: 0 16px }
+    .section-title{ font-size:18px; font-weight:800; margin: 10px 2px 12px; color:var(--ink-2) }
+    .links{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px }
+    .link-card{ overflow:hidden; display:flex; flex-direction:column; background:var(--card); border:1px solid var(--muted); border-radius:16px; box-shadow:var(--shadow); text-decoration:none; color:inherit; }
+    .link-card img{ width:100%; height:220px; object-fit:cover; object-position:center; display:block; background:#e2e8f0; }
+    .link-body{ padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px }
+    .link-title{ font-weight:800; font-size:16px; color:var(--ink-2) }
+    .link-go{ text-decoration:none; color:#fff; background:var(--ink); padding:9px 12px; border-radius:10px; font-weight:800; }
+    .tasks{ margin-top:24px }
+    .task-card{ padding:16px; background:var(--card); border:1px solid var(--muted); border-radius:16px; box-shadow:var(--shadow); }
+    .task-empty{ padding:14px; border:1px dashed #cbd5e1; border-radius:12px; background:#f8fafc; color:#475569; font-weight:600; }
+    .task-list{ list-style:none; margin:0; padding:0; display:grid; gap:10px }
+    .task{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; border:1px solid #e2e8f0; background:#fff; font-weight:700; color:#0f172a; }
+    .task .pill{ background:#fee2e2; color:#7f1d1d; border:1px solid #fecaca; padding:4px 8px; border-radius:999px; font-size:12px; font-weight:800; }
+    @media (max-width:980px){ .links{ grid-template-columns: 1fr 1fr } }
+    @media (max-width:640px){ .links{ grid-template-columns: 1fr } .brand .title{ display:none } }
+  </style>
 </head>
 <body>
-
-  <!-- Header / App Bar -->
-  <header class="appbar">
-    <div class="appbar__left">
-      <img class="logo" src="logo.png" alt="Bayside Slashing" />
-      <h1 class="appbar__title">Dashboard</h1>
+  <header class="header">
+    <div class="brand">
+      <img src="logo.png" alt="Bayside logo" onerror="this.style.display='none'">
+      <div class="title">Dashboard</div>
     </div>
-
-    <div class="appbar__right">
-      <span class="user-pill" id="user-email">user@bayside.local</span>
-      <button class="btn btn-outline" id="logoutBtn" type="button">Logout</button>
+    <div class="userbox">
+      <div id="userEmail" class="email">—</div>
+      <button id="logoutBtn" class="btn" type="button">Logout</button>
     </div>
   </header>
 
   <main class="container">
-
-<section class="section">
-  
-  <h2 class="section-title">Work areas</h2>
-
-  <div class="cards-row">
-
-    <!-- Parks Mowing -->
-    <a href="./ParksMowing.html" class="work-card">
-      <div class="work-card__img">
-        <img src="MOWING PICTURE.png" alt="Parks Mowing map" />
-      </div>
-      <div class="work-card__footer">
-        <span class="work-card__title">Parks Mowing</span>
-        <span class="btn btn-dark">Open</span>
-      </div>
-    </a>
-
-    <!-- Parks Snipping -->
-    <a href="./ParksSnipping.html" class="work-card">
-      <div class="work-card__img">
-        <img src="SNIPPING PICTURE.png" alt="Parks Snipping map" />
-      </div>
-      <div class="work-card__footer">
-        <span class="work-card__title">Parks Snipping</span>
-        <span class="btn btn-dark">Open</span>
-      </div>
-    </a>
-
-    <!-- Firebreaks -->
-    <a href="./Firebreaks.html" class="work-card">
-      <div class="work-card__img">
-        <img src="FIREBREAKS PICTURE.png" alt="Firebreaks map" />
-      </div>
-      <div class="work-card__footer">
-        <span class="work-card__title">Firebreaks</span>
-        <span class="btn btn-dark">Open</span>
-      </div>
-    </a>
-
-  </div>
-</section>
-
-
-    <!-- Tasks to complete -->
-    <section class="section">
-      <h2 class="section-title">Tasks to complete</h2>
-
-      <!-- Your existing JS can inject items into this list -->
-      <div id="tasks-list" class="tasks">
-        <!-- Example task markup for reference (leave commented out)
-        <div class="task">
-          <div class="task__left">
-            <div class="task__title">Zone 1 — Numbers 1–50</div>
-            <div class="task__meta">Assigned · Due 15 Oct</div>
-          </div>
-          <div class="task__right">
-            <span class="badge badge-amber">Assigned</span>
-          </div>
+    <!-- Work areas -->
+    <h2 class="section-title">Work areas</h2>
+    <section class="links">
+      <a class="link-card" href="./ParksMowing.html">
+        <img src="MOWING PICTURE.png" alt="Parks Mowing">
+        <div class="link-body">
+          <div class="link-title">Parks Mowing</div>
+          <span class="link-go">Open</span>
         </div>
-        -->
-      </div>
+      </a>
+
+      <a class="link-card" href="./ParksSnipping.html">
+        <img src="SNIPPING PICTURE.png" alt="Parks Snipping">
+        <div class="link-body">
+          <div class="link-title">Parks Snipping</div>
+          <span class="link-go">Open</span>
+        </div>
+      </a>
+
+      <a class="link-card" href="./Firebreaks.html">
+        <img src="FIREBREAKS PICTURE.png" alt="Firebreaks">
+        <div class="link-body">
+          <div class="link-title">Firebreaks</div>
+          <span class="link-go">Open</span>
+        </div>
+      </a>
     </section>
 
+    <!-- Tasks -->
+    <section class="tasks">
+      <h2 class="section-title">Tasks to complete</h2>
+      <div class="task-card">
+        <ul id="taskList" class="task-list"></ul>
+        <div id="taskEmpty" class="task-empty" style="display:none">No tasks found. Example: <b>Zone 1 — Numbers 1–50</b></div>
+      </div>
+    </section>
   </main>
 
-  <footer class="footer-space"></footer>
+  <!-- Firebase + local session -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="firebase-init.js"></script>
+  <script src="auth.js"></script>
 
-  <!-- Optional tiny script: hook up logout if you already expose a logout() -->
   <script>
-    (function() {
-      // Fill the email pill if your login code stores it (adjust as needed)
-      try {
-        const emailEl = document.getElementById('user-email');
-        const stored = localStorage.getItem('bayside:userEmail');
-        if (stored && emailEl) emailEl.textContent = stored;
-      } catch (e) {}
-
+    (function(){
+      const emailEl = document.getElementById('userEmail');
       const logoutBtn = document.getElementById('logoutBtn');
-      if (logoutBtn) {
-        logoutBtn.addEventListener('click', function(){
-          // If you already have a global logout function, call it:
-          if (window.logout) { window.logout(); return; }
-          // Fallback: route back to login
-          window.location.href = './login.html';
-        });
+      const taskList = document.getElementById('taskList');
+      const taskEmpty = document.getElementById('taskEmpty');
+
+      function renderTask(t){
+        const li = document.createElement('li');
+        li.className = 'task';
+        const pill = document.createElement('span');
+        pill.className = 'pill';
+        pill.textContent = (t.zone || 'Zone ?');
+        const text = document.createElement('span');
+        text.textContent = ' — ' + (t.range || 'Numbers ?');
+        li.appendChild(pill);
+        li.appendChild(text);
+        return li;
       }
+      function showEmpty(show){ taskEmpty.style.display = show ? 'block' : 'none'; }
+
+      firebase.auth().onAuthStateChanged(async user=>{
+        if(!user){ window.location.href = 'login.html'; return; }
+        emailEl.textContent = user.email || localStorage.getItem('bayside:userEmail') || 'Signed in';
+
+        // Load tasks (optional; safe no-op if no assignments)
+        try{
+          const db = firebase.firestore();
+          const snap = await db.collection('assignments')
+            .where('userId', '==', user.uid)
+            .where('status', 'in', ['open', 'assigned', 'in_progress'])
+            .orderBy('zone', 'asc')
+            .get();
+
+          taskList.innerHTML = '';
+          if(snap.empty){ showEmpty(true); }
+          else{
+            showEmpty(false);
+            snap.forEach(doc=>{
+              const d = doc.data()||{};
+              taskList.appendChild(renderTask({
+                zone: d.zone || '',
+                range: d.parksRange || d.range || ''
+              }));
+            });
+          }
+        }catch(err){
+          console.warn('Task load error:', err);
+          taskList.innerHTML = ''; showEmpty(true);
+        }
+      });
+
+      logoutBtn.addEventListener('click', async ()=>{
+        try{
+          if (window.BaysideAuth?.clear) BaysideAuth.clear();
+          await firebase.auth().signOut();
+        }catch(e){ console.warn(e); }
+        window.location.href = 'login.html';
+      });
     })();
   </script>
 </body>
