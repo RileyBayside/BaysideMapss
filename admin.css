@@ -1,18 +1,1 @@
-#admin-add-users { padding: 12px 14px; }
-#admin-add-users .admin-title { margin: 0 0 4px; font-weight: 600; }
-#admin-add-users .admin-subtitle { margin: 0 0 10px; color: #666; font-size: 0.95rem; }
-
-.au-lined-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.au-lined-list li { display: grid; grid-template-columns: 180px 1fr; align-items: center; gap: 10px; }
-
-.au-lined-list label { white-space: nowrap; font-weight: 500; }
-.au-lined-list input {
-  border: none;
-  border-bottom: 1.5px solid #cfcfcf;   /* gives the “_______” look */
-  padding: 6px 2px;
-  outline: none;
-  background: transparent;
-  width: 100%;
-}
-.au-lined-list input:focus { border-bottom-color: #4b6bfb; }
-.au-hint { display: block; margin-top: 6px; color: #777; }
+/* using inline styles in admin.html; keep your existing admin.css if you prefer */
