@@ -12,13 +12,14 @@
 
   <style>
     :root{
-      --ink:#0f172a;       /* deep slate */
+      --ink:#0f172a;
       --ink-2:#111827;
       --muted:#e5e7eb;
       --bg:#f6f7fb;
       --card:#ffffff;
-      --accent:#d11e2b;   /* brand red */
+      --accent:#d11e2b;
       --accent-600:#b71a24;
+      --focus:#e6f0ff;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
@@ -29,23 +30,19 @@
       color:var(--ink);
     }
 
-    /* Header (taller to accommodate bigger logo) */
+    /* Header (roomier for bigger logo) */
     .header{
       display:flex; align-items:center; justify-content:space-between;
       gap:16px; padding:16px 22px; background:#fff; border-bottom:1px solid var(--muted);
       position:sticky; top:0; z-index:10;
     }
-    .brand{
-      display:flex; align-items:center; gap:14px; min-width:0;
-    }
+    .brand{ display:flex; align-items:center; gap:14px; min-width:0; }
     .brand img{ height:56px; display:block }
     .brand .title{
       font-size:22px; font-weight:800; color:var(--ink-2); letter-spacing:.2px;
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     }
-    .userbox{
-      display:flex; align-items:center; gap:12px; flex-wrap:wrap;
-    }
+    .userbox{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
     .email{
       font-weight:600; color:#334155; background:#f1f5f9; border:1px solid #e2e8f0;
       padding:8px 10px; border-radius:10px; max-width:52vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
@@ -65,31 +62,37 @@
       box-shadow:0 8px 26px rgba(16,24,40,.08);
     }
 
-    /* Admin tools: multiple actions per tool */
-    .tools{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px }
+    /* Admin tools */
+    .admin-grid{ display:grid; grid-template-columns: 1fr; gap:16px }
     .tool{ padding:16px }
-    .tool h3{ margin:0 0 8px; font-size:15px; font-weight:800 }
-    .tool p { margin:0 0 12px; color:#475569 }
 
-    .actions{ display:flex; flex-wrap:wrap; gap:10px; margin-top:6px }
-    .action{
-      display:inline-flex; align-items:center; justify-content:center;
-      padding:9px 12px; border-radius:10px; font-weight:800; text-decoration:none; color:#fff;
-      background:var(--accent);
+    .tool-row{
+      display:grid; grid-template-columns: 220px 1fr auto; align-items:center; gap:12px;
+      padding:10px 0; border-top:1px dashed #e2e8f0;
     }
-    .action:hover{ background:var(--accent-600) }
+    .tool-row:first-of-type{ border-top:none }
+    .tool-label{ font-weight:800; color:var(--ink-2) }
 
-    /* Quick links grid */
+    .tool input, .tool select{
+      width:100%; padding:11px 12px; border-radius:10px; border:1px solid var(--muted);
+      font-size:15px; background:#fff;
+    }
+    .tool input:focus, .tool select:focus{ outline:3px solid var(--focus); border-color:#94a3b8 }
+
+    .delete-col{ display:flex; gap:10px; align-items:center }
+    .delete-btn{
+      background:var(--accent); color:#fff; border:0; border-radius:10px; padding:10px 12px; font-weight:800; cursor:pointer;
+    }
+    .delete-btn:hover{ background:var(--accent-600) }
+
+    .hint{ color:#64748b; font-size:13px }
+
+    /* Quick links */
     .links{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px }
     .link-card{ overflow:hidden; display:flex; flex-direction:column }
-    /* Consistent rectangle thumbnails, show full height nicely */
     .link-card img{
       width:100%;
-      height:280px;             /* uniform rectangle height */
-      object-fit:cover;         /* fill neatly without squishing */
-      object-position:center;   /* center focal point */
-      display:block;
-      background:#e2e8f0;
+      height:220px; object-fit:cover; object-position:center; display:block; background:#e2e8f0;
     }
     .link-body{ padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px }
     .link-title{ font-weight:800; font-size:16px; color:var(--ink-2) }
@@ -98,14 +101,23 @@
     }
     .link-go:hover{ background:#1f2937 }
 
+    /* Alerts */
+    .toast{
+      position:fixed; left:50%; bottom:22px; transform:translateX(-50%);
+      background:#111827; color:#fff; padding:12px 14px; border-radius:10px; font-weight:700;
+      display:none; z-index:50; box-shadow:0 10px 24px rgba(0,0,0,.25);
+    }
+    .toast.show{ display:block }
+
     /* Responsive */
     @media (max-width:980px){
-      .tools{ grid-template-columns: 1fr }
       .links{ grid-template-columns: 1fr 1fr }
     }
     @media (max-width:640px){
       .links{ grid-template-columns: 1fr }
-      .brand .title{ display:none } /* save space on very small screens */
+      .brand .title{ display:none }
+      .tool-row{ grid-template-columns: 1fr; gap:6px }
+      .delete-col{ justify-content:flex-start }
     }
   </style>
 </head>
@@ -125,35 +137,32 @@
   <main class="container">
     <!-- Admin tools -->
     <h2 class="section-title">Admin tools</h2>
-    <section class="tools">
+    <section class="admin-grid">
       <div class="card tool">
-        <h3>Add users</h3>
-        <p>Create operator accounts and set display names.</p>
-        <div class="actions">
-          <a class="action" href="admin.html#create">Create operator</a>
-          <a class="action" href="admin.html#reset">Reset password</a>
-          <a class="action" href="admin.html#disable">Disable / delete</a>
+        <!-- Create Operator -->
+        <div class="tool-row">
+          <div class="tool-label">Create Operator</div>
+          <input id="co_username" placeholder="e.g., riley" autocomplete="off" />
+          <div class="hint">Press <b>Enter</b> to create</div>
         </div>
-      </div>
 
-      <div class="card tool">
-        <h3>Delegate work</h3>
-        <p>Assign parks or zones to operators (e.g., Zone 1, Parks 1–50).</p>
-        <div class="actions">
-          <a class="action" href="delegate.html#zone">Assign by zone</a>
-          <a class="action" href="delegate.html#range">Assign by range</a>
-          <a class="action" href="delegate.html#view">View assignments</a>
+        <!-- Set Password -->
+        <div class="tool-row">
+          <div class="tool-label">Set Password</div>
+          <input id="sp_payload" placeholder="username:newpassword" autocomplete="off" />
+          <div class="hint">Format: <b>username:newpassword</b> then press <b>Enter</b></div>
         </div>
-      </div>
 
-      <div class="card tool">
-        <h3>Generate reports</h3>
-        <p>Build PDFs (same options as your sidebar PDF actions).</p>
-        <div class="actions">
-          <a class="action" href="reports.html?type=mowing">Mowing PDF</a>
-          <a class="action" href="reports.html?type=snipping">Snipping PDF</a>
-          <a class="action" href="reports.html?type=firebreaks">Firebreaks PDF</a>
-          <a class="action" href="reports.html?type=daily">Daily summary</a>
+        <!-- Delete User -->
+        <div class="tool-row">
+          <div class="tool-label">Delete User</div>
+          <div class="delete-col">
+            <select id="du_select">
+              <option value="" disabled selected>Loading users…</option>
+            </select>
+            <button class="delete-btn" id="du_btn" type="button">Delete</button>
+          </div>
+          <div class="hint">Select user then press <b>Delete</b></div>
         </div>
       </div>
     </section>
@@ -165,7 +174,7 @@
         <img src="MOWING PICTURE.png" alt="Parks Mowing" onerror="this.style.display='none'">
         <div class="link-body">
           <div class="link-title">Parks Mowing</div>
-          <a class="link-go" href="ParksMowing.html">Open</a>
+          <a class="link-go" href="parksmowing.html">Open</a>
         </div>
       </article>
 
@@ -173,48 +182,142 @@
         <img src="SNIPPING PICTURE.png" alt="Parks Snipping" onerror="this.style.display='none'">
         <div class="link-body">
           <div class="link-title">Parks Snipping</div>
-          <a class="link-go" href="ParksSnipping.html">Open</a>
+          <a class="link-go" href="parkssnipping.html">Open</a>
         </div>
       </article>
 
       <article class="card link-card">
-        <!-- fixed filename per your note -->
         <img src="FIREBREAKS PICTURE.png" alt="Firebreaks" onerror="this.style.display='none'">
         <div class="link-body">
           <div class="link-title">Firebreaks</div>
-          <a class="link-go" href="Firebreaks.html">Open</a>
+          <a class="link-go" href="firebreaks.html">Open</a>
         </div>
       </article>
     </section>
   </main>
 
+  <div id="toast" class="toast"></div>
+
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-functions-compat.js"></script>
   <script src="firebase-init.js"></script>
 
   <script>
-    // Auth gate + UI hooks
+    // helpers
+    function toast(msg, ms=2200){
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      setTimeout(()=>t.classList.remove('show'), ms);
+    }
+
     (function(){
       const emailEl = document.getElementById('userEmail');
       const logoutBtn = document.getElementById('logoutBtn');
+      const db = firebase.firestore();
+      const fns = firebase.functions();
 
+      // auth gate
       firebase.auth().onAuthStateChanged(user=>{
-        if(!user){
-          // Not signed in → back to login
-          window.location.href = 'login.html';
-          return;
-        }
+        if(!user){ window.location.href = 'login.html'; return; }
         emailEl.textContent = user.email || 'Signed in';
       });
 
       logoutBtn.addEventListener('click', async ()=>{
+        try{ await firebase.auth().signOut(); window.location.href = 'login.html'; }
+        catch(e){ toast('Logout failed'); console.warn(e); }
+      });
+
+      // --- Admin tools wire-up ---
+
+      // Create operator (Enter to submit)
+      const coInput = document.getElementById('co_username');
+      coInput.addEventListener('keydown', async (e)=>{
+        if(e.key !== 'Enter') return;
+        const username = (coInput.value || '').trim().toLowerCase();
+        if(!username){ toast('Enter a username'); return; }
         try{
-          await firebase.auth().signOut();
-          window.location.href = 'login.html';
-        }catch(e){
-          alert('Logout failed. Please try again.');
-          console.warn(e);
+          const callable = fns.httpsCallable('adminCreateOperator');
+          await callable({ username }); // server should create username@bayside.local
+          toast('Operator created: ' + username);
+          coInput.value = '';
+        }catch(err){
+          console.warn(err);
+          toast('Create failed: ' + (err.message || err.code || 'error'));
+        }
+      });
+
+      // Set password (username:newpassword)
+      const spInput = document.getElementById('sp_payload');
+      spInput.addEventListener('keydown', async (e)=>{
+        if(e.key !== 'Enter') return;
+        const payload = (spInput.value || '').trim();
+        const idx = payload.indexOf(':');
+        if(idx < 1 || idx === payload.length-1){
+          toast('Use format username:newpassword'); return;
+        }
+        const username = payload.slice(0, idx).trim().toLowerCase();
+        const password = payload.slice(idx+1).trim();
+        if(password.length < 6){ toast('Password must be at least 6 chars'); return; }
+
+        try{
+          const callable = fns.httpsCallable('adminSetPassword');
+          await callable({ username, password });
+          toast('Password updated for ' + username);
+          spInput.value = '';
+        }catch(err){
+          console.warn(err);
+          toast('Set password failed: ' + (err.message || err.code || 'error'));
+        }
+      });
+
+      // Populate delete dropdown from Firestore /users
+      const duSelect = document.getElementById('du_select');
+      const duBtn = document.getElementById('du_btn');
+
+      function renderUserOption(doc){
+        const data = doc.data() || {};
+        const label = data.name ? `${data.name} (${data.email || '—'})` : (data.email || doc.id);
+        const opt = document.createElement('option');
+        opt.value = doc.id;
+        opt.textContent = label;
+        return opt;
+      }
+
+      db.collection('users').orderBy('name','asc').onSnapshot(snap=>{
+        duSelect.innerHTML = '';
+        if(snap.empty){
+          const o = document.createElement('option');
+          o.value=''; o.textContent='No users'; o.disabled = true; o.selected = true;
+          duSelect.appendChild(o);
+          return;
+        }
+        const ph = document.createElement('option');
+        ph.value=''; ph.textContent='Select a user…'; ph.disabled = true; ph.selected = true;
+        duSelect.appendChild(ph);
+
+        snap.forEach(doc=> duSelect.appendChild(renderUserOption(doc)));
+      }, err=>{
+        console.warn(err);
+        duSelect.innerHTML = '<option disabled selected>Error loading users</option>';
+      });
+
+      // Delete user (needs Cloud Function)
+      duBtn.addEventListener('click', async ()=>{
+        const uid = duSelect.value;
+        if(!uid){ toast('Choose a user'); return; }
+        if(!confirm('Delete this user? This cannot be undone.')) return;
+
+        try{
+          const callable = fns.httpsCallable('adminDeleteUser');
+          await callable({ uid });
+          toast('User deleted');
+          duSelect.value = '';
+        }catch(err){
+          console.warn(err);
+          toast('Delete failed: ' + (err.message || err.code || 'error'));
         }
       });
     })();
