@@ -57,6 +57,31 @@
 
   <script>
     (function(){
+      // Utility: target page after login
+      function getNextUrl(){
+        try{
+          const p = new URLSearchParams(window.location.search);
+          const next = p.get('next');
+          if(next){
+            const u = new URL(next, window.location.href);
+            if (u.origin === window.location.origin) return u.pathname + u.search + u.hash;
+          }
+        }catch(e){}
+        return 'index.html';
+      }
+      function goNext(){
+        const target = getNextUrl();
+        // Use replace to avoid returning to login on back button
+        window.location.replace(target);
+        // Safety fallback in case replace is ignored
+        setTimeout(()=>{ window.location.href = target; }, 250);
+      }
+
+      // Keep previous session (default) so the redirect is immediate if already signed in
+      firebase.auth().onAuthStateChanged(u => {
+        if (u) { goNext(); }
+      });
+
       const opTab = document.getElementById('tab-operator');
       const adTab = document.getElementById('tab-admin');
       const email = document.getElementById('email');
@@ -93,13 +118,16 @@
         const pass = document.getElementById('password').value;
         if(!raw || !pass){ return; }
 
-        // Smart detection: if it looks like an email, use it directly; otherwise treat as operator username
         const isEmail = raw.includes('@');
         const signinEmail = isEmail ? raw : `${raw.toLowerCase()}@bayside.local`;
 
         try{
-          const cred = await firebase.auth().signInWithEmailAndPassword(signinEmail, pass);
-          window.location.replace('index.html');
+          // Ensure previous anonymous sessions don't interfere
+          if (firebase.auth().currentUser && firebase.auth().currentUser.isAnonymous) {
+            await firebase.auth().currentUser.delete().catch(()=>firebase.auth().signOut());
+          }
+          await firebase.auth().signInWithEmailAndPassword(signinEmail, pass);
+          goNext();
         }catch(err){
           console.warn(err);
           errBox.textContent = 'Sign-in failed: ' + (err && err.message ? err.message : String(err));
