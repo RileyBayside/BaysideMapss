@@ -55,39 +55,129 @@
 
   <main class="container">
     <!-- Admin tools -->
-    <h2 class="section-title">Admin tools</h2>
-    <section class="tools">
-      <div class="card tool">
-        <h3>Add users</h3>
-        <p>Create operator accounts and set display names.</p>
-        <div class="actions">
-          <a class="action" href="admin.html#create">Create operator</a>
-          <a class="action" href="admin.html#reset">Reset password</a>
-          <a class="action" href="admin.html#disable">Disable / delete</a>
-        </div>
-      </div>
+    <!-- ===========================
+     ADD USERS (LIST UI) – DROP-IN
+     Paste this anywhere inside your existing #admin-tools on admin.html
+     =========================== -->
+<section id="admin-add-users" class="admin-card">
+  <h3 class="admin-title">Add Users</h3>
+  <p class="admin-subtitle">Create operator accounts and set display names.</p>
 
-      <div class="card tool">
-        <h3>Delegate work</h3>
-        <p>Assign parks or zones to operators (e.g., Zone 1, Parks 1–50).</p>
-        <div class="actions">
-          <a class="action" href="delegate.html#zone">Assign by zone</a>
-          <a class="action" href="delegate.html#select">Select on map</a>
-          <a class="action" href="delegate.html#view">View assignments</a>
-        </div>
-      </div>
+  <ul class="au-lined-list">
+    <li>
+      <label for="au-create-operator">Create Operator:</label>
+      <input id="au-create-operator" type="text" placeholder="email or UID" autocomplete="username" />
+    </li>
 
-      <div class="card tool">
-        <h3>Generate reports</h3>
-        <p>Build PDFs (same options as your sidebar PDF actions).</p>
-        <div class="actions">
-          <a class="action" href="reports.html?type=mowing">Mowing PDF</a>
-          <a class="action" href="reports.html?type=snipping">Snipping PDF</a>
-          <a class="action" href="reports.html?type=firebreaks">Firebreaks PDF</a>
-          <a class="action" href="reports.html?type=daily">Daily summary</a>
-        </div>
+    <li>
+      <label for="au-setpass-user">Set Password:</label>
+      <div class="au-row">
+        <input id="au-setpass-user" type="text" placeholder="email or UID" autocomplete="username" />
+        <input id="au-setpass-pass" type="password" placeholder="new password" autocomplete="new-password" />
       </div>
-    </section>
+    </li>
+
+    <li>
+      <label for="au-delete-user">Delete User:</label>
+      <input id="au-delete-user" type="text" placeholder="email or UID" autocomplete="username" />
+    </li>
+
+    <li>
+      <label for="au-view-filter">View Users:</label>
+      <input id="au-view-filter" type="text" placeholder="(optional) filter — press Enter" />
+    </li>
+  </ul>
+
+  <small class="au-hint">Tip: press <strong>Enter</strong> on a line to run that action.</small>
+
+  <!-- Keep your original buttons/handlers but hide them.
+       If you already have these elsewhere, keep one set only. -->
+  <div style="display:none">
+    <button id="btn-create-operator" type="button"></button>
+    <button id="btn-set-password" type="button"></button>
+    <button id="btn-delete-user" type="button"></button>
+    <button id="btn-view-users" type="button"></button>
+  </div>
+</section>
+
+<!-- ============ Minimal styles (safe to inline or move to your CSS) ============ -->
+<style>
+  #admin-add-users { padding: 12px 14px; }
+  #admin-add-users .admin-title { margin: 0 0 4px; font-weight: 600; }
+  #admin-add-users .admin-subtitle { margin: 0 0 10px; color: #666; font-size: 0.95rem; }
+
+  .au-lined-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .au-lined-list li { display: grid; grid-template-columns: 180px 1fr; align-items: center; gap: 10px; }
+
+  .au-lined-list label { white-space: nowrap; font-weight: 500; }
+
+  .au-lined-list input {
+    border: none;
+    border-bottom: 1.5px solid #cfcfcf;   /* the “_______” look */
+    padding: 6px 2px;
+    outline: none;
+    background: transparent;
+    width: 100%;
+  }
+  .au-lined-list input:focus { border-bottom-color: #4b6bfb; }
+
+  .au-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .au-hint { display: block; margin-top: 6px; color: #777; }
+  
+  /* Optional: card look if your admin cards use something similar */
+  .admin-card {
+    background: #fff; border: 1px solid #eee; border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04); 
+  }
+</style>
+
+<!-- ============ Wiring: map Enter key to your existing (hidden) handlers ============ -->
+<script>
+(() => {
+  // If your original handler buttons have different IDs, change these:
+  const BTN_CREATE = document.getElementById('btn-create-operator');
+  const BTN_SETPASS = document.getElementById('btn-set-password');
+  const BTN_DELETE = document.getElementById('btn-delete-user');
+  const BTN_VIEW   = document.getElementById('btn-view-users');
+
+  // Inputs
+  const $create  = document.getElementById('au-create-operator');
+  const $setUser = document.getElementById('au-setpass-user');
+  const $setPass = document.getElementById('au-setpass-pass');
+  const $delete  = document.getElementById('au-delete-user');
+  const $view    = document.getElementById('au-view-filter');
+
+  // Helper: on Enter key, run a handler
+  const onEnter = (el, handler) => {
+    if (!el) return;
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handler();
+      }
+    });
+  };
+
+  // CREATE OPERATOR
+  onEnter($create, () => {
+    // If your existing code expects a specific input ID/value, either:
+    // 1) read from this field inside that handler, or
+    // 2) mirror the expected ID here (rename this input's id).
+    BTN_CREATE?.click();
+  });
+
+  // SET PASSWORD (triggered by Enter in either field)
+  const runSetPassword = () => BTN_SETPASS?.click();
+  onEnter($setUser, runSetPassword);
+  onEnter($setPass, runSetPassword);
+
+  // DELETE USER
+  onEnter($delete, () => BTN_DELETE?.click());
+
+  // VIEW USERS
+  onEnter($view, () => BTN_VIEW?.click());
+})();
+</script>
 
     <!-- Work areas -->
     <h2 class="section-title">Work areas</h2>
