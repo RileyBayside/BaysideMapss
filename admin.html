@@ -1,238 +1,373 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Bayside — Admin</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Bayside – Admin</title>
 
+  <!-- Optional: your global stylesheet(s) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
-    :root{ --ink:#0f172a; --ink-2:#111827; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff; --shadow:0 8px 26px rgba(16,24,40,.08);}
-    *{box-sizing:border-box} html,body{height:100%}
-    body{ margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink); }
-    .header{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px 22px; background:#fff; border-bottom:1px solid var(--muted); position:sticky; top:0; z-index:10; box-shadow:var(--shadow);}
-    .brand{ display:flex; align-items:center; gap:14px; min-width:0; }
-    .brand img{ height:56px; display:block }
-    .brand .title{ font-size:22px; font-weight:800; color:var(--ink-2); letter-spacing:.2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .userbox{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-    .email{ font-weight:600; color:#334155; background:#f1f5f9; border:1px solid #e2e8f0; padding:8px 10px; border-radius:10px; max-width:52vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .btn{ border:0; border-radius:10px; padding:10px 14px; font-weight:800; cursor:pointer; color:#fff; background:var(--ink); }
-    .btn:hover{ background:#1f2937 }
-    .container{ max-width:1120px; margin: 24px auto; padding: 0 16px }
-    .section-title{ font-size:18px; font-weight:800; margin: 10px 2px 12px; color:var(--ink-2) }
-    .tools{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px }
-    .card{ background:var(--card); border:1px solid var(--muted); border-radius:16px; box-shadow:var(--shadow); padding:16px }
-    .tool h3{ margin:0 0 8px; font-size:15px; font-weight:800 }
-    .tool p { margin:0 0 8px; color:#475569 }
-    .actions{ display:flex; flex-wrap:wrap; gap:10px }
-    .action{ display:inline-flex; align-items:center; justify-content:center; padding:9px 12px; border-radius:10px; font-weight:800; text-decoration:none; color:#fff; background:#d11e2b; }
-    .action:hover{ background:#b71a24 }
+    :root {
+      --bg: #f7f7f8;
+      --card: #ffffff;
+      --ink: #101828;
+      --muted: #667085;
+      --line: #e6e7eb;
+      --brand: #4b6bfb;
+      --radius: 12px;
+    }
+    html,body { height:100%; }
+    body {
+      margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color:var(--ink); background:var(--bg);
+    }
+    header {
+      background:var(--card); border-bottom:1px solid var(--line);
+      position:sticky; top:0; z-index:10;
+    }
+    .wrap { max-width:1100px; margin:0 auto; padding:16px; }
+    .brand { display:flex; align-items:center; gap:12px; }
+    .brand img { height:36px; width:auto; }
+    .brand h1 { font-size:1.25rem; margin:0; }
+    .actions { display:flex; gap:8px; margin-left:auto; }
+    .btn {
+      appearance:none; border:1px solid var(--line); background:#fff; color:#111;
+      padding:8px 12px; border-radius:8px; cursor:pointer; font-weight:600;
+    }
+    .btn.primary { background:var(--brand); color:#fff; border-color:var(--brand); }
+    .btn:disabled { opacity:.6; cursor:not-allowed; }
 
-    .links{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px; margin-top:22px }
-    .link-card{ overflow:hidden; display:flex; flex-direction:column; background:var(--card); border:1px solid var(--muted); border-radius:16px; box-shadow:var(--shadow); text-decoration:none; color:inherit; }
-    .link-card img{ width:100%; height:220px; object-fit:cover; object-position:center; display:block; background:#e2e8f0; }
-    .link-body{ padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px }
-    .link-title{ font-weight:800; font-size:16px; color:var(--ink-2) }
-    .link-go{ text-decoration:none; color:#fff; background:var(--ink); padding:9px 12px; border-radius:10px; font-weight:800; }
-    @media (max-width:980px){ .tools{ grid-template-columns: 1fr } .links{ grid-template-columns: 1fr 1fr } }
-    @media (max-width:640px){ .links{ grid-template-columns: 1fr } .brand .title{ display:none } }
+    main .wrap { padding-top:20px; padding-bottom:40px; }
+
+    /* Work areas */
+    .grid {
+      display:grid; grid-template-columns: repeat(3, 1fr); gap:14px;
+    }
+    @media (max-width: 960px) { .grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+      padding:16px; display:flex; flex-direction:column; gap:10px;
+      box-shadow:0 1px 2px rgba(16,24,40,.05);
+    }
+    .card h3 { margin:0; font-size:1.05rem; }
+    .card p { margin:0; color:var(--muted); }
+    .card a {
+      display:inline-block; margin-top:4px; text-decoration:none; color:#111; font-weight:600;
+      border-bottom:2px solid transparent;
+    }
+    .card a:hover { color:var(--brand); border-bottom-color:var(--brand); }
+
+    /* Admin tools (hidden until unlock) */
+    #admin-tools-locked { margin:18px 0 0; color:var(--muted); }
+    #admin-tools { display:none; margin-top:16px; }
+
+    .admin-grid {
+      display:grid; grid-template-columns: repeat(3, 1fr); gap:14px;
+    }
+    @media (max-width: 1100px) { .admin-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 720px)  { .admin-grid { grid-template-columns: 1fr; } }
+
+    .admin-card {
+      background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+      padding:14px; box-shadow:0 1px 2px rgba(16,24,40,.05);
+    }
+    .admin-title   { margin:0 0 4px; font-weight:700; font-size:1.05rem; }
+    .admin-subtitle{ margin:0 0 12px; color:var(--muted); font-size:.95rem; }
+
+    .au-lined-list { list-style:none; margin:0; padding:0; display:grid; gap:12px; }
+    .au-lined-list li {
+      display:grid; grid-template-columns: 190px 1fr; align-items:center; gap:10px;
+    }
+    .au-lined-list label { white-space:nowrap; font-weight:500; }
+    .au-lined-list input {
+      border:none; border-bottom:1.6px solid #cfcfcf; padding:6px 2px; outline:none; background:transparent; width:100%;
+    }
+    .au-lined-list input:focus { border-bottom-color:var(--brand); }
+    .au-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .au-hint{ display:block; margin-top:6px; color:var(--muted); }
+
+    footer { color:var(--muted); font-size:.9rem; padding:16px 0; }
   </style>
 </head>
 <body>
-  <header class="header">
-    <div class="brand">
-      <img src="logo.png" alt="Bayside logo" onerror="this.style.display='none'">
-      <div class="title">Admin</div>
-    </div>
-    <div class="userbox">
-      <div id="userEmail" class="email">—</div>
-      <button id="logoutBtn" class="btn" type="button">Logout</button>
+
+  <!-- Require sign-in for this page -->
+  <script src="auth.js"></script>
+  <script>
+    // If your auth gate exposes this, keep it. Otherwise remove the call.
+    try { BaysideAuth && BaysideAuth.enforceGate && BaysideAuth.enforceGate(); } catch(e) {}
+  </script>
+
+  <header>
+    <div class="wrap" style="display:flex; align-items:center;">
+      <div class="brand">
+        <img src="logo.png" alt="Bayside" onerror="this.style.display='none'">
+        <h1>Admin</h1>
+      </div>
+      <div class="actions">
+        <a class="btn" href="./index.html">Home</a>
+        <button class="btn" onclick="logout()">Logout</button>
+        <button id="btn-admin-login" class="btn primary" onclick="adminLogin()">Admin Login</button>
+      </div>
     </div>
   </header>
 
-  <main class="container">
-    <!-- Admin tools -->
-    <!-- ===========================
-     ADD USERS (LIST UI) – DROP-IN
-     Paste this anywhere inside your existing #admin-tools on admin.html
-     =========================== -->
-<section id="admin-add-users" class="admin-card">
-  <h3 class="admin-title">Add Users</h3>
-  <p class="admin-subtitle">Create operator accounts and set display names.</p>
-
-  <ul class="au-lined-list">
-    <li>
-      <label for="au-create-operator">Create Operator:</label>
-      <input id="au-create-operator" type="text" placeholder="email or UID" autocomplete="username" />
-    </li>
-
-    <li>
-      <label for="au-setpass-user">Set Password:</label>
-      <div class="au-row">
-        <input id="au-setpass-user" type="text" placeholder="email or UID" autocomplete="username" />
-        <input id="au-setpass-pass" type="password" placeholder="new password" autocomplete="new-password" />
-      </div>
-    </li>
-
-    <li>
-      <label for="au-delete-user">Delete User:</label>
-      <input id="au-delete-user" type="text" placeholder="email or UID" autocomplete="username" />
-    </li>
-
-    <li>
-      <label for="au-view-filter">View Users:</label>
-      <input id="au-view-filter" type="text" placeholder="(optional) filter — press Enter" />
-    </li>
-  </ul>
-
-  <small class="au-hint">Tip: press <strong>Enter</strong> on a line to run that action.</small>
-
-  <!-- Keep your original buttons/handlers but hide them.
-       If you already have these elsewhere, keep one set only. -->
-  <div style="display:none">
-    <button id="btn-create-operator" type="button"></button>
-    <button id="btn-set-password" type="button"></button>
-    <button id="btn-delete-user" type="button"></button>
-    <button id="btn-view-users" type="button"></button>
-  </div>
-</section>
-
-<!-- ============ Minimal styles (safe to inline or move to your CSS) ============ -->
-<style>
-  #admin-add-users { padding: 12px 14px; }
-  #admin-add-users .admin-title { margin: 0 0 4px; font-weight: 600; }
-  #admin-add-users .admin-subtitle { margin: 0 0 10px; color: #666; font-size: 0.95rem; }
-
-  .au-lined-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
-  .au-lined-list li { display: grid; grid-template-columns: 180px 1fr; align-items: center; gap: 10px; }
-
-  .au-lined-list label { white-space: nowrap; font-weight: 500; }
-
-  .au-lined-list input {
-    border: none;
-    border-bottom: 1.5px solid #cfcfcf;   /* the “_______” look */
-    padding: 6px 2px;
-    outline: none;
-    background: transparent;
-    width: 100%;
-  }
-  .au-lined-list input:focus { border-bottom-color: #4b6bfb; }
-
-  .au-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .au-hint { display: block; margin-top: 6px; color: #777; }
-  
-  /* Optional: card look if your admin cards use something similar */
-  .admin-card {
-    background: #fff; border: 1px solid #eee; border-radius: 10px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.04); 
-  }
-</style>
-
-<!-- ============ Wiring: map Enter key to your existing (hidden) handlers ============ -->
-<script>
-(() => {
-  // If your original handler buttons have different IDs, change these:
-  const BTN_CREATE = document.getElementById('btn-create-operator');
-  const BTN_SETPASS = document.getElementById('btn-set-password');
-  const BTN_DELETE = document.getElementById('btn-delete-user');
-  const BTN_VIEW   = document.getElementById('btn-view-users');
-
-  // Inputs
-  const $create  = document.getElementById('au-create-operator');
-  const $setUser = document.getElementById('au-setpass-user');
-  const $setPass = document.getElementById('au-setpass-pass');
-  const $delete  = document.getElementById('au-delete-user');
-  const $view    = document.getElementById('au-view-filter');
-
-  // Helper: on Enter key, run a handler
-  const onEnter = (el, handler) => {
-    if (!el) return;
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        handler();
-      }
-    });
-  };
-
-  // CREATE OPERATOR
-  onEnter($create, () => {
-    // If your existing code expects a specific input ID/value, either:
-    // 1) read from this field inside that handler, or
-    // 2) mirror the expected ID here (rename this input's id).
-    BTN_CREATE?.click();
-  });
-
-  // SET PASSWORD (triggered by Enter in either field)
-  const runSetPassword = () => BTN_SETPASS?.click();
-  onEnter($setUser, runSetPassword);
-  onEnter($setPass, runSetPassword);
-
-  // DELETE USER
-  onEnter($delete, () => BTN_DELETE?.click());
-
-  // VIEW USERS
-  onEnter($view, () => BTN_VIEW?.click());
-})();
-</script>
-
-    <!-- Work areas -->
-    <h2 class="section-title">Work areas</h2>
-    <section class="links">
-      <a class="link-card" href="./ParksMowing.html">
-        <img src="MOWING PICTURE.png" alt="Parks Mowing">
-        <div class="link-body">
-          <div class="link-title">Parks Mowing</div>
-          <span class="link-go">Open</span>
+  <main>
+    <div class="wrap">
+      <!-- Work areas (same links as your landing pages) -->
+      <section class="card">
+        <h2 style="margin:0 0 8px;">Work areas</h2>
+        <div class="grid">
+          <div class="card">
+            <h3>Parks Mowing</h3>
+            <p>Daily/rostered mowing routes.</p>
+            <a href="./ParksMowing.html">Open ParksMowing.html →</a>
+          </div>
+          <div class="card">
+            <h3>Parks Snipping</h3>
+            <p>Whipper-snipping and edges.</p>
+            <a href="./ParksSnipping.html">Open ParksSnipping.html →</a>
+          </div>
+          <div class="card">
+            <h3>Firebreaks</h3>
+            <p>Creation & maintenance.</p>
+            <a href="./Firebreaks.html">Open Firebreaks.html →</a>
+          </div>
         </div>
-      </a>
+      </section>
 
-      <a class="link-card" href="./ParksSnipping.html">
-        <img src="SNIPPING PICTURE.png" alt="Parks Snipping">
-        <div class="link-body">
-          <div class="link-title">Parks Snipping</div>
-          <span class="link-go">Open</span>
-        </div>
-      </a>
+      <!-- Admin tools (locked) -->
+      <p id="admin-tools-locked">Admin tools are hidden. Click <strong>Admin Login</strong> to unlock.</p>
 
-      <a class="link-card" href="./Firebreaks.html">
-        <img src="FIREBREAKS PICTURE.png" alt="Firebreaks">
-        <div class="link-body">
-          <div class="link-title">Firebreaks</div>
-          <span class="link-go">Open</span>
+      <section id="admin-tools">
+        <!-- THREE COLUMNS -->
+        <div class="admin-grid">
+          <!-- Column 1: Add Users -->
+          <div class="admin-card" id="admin-col-addusers">
+            <h3 class="admin-title">Add Users:</h3>
+            <p class="admin-subtitle">Create operator accounts and set display names.</p>
+
+            <ul class="au-lined-list">
+              <li>
+                <label for="au-create-operator">Create Operator:</label>
+                <input id="au-create-operator" type="text" placeholder="email or UID" autocomplete="username" />
+              </li>
+
+              <li>
+                <label for="au-setpass-user">Set Password:</label>
+                <div class="au-row">
+                  <input id="au-setpass-user" type="text" placeholder="email or UID" autocomplete="username" />
+                  <input id="au-setpass-pass" type="password" placeholder="new password" autocomplete="new-password" />
+                </div>
+              </li>
+
+              <li>
+                <label for="au-delete-user">Delete User:</label>
+                <input id="au-delete-user" type="text" placeholder="email or UID" autocomplete="username" />
+              </li>
+
+              <li>
+                <label for="au-view-filter">View Users:</label>
+                <input id="au-view-filter" type="text" placeholder="(optional) filter — press Enter" />
+              </li>
+            </ul>
+            <small class="au-hint">Press <strong>Enter</strong> on a line to run that action.</small>
+          </div>
+
+          <!-- Column 2: Delegate work -->
+          <div class="admin-card" id="admin-col-delegate">
+            <h3 class="admin-title">Delegate work</h3>
+            <p class="admin-subtitle">Assign parks or zones to operators.</p>
+
+            <ul class="au-lined-list">
+              <li>
+                <label for="dw-assign">Assign work:</label>
+                <input id="dw-assign" type="text" placeholder="e.g. zone/park → operator" />
+              </li>
+              <li>
+                <label for="dw-selectonmap">Select on Map:</label>
+                <input id="dw-selectonmap" type="text" placeholder="type target & press Enter" />
+              </li>
+              <li>
+                <label for="dw-current">Current Assignments:</label>
+                <input id="dw-current" type="text" placeholder="(optional) filter — press Enter" />
+              </li>
+              <li>
+                <label for="dw-reassign">Reassign work:</label>
+                <input id="dw-reassign" type="text" placeholder="e.g. zone/park → new operator" />
+              </li>
+            </ul>
+          </div>
+
+          <!-- Column 3: Generate reports -->
+          <div class="admin-card" id="admin-col-reports">
+            <h3 class="admin-title">Generate reports</h3>
+            <p class="admin-subtitle">Build PDFs (same options as your sidebar PDF actions).</p>
+
+            <ul class="au-lined-list">
+              <li>
+                <label for="gr-mowing">Mowing PDF:</label>
+                <input id="gr-mowing" type="text" placeholder="(optional) filter/date — Enter to build" />
+              </li>
+              <li>
+                <label for="gr-snipping">Snipping PDF:</label>
+                <input id="gr-snipping" type="text" placeholder="(optional) filter/date — Enter to build" />
+              </li>
+              <li>
+                <label for="gr-firebreaks">Firebreaks PDF:</label>
+                <input id="gr-firebreaks" type="text" placeholder="(optional) filter/date — Enter to build" />
+              </li>
+              <li>
+                <label for="gr-clear">Clear work:</label>
+                <input id="gr-clear" type="text" placeholder="type CONFIRM to clear — Enter" />
+              </li>
+            </ul>
+          </div>
         </div>
-      </a>
-    </section>
+
+        <!-- Hidden buttons – these let you keep your existing JS handlers untouched.
+             If you already have them elsewhere, keep ONE set only. -->
+        <div style="display:none">
+          <!-- Add Users -->
+          <button id="btn-create-operator" type="button"></button>
+          <button id="btn-set-password" type="button"></button>
+          <button id="btn-delete-user" type="button"></button>
+          <button id="btn-view-users" type="button"></button>
+
+          <!-- Delegate Work -->
+          <button id="btn-assign-work" type="button"></button>
+          <button id="btn-select-on-map" type="button"></button>
+          <button id="btn-current-assignments" type="button"></button>
+          <button id="btn-reassign-work" type="button"></button>
+
+          <!-- Reports -->
+          <button id="btn-mowing-pdf" type="button"></button>
+          <button id="btn-snipping-pdf" type="button"></button>
+          <button id="btn-firebreaks-pdf" type="button"></button>
+          <button id="btn-clear-work" type="button"></button>
+        </div>
+      </section>
+
+      <footer class="wrap" style="padding-left:0;">
+        © Bayside
+      </footer>
+    </div>
   </main>
 
-  <!-- Firebase + local session -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <!-- Your existing JS bundles (optional if you already include elsewhere) -->
   <script src="firebase-init.js"></script>
-  <script src="auth.js"></script>
+  <script src="sidebar.js"></script>
 
   <script>
-    (function(){
-      const emailEl = document.getElementById('userEmail');
-      const logoutBtn = document.getElementById('logoutBtn');
+    /* --------------------------
+       Admin unlock (front-end)
+       --------------------------
+       If you already have this in sidebar.js, you can delete this block.
+    */
+    const ADMIN_PIN = '2455'; // ← change if you use a different admin PIN
+    function adminLogin(){
+      const val = prompt('Enter admin PIN');
+      if (val && val.trim() === ADMIN_PIN) {
+        localStorage.setItem('bayside_admin_unlocked', '1');
+        revealAdminTools();
+      } else if (val != null) {
+        alert('Incorrect PIN.');
+      }
+    }
+    function revealAdminTools(){
+      document.getElementById('admin-tools').style.display = 'block';
+      document.getElementById('admin-tools-locked').style.display = 'none';
+      const btn = document.getElementById('btn-admin-login');
+      if (btn) { btn.textContent = 'Admin Unlocked'; btn.disabled = true; }
+    }
+    // Persist unlock during session
+    if (localStorage.getItem('bayside_admin_unlocked') === '1') { revealAdminTools(); }
 
-      firebase.auth().onAuthStateChanged(async user=>{
-        if(!user){ window.location.href = 'login.html'; return; }
-        emailEl.textContent = user.email || localStorage.getItem('bayside:userEmail') || 'Signed in';
-      });
+    function logout(){
+      try { BaysideAuth && BaysideAuth.logout && BaysideAuth.logout(); } catch(e){}
+      localStorage.removeItem('bayside_admin_unlocked');
+      location.href = './login.html';
+    }
+  </script>
 
-      logoutBtn.addEventListener('click', async ()=>{
-        try{
-          if (window.BaysideAuth?.clear) BaysideAuth.clear();
-          await firebase.auth().signOut();
-        }catch(e){ console.warn(e); }
-        window.location.href = 'login.html';
-      });
+  <!-- Map ENTER on each line → your existing handler buttons.
+       If you prefer, you can remap to call your functions directly. -->
+  <script>
+    (() => {
+      const HANDLERS = {
+        // Add Users
+        createOperator:  'btn-create-operator',
+        setPassword:     'btn-set-password',
+        deleteUser:      'btn-delete-user',
+        viewUsers:       'btn-view-users',
+        // Delegate
+        assignWork:      'btn-assign-work',
+        selectOnMap:     'btn-select-on-map',
+        currentAssign:   'btn-current-assignments',
+        reassignWork:    'btn-reassign-work',
+        // Reports
+        pdfMowing:       'btn-mowing-pdf',
+        pdfSnipping:     'btn-snipping-pdf',
+        pdfFirebreaks:   'btn-firebreaks-pdf',
+        clearWork:       'btn-clear-work',
+      };
+      const btn = (id) => document.getElementById(id);
+
+      // Inputs
+      const $ = (id) => document.getElementById(id);
+      const inputs = {
+        // Add Users
+        create:   $('au-create-operator'),
+        setUser:  $('au-setpass-user'),
+        setPass:  $('au-setpass-pass'),
+        delUser:  $('au-delete-user'),
+        view:     $('au-view-filter'),
+        // Delegate
+        assign:   $('dw-assign'),
+        select:   $('dw-selectonmap'),
+        current:  $('dw-current'),
+        reassign: $('dw-reassign'),
+        // Reports
+        mowPDF:   $('gr-mowing'),
+        snipPDF:  $('gr-snipping'),
+        fbPDF:    $('gr-firebreaks'),
+        clear:    $('gr-clear'),
+      };
+
+      const onEnterClick = (el, buttonId) => {
+        if (!el) return;
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            btn(buttonId)?.click();
+          }
+        });
+      };
+
+      // Wire up
+      onEnterClick(inputs.create,  HANDLERS.createOperator);
+      const runSetPass = () => btn(HANDLERS.setPassword)?.click();
+      inputs.setUser?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); runSetPass(); }});
+      inputs.setPass?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); runSetPass(); }});
+      onEnterClick(inputs.delUser, HANDLERS.deleteUser);
+      onEnterClick(inputs.view,    HANDLERS.viewUsers);
+
+      onEnterClick(inputs.assign,  HANDLERS.assignWork);
+      onEnterClick(inputs.select,  HANDLERS.selectOnMap);
+      onEnterClick(inputs.current, HANDLERS.currentAssign);
+      onEnterClick(inputs.reassign,HANDLERS.reassignWork);
+
+      onEnterClick(inputs.mowPDF,  HANDLERS.pdfMowing);
+      onEnterClick(inputs.snipPDF, HANDLERS.pdfSnipping);
+      onEnterClick(inputs.fbPDF,   HANDLERS.pdfFirebreaks);
+      onEnterClick(inputs.clear,   HANDLERS.clearWork);
     })();
   </script>
 </body>
 </html>
-
