@@ -1,8 +1,7 @@
-
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bayside — Sign in</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -20,7 +19,7 @@
     .tab{flex:1;padding:10px 12px;border-radius:12px;border:1px solid #e5e7eb;background:#f8fafc;text-align:center;font-weight:600;cursor:pointer}
     .tab.active{background:#0f172a;color:#fff}
     label{display:block;font-weight:600;margin:8px 0 6px}
-    input,button{width:100%;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;font-size:16px}
+    input,button,a.btn{width:100%;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;font-size:16px;text-align:center;text-decoration:none;display:inline-block}
     input:focus{outline:3px solid #e5efff;border-color:#94a3b8}
     .mt8{margin-top:8px}.mt12{margin-top:12px}.mt16{margin-top:16px}
     .btn{background:#0f172a;color:#fff;border:0;font-weight:700;cursor:pointer}
@@ -35,20 +34,21 @@
   <div class="wrap">
     <div class="card">
       <img class="logo" src="assets/bayside-logo.png" alt="Bayside Slashing" onerror="this.style.display='none'">
-      <div class="badge">Secure Sign‑in</div>
+      <div class="badge">Secure Sign-in</div>
       <h1>Welcome</h1>
 
+      <!-- Show only if already signed in. No auto-redirect. -->
       <div id="signedInBox" class="info">
         You’re already signed in. Choose:
         <div class="row mt12">
-          <button id="continueBtn" class="btn">Continue to dashboard</button>
-          <button id="signOutBtn" class="btn outline">Sign out</button>
+          <a href="index.html" id="continueLink" class="btn">Continue to dashboard</a>
+          <button id="signOutBtn" class="btn outline" type="button">Sign out</button>
         </div>
       </div>
 
       <div class="tabs" role="tablist" aria-label="Sign in method">
-        <button id="tab-operator" class="tab active" role="tab" aria-selected="true">Operator (Username + Password)</button>
-        <button id="tab-admin" class="tab" role="tab" aria-selected="false">Admin (Email + Password)</button>
+        <button id="tab-operator" class="tab active" type="button">Operator (Username + Password)</button>
+        <button id="tab-admin" class="tab" type="button">Admin (Email + Password)</button>
       </div>
 
       <form id="loginForm" autocomplete="on">
@@ -69,34 +69,14 @@
 
   <script>
     (function(){
-      // Where to go after login
-      function getNextUrl(){
-        try{
-          const p = new URLSearchParams(window.location.search);
-          const next = p.get('next');
-          if(next){
-            const u = new URL(next, window.location.href);
-            if (u.origin === window.location.origin && !/login\.html$/i.test(u.pathname)) {
-              return u.pathname + u.search + u.hash;
-            }
-          }
-        }catch(e){}
-        return 'index.html';
-      }
-      function goNext(){
-        const target = getNextUrl();
-        // set a short-lived token to avoid accidental loops
-        sessionStorage.setItem('bs_last_redirect', Date.now().toString());
-        window.location.replace(target);
-        setTimeout(()=>{ window.location.href = target; }, 300);
-      }
-
       const opTab = document.getElementById('tab-operator');
       const adTab = document.getElementById('tab-admin');
       const email = document.getElementById('email');
       const lblEmail = document.getElementById('lbl-email');
       const form = document.getElementById('loginForm');
       const errBox = document.getElementById('error');
+      const signedInBox = document.getElementById('signedInBox');
+      const signOutBtn = document.getElementById('signOutBtn');
 
       function setMode(mode){
         if(mode === 'operator'){
@@ -111,46 +91,41 @@
           email.dataset.mode='admin';
         }
       }
-      opTab.onclick=()=>setMode('operator');
-      adTab.onclick=()=>setMode('admin');
+
+      opTab.onclick = () => setMode('operator');
+      adTab.onclick = () => setMode('admin');
       setMode('operator');
 
-      // Auto-switch to Admin if an '@' is typed
+      // Type '@' → switch to admin mode
       email.addEventListener('input', () => {
         if (email.value.includes('@')) setMode('admin');
       });
 
-      // Do NOT auto-redirect on auth state (prevents refresh loops).
-      // Instead, show a gentle "Continue" / "Sign out" choice.
-      const signedInBox = document.getElementById('signedInBox');
-      const continueBtn = document.getElementById('continueBtn');
-      const signOutBtn = document.getElementById('signOutBtn');
-
+      // Show/hide the "already signed in" box (no auto-redirect)
       firebase.auth().onAuthStateChanged(u => {
-        if (u) {
-          signedInBox.style.display = 'block';
-          continueBtn.onclick = () => goNext();
-          signOutBtn.onclick = async () => {
-            try { await firebase.auth().signOut(); } finally { location.reload(); }
-          };
-        } else {
-          signedInBox.style.display = 'none';
-        }
+        signedInBox.style.display = u ? 'block' : 'none';
       });
 
+      signOutBtn.onclick = async () => {
+        try { await firebase.auth().signOut(); } finally { location.reload(); }
+      };
+
+      // Submit → sign in → hard navigate to index.html (no other targets)
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
         errBox.style.display='none'; errBox.textContent='';
+
         const raw = email.value.trim();
         const pass = document.getElementById('password').value;
-        if(!raw || !pass){ return; }
+        if(!raw || !pass) return;
 
         const isEmail = raw.includes('@');
         const signinEmail = isEmail ? raw : `${raw.toLowerCase()}@bayside.local`;
 
         try{
           await firebase.auth().signInWithEmailAndPassword(signinEmail, pass);
-          goNext();
+          // Single, hard navigation — prevents loops
+          window.location.href = 'index.html';
         }catch(err){
           console.warn(err);
           errBox.textContent = 'Sign-in failed: ' + (err && err.message ? err.message : String(err));
