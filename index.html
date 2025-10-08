@@ -4,65 +4,201 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bayside — Dashboard</title>
-  <!-- Hide content until auth status is known -->
-  <style>
-    html{visibility:hidden}
-    body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#f6f7fb;color:#0f172a}
-    .topbar{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#fff;border-bottom:1px solid #e5e7eb}
-    .btn{background:#0f172a;color:#fff;border:0;border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer}
-    .wrap{max-width:1000px;margin:24px auto;padding:0 16px}
-    .card{background:#fff;border-radius:14px;box-shadow:0 6px 22px rgba(16,24,40,.08);padding:20px}
-    h1{margin:0;font-size:22px}
-  </style>
 
-  <!-- Firebase SDK + your config -->
+  <!-- Type -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --ink:#0f172a;       /* deep slate */
+      --ink-2:#111827;
+      --muted:#e5e7eb;
+      --bg:#f6f7fb;
+      --card:#ffffff;
+      --accent:#d11e2b;   /* brand red */
+      --accent-600:#b71a24;
+      --focus:#e6f0ff;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      background:var(--bg);
+      color:var(--ink);
+    }
+
+    /* Header */
+    .header{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:16px; padding:14px 20px; background:#fff; border-bottom:1px solid var(--muted);
+      position:sticky; top:0; z-index:10;
+    }
+    .brand{
+      display:flex; align-items:center; gap:12px; min-width:0;
+    }
+    .brand img{ height:38px; display:block }
+    .brand .title{
+      font-size:20px; font-weight:800; color:var(--ink-2); letter-spacing:.2px;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .userbox{
+      display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    }
+    .email{
+      font-weight:600; color:#334155; background:#f1f5f9; border:1px solid #e2e8f0;
+      padding:8px 10px; border-radius:10px; max-width:52vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .btn{
+      border:0; border-radius:10px; padding:10px 14px; font-weight:800; cursor:pointer; color:#fff;
+      background:var(--ink);
+    }
+    .btn:hover{ background:#1f2937 }
+
+    /* Layout */
+    .container{ max-width:1100px; margin: 22px auto; padding: 0 16px }
+    .section-title{ font-size:18px; font-weight:800; margin: 10px 2px 12px; color:var(--ink-2) }
+
+    .card{
+      background:var(--card); border:1px solid var(--muted); border-radius:16px;
+      box-shadow:0 8px 26px rgba(16,24,40,.08);
+    }
+
+    /* Admin tools */
+    .tools{
+      display:grid; grid-template-columns: repeat(3, 1fr); gap:14px;
+    }
+    .tool{ padding:16px }
+    .tool h3{ margin:0 0 8px; font-size:15px; font-weight:800 }
+    .tool p { margin:0 0 12px; color:#475569 }
+    .tool .btn{
+      width:100%; background:var(--accent);
+    }
+    .tool .btn:hover{ background:var(--accent-600) }
+
+    /* Quick links grid */
+    .links{
+      display:grid; grid-template-columns: repeat(3, 1fr); gap:16px;
+    }
+    .link-card{ overflow:hidden; display:flex; flex-direction:column }
+    .link-card img{
+      width:100%; height:180px; object-fit:cover; display:block; background:#e2e8f0;
+    }
+    .link-body{ padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px }
+    .link-title{ font-weight:800; font-size:16px; color:var(--ink-2) }
+    .link-go{
+      text-decoration:none; color:#fff; background:var(--ink); padding:9px 12px; border-radius:10px; font-weight:800;
+    }
+    .link-go:hover{ background:#1f2937 }
+
+    /* Responsive */
+    @media (max-width:900px){
+      .tools{ grid-template-columns: 1fr }
+      .links{ grid-template-columns: 1fr 1fr }
+    }
+    @media (max-width:620px){
+      .links{ grid-template-columns: 1fr }
+      .brand .title{ display:none } /* save space on very small screens */
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="brand">
+      <img src="logo.png" alt="Bayside logo" onerror="this.style.display='none'">
+      <div class="title">Dashboard</div>
+    </div>
+    <div class="userbox">
+      <div id="userEmail" class="email">—</div>
+      <button id="logoutBtn" class="btn" type="button">Logout</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Admin tools -->
+    <h2 class="section-title">Admin tools</h2>
+    <section class="tools">
+      <div class="card tool">
+        <h3>Add users</h3>
+        <p>Create operator accounts and set display names.</p>
+        <!-- Link this to your admin user creation page if you have one -->
+        <button class="btn" type="button" onclick="location.href='admin.html'">Open</button>
+      </div>
+      <div class="card tool">
+        <h3>Delegate work</h3>
+        <p>Assign parks or zones to operators (e.g., Zone 1, Parks 1–50).</p>
+        <button class="btn" type="button" onclick="location.href='delegate.html'">Open</button>
+      </div>
+      <div class="card tool">
+        <h3>Generate reports</h3>
+        <p>Build PDFs (same options as your sidebar PDF actions).</p>
+        <!-- If you already have a page with the report UI, link it here -->
+        <button class="btn" type="button" onclick="location.href='reports.html'">Open</button>
+      </div>
+    </section>
+
+    <!-- Quick links -->
+    <h2 class="section-title" style="margin-top:22px">Work areas</h2>
+    <section class="links">
+      <article class="card link-card">
+        <img src="MOWING PICTURE.png" alt="Parks Mowing" onerror="this.style.display='none'">
+        <div class="link-body">
+          <div class="link-title">Parks Mowing</div>
+          <a class="link-go" href="ParksMowing.html">Open</a>
+        </div>
+      </article>
+
+      <article class="card link-card">
+        <img src="SNIPPING PICTURE.png" alt="Parks Snipping" onerror="this.style.display='none'">
+        <div class="link-body">
+          <div class="link-title">Parks Snipping</div>
+          <a class="link-go" href="ParksSnipping.html">Open</a>
+        </div>
+      </article>
+
+      <article class="card link-card">
+        <img src="FIREBREAKS FICTURE.png" alt="Firebreaks" onerror="this.style.display='none'">
+        <div class="link-body">
+          <div class="link-title">Firebreaks</div>
+          <a class="link-go" href="Firebreaks.html">Open</a>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="firebase-init.js"></script>
 
   <script>
-    // Gate: only show if signed-in; else go to login
+    // Auth gate + UI hooks
     (function(){
-      firebase.auth().onAuthStateChanged(function(user){
-        if (user) {
-          // Show page
-          document.documentElement.style.visibility = 'visible';
-          // Optionally display the user's email/name
-          const el = document.getElementById('whoami');
-          if (el) el.textContent = user.email || 'Signed in';
-        } else {
-          // Not signed in → login with safe next back to index
-          const next = encodeURIComponent(location.pathname + location.search + location.hash);
-          location.replace('login.html?next=' + next);
+      const emailEl = document.getElementById('userEmail');
+      const logoutBtn = document.getElementById('logoutBtn');
+
+      firebase.auth().onAuthStateChanged(user=>{
+        if(!user){
+          // Not signed in → back to login
+          window.location.href = 'login.html';
+          return;
+        }
+        emailEl.textContent = user.email || 'Signed in';
+      });
+
+      logoutBtn.addEventListener('click', async ()=>{
+        try{
+          await firebase.auth().signOut();
+          window.location.href = 'login.html';
+        }catch(e){
+          alert('Logout failed. Please try again.');
+          console.warn(e);
         }
       });
     })();
-  </script>
-</head>
-<body>
-  <div class="topbar">
-    <h1>Bayside Dashboard</h1>
-    <div>
-      <span id="whoami" style="margin-right:12px;color:#334155;"></span>
-      <button class="btn" id="logoutBtn">Sign out</button>
-    </div>
-  </div>
-
-  <div class="wrap">
-    <div class="card">
-      <p>Welcome to the dashboard. Replace this content with your actual app UI.</p>
-      <ul>
-        <li>If you need to load Firestore here, we can add it next (step by step).</li>
-        <li>If App Check is enforced, we’ll wire that in carefully after this works.</li>
-      </ul>
-    </div>
-  </div>
-
-  <script>
-    // Sign out button
-    document.getElementById('logoutBtn').addEventListener('click', async () => {
-      try { await firebase.auth().signOut(); } finally { location.href = 'login.html'; }
-    });
   </script>
 </body>
 </html>
