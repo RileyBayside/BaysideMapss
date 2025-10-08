@@ -30,7 +30,7 @@
 <body>
   <div class="wrap">
     <div class="card">
-      <img class="logo" src="https://rileybayside.github.io/BaysideMapss/assets/bayside-logo.png" alt="Bayside Slashing">
+      <img class="logo" src="assets/bayside-logo.png" alt="Bayside Slashing" onerror="this.style.display='none'">
       <div class="badge">Secure Sign‑in</div>
       <h1>Welcome</h1>
 
@@ -53,7 +53,6 @@
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-  <!-- No Firestore and No App Check on the login page -->
   <script src="firebase-init.js"></script>
 
   <script>
@@ -82,17 +81,24 @@
       adTab.onclick=()=>setMode('admin');
       setMode('operator');
 
+      // Auto-switch to Admin if an '@' is typed
+      email.addEventListener('input', () => {
+        if (email.value.includes('@')) setMode('admin');
+      });
+
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
         errBox.style.display='none'; errBox.textContent='';
-        const mode = email.dataset.mode || 'operator';
+        const raw = email.value.trim();
         const pass = document.getElementById('password').value;
-        let id = email.value.trim();
-        if(!id || !pass){ return; }
-        const signinEmail = (mode==='operator') ? `${id.toLowerCase()}@bayside.local` : id;
+        if(!raw || !pass){ return; }
+
+        // Smart detection: if it looks like an email, use it directly; otherwise treat as operator username
+        const isEmail = raw.includes('@');
+        const signinEmail = isEmail ? raw : `${raw.toLowerCase()}@bayside.local`;
+
         try{
           const cred = await firebase.auth().signInWithEmailAndPassword(signinEmail, pass);
-          // Do NOT touch Firestore here; just go to index
           window.location.replace('index.html');
         }catch(err){
           console.warn(err);
