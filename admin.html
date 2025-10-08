@@ -26,7 +26,46 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bayside — Dashboard</title>
+  <style>
+     /* Prevent UI flash while we verify auth/role */
+     body.auth-checking { visibility: hidden; }
+  </style>
+  
+<script type="module">
+  import { app } from "./firebase-init.js"; // adjust path if needed
+  import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+  import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
 
+  // Hide page until we finish the role check
+  document.addEventListener("DOMContentLoaded", () => {
+    document.body.classList.add("auth-checking");
+  });
+
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
+
+  onAuthStateChanged(auth, async (user) => {
+    try {
+      if (!user) {
+        window.location.href = "/BaysideMapss/login.html";
+        return;
+      }
+      const snap = await getDoc(doc(db, "users", user.uid));
+      if (!snap.exists() || snap.data().role !== "admin") {
+        window.location.href = "/BaysideMapss/index.html";
+        return;
+      }
+      // ✅ Admin verified — do nothing; your existing page will show
+    } catch (err) {
+      console.error("Admin gate error:", err);
+      window.location.href = "/BaysideMapss/login.html";
+      return;
+    } finally {
+      document.body.classList.remove("auth-checking");
+    }
+  });
+</script>
+  
   <!-- Type -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
