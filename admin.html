@@ -3,139 +3,205 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Bayside — Admin Dashboard</title>
-  <link rel="icon" href="logo.png">
-  <link rel="stylesheet" href="admin.css">
-  <script src="auth.js"></script>
-  <script>window.BaysideAuth && BaysideAuth.enforceGate && BaysideAuth.enforceGate();</script>
+  <title>Bayside — Dashboard</title>
 
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-functions-compat.js"></script>
-  <script src="firebase-init.js"></script>
-  <script src="data.js"></script>
+  <!-- Type -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 
   <style>
-    :root{--card:#fff;--bg:#f6f7f9;--muted:#6b7280;--black:#0f172a}
+    :root{
+      --ink:#0f172a;
+      --ink-2:#111827;
+      --muted:#e5e7eb;
+      --bg:#f6f7fb;
+      --card:#ffffff;
+      --accent:#d11e2b;
+      --accent-600:#b71a24;
+    }
     *{box-sizing:border-box}
-    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--black)}
-    .header{display:flex;align-items:center;gap:12px;padding:14px 22px;background:#fff;border-bottom:1px solid #e5e7eb}
-    .header img{height:40px}.header .brand{font-weight:800}.header .spacer{flex:1}
-    .header .link{text-decoration:none;color:#0f172a;border:1px solid #e5e7eb;padding:8px 12px;border-radius:10px}
-    .container{max-width:1100px;margin:22px auto;padding:0 22px}
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
-    .card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px;box-shadow:0 8px 24px rgba(0,0,0,.06)}
-    label{display:block;font-weight:700;margin:10px 0 6px}
-    input,select,textarea{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px}
-    .btn{margin-top:12px;padding:10px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;cursor:pointer;font-weight:800}
-    .muted{color:#6b7280}.alert{padding:14px;border:1px solid #f3d1d4;background:#fff7f7;border-radius:12px;color:#991b1b;margin-top:14px}
-    .msg{margin-top:10px;font-size:14px}
-    .ok{color:#065f46}.err{color:#991b1b}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      background:var(--bg);
+      color:var(--ink);
+    }
+
+    /* Header (roomy for bigger logo) */
+    .header{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:16px; padding:16px 22px; background:#fff; border-bottom:1px solid var(--muted);
+      position:sticky; top:0; z-index:10;
+    }
+    .brand{ display:flex; align-items:center; gap:14px; min-width:0; }
+    .brand img{ height:56px; display:block }
+    .brand .title{
+      font-size:22px; font-weight:800; color:var(--ink-2); letter-spacing:.2px;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .userbox{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    .email{
+      font-weight:600; color:#334155; background:#f1f5f9; border:1px solid #e2e8f0;
+      padding:8px 10px; border-radius:10px; max-width:52vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .btn{
+      border:0; border-radius:10px; padding:10px 14px; font-weight:800; cursor:pointer; color:#fff;
+      background:var(--ink);
+    }
+    .btn:hover{ background:#1f2937 }
+
+    /* Layout */
+    .container{ max-width:1120px; margin: 24px auto; padding: 0 16px }
+    .section-title{ font-size:18px; font-weight:800; margin: 10px 2px 12px; color:var(--ink-2) }
+
+    .card{
+      background:var(--card); border:1px solid var(--muted); border-radius:16px;
+      box-shadow:0 8px 26px rgba(16,24,40,.08);
+    }
+
+    /* Admin tools (cards with multiple actions) */
+    .tools{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px }
+    .tool{ padding:16px; display:flex; flex-direction:column; gap:8px }
+    .tool h3{ margin:0; font-size:15px; font-weight:800 }
+    .tool p { margin:0 0 8px; color:#475569 }
+    .actions{ display:flex; flex-wrap:wrap; gap:10px }
+    .action{
+      display:inline-flex; align-items:center; justify-content:center;
+      padding:9px 12px; border-radius:10px; font-weight:800; text-decoration:none; color:#fff;
+      background:var(--accent);
+    }
+    .action:hover{ background:var(--accent-600) }
+
+    /* Quick links */
+    .links{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px }
+    .link-card{ overflow:hidden; display:flex; flex-direction:column }
+    .link-card img{
+      width:100%;
+      height:220px; object-fit:cover; object-position:center; display:block; background:#e2e8f0;
+    }
+    .link-body{ padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px }
+    .link-title{ font-weight:800; font-size:16px; color:var(--ink-2) }
+    .link-go{
+      text-decoration:none; color:#fff; background:var(--ink); padding:9px 12px; border-radius:10px; font-weight:800;
+    }
+    .link-go:hover{ background:#1f2937 }
+
+    /* Responsive */
+    @media (max-width:980px){
+      .tools{ grid-template-columns: 1fr }
+      .links{ grid-template-columns: 1fr 1fr }
+    }
+    @media (max-width:640px){
+      .links{ grid-template-columns: 1fr }
+      .brand .title{ display:none }
+    }
   </style>
 </head>
 <body>
-  <div class="header">
-    <img src="logo.png" alt="Bayside">
-    <div class="brand">Admin Dashboard</div>
-    <div class="spacer"></div>
-    <a class="link" href="index.html">Back to Dashboard</a>
-  </div>
+  <!-- Header -->
+  <header class="header">
+    <div class="brand">
+      <img src="logo.png" alt="Bayside logo" onerror="this.style.display='none'">
+      <div class="title">Dashboard</div>
+    </div>
+    <div class="userbox">
+      <div id="userEmail" class="email">—</div>
+      <button id="logoutBtn" class="btn" type="button">Logout</button>
+    </div>
+  </header>
 
-  <div class="container">
-    <div id="roleGate" class="alert" style="display:none">You must be an admin to view this page.</div>
-
-    <div id="app" style="display:none">
-      <div class="grid">
-        <div class="card">
-          <h3>Operators</h3>
-          <div id="operators"></div>
-        </div>
-
-        <div class="card">
-          <h3>Create Assignment</h3>
-          <form id="assignForm">
-            <label>Operator</label>
-            <select id="assignee"></select>
-            <label>Zone</label>
-            <input id="zone" type="text" placeholder="e.g., Zone 1" />
-            <label>Parks (range or list)</label>
-            <input id="parksSpec" type="text" placeholder="e.g., 1-50 or M0001-M0050" />
-            <label>Notes (optional)</label>
-            <textarea id="notes" rows="3" placeholder="Any extra details"></textarea>
-            <button class="btn" type="submit">Assign Work</button>
-            <div id="msg" class="msg"></div>
-          </form>
-        </div>
-
-        <div class="card">
-          <h3>Create Operator (Username + Password)</h3>
-          <form id="createOpForm">
-            <label>Username (lowercase, no spaces)</label>
-            <input id="co_username" type="text" placeholder="e.g., riley" required />
-            <label>Password (6+ characters)</label>
-            <input id="co_password" type="password" placeholder="e.g., 123456" minlength="6" required />
-            <label>Display name (optional)</label>
-            <input id="co_display" type="text" placeholder="e.g., Riley" />
-            <button class="btn" type="submit">Create Operator</button>
-            <div id="co_msg" class="msg"></div>
-          </form>
-          <p class="muted">This securely creates an Auth user <code>username@bayside.local</code> and a Firestore
-          <code>/users/{uid}</code> doc with <code>role: "operator"</code>. Only admins can call it.</p>
+  <main class="container">
+    <!-- Admin tools (3 tools, each with multiple actions) -->
+    <h2 class="section-title">Admin tools</h2>
+    <section class="tools">
+      <div class="card tool">
+        <h3>Add users</h3>
+        <p>Create operator accounts and set display names.</p>
+        <div class="actions">
+          <a class="action" href="admin.html#create">Create operator</a>
+          <a class="action" href="admin.html#reset">Reset password</a>
+          <a class="action" href="admin.html#disable">Disable / delete</a>
         </div>
       </div>
-    </div>
-  </div>
+
+      <div class="card tool">
+        <h3>Delegate work</h3>
+        <p>Assign parks or zones to operators (e.g., Zone 1, Parks 1–50).</p>
+        <div class="actions">
+          <a class="action" href="delegate.html#zone">Assign by zone</a>
+          <a class="action" href="delegate.html#range">Assign by range</a>
+          <a class="action" href="delegate.html#view">View assignments</a>
+        </div>
+      </div>
+
+      <div class="card tool">
+        <h3>Generate reports</h3>
+        <p>Build PDFs (same options as your sidebar PDF actions).</p>
+        <div class="actions">
+          <a class="action" href="reports.html?type=mowing">Mowing PDF</a>
+          <a class="action" href="reports.html?type=snipping">Snipping PDF</a>
+          <a class="action" href="reports.html?type=firebreaks">Firebreaks PDF</a>
+          <a class="action" href="reports.html?type=daily">Daily summary</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Work areas -->
+    <h2 class="section-title" style="margin-top:22px">Work areas</h2>
+    <section class="links">
+      <article class="card link-card">
+        <img src="MOWING PICTURE.png" alt="Parks Mowing" onerror="this.style.display='none'">
+        <div class="link-body">
+          <div class="link-title">Parks Mowing</div>
+          <a class="link-go" href="ParksMowing.html">Open</a>
+        </div>
+      </article>
+
+      <article class="card link-card">
+        <img src="SNIPPING PICTURE.png" alt="Parks Snipping" onerror="this.style.display='none'">
+        <div class="link-body">
+          <div class="link-title">Parks Snipping</div>
+          <a class="link-go" href="ParksSnipping.html">Open</a>
+        </div>
+      </article>
+
+      <article class="card link-card">
+        <img src="FIREBREAKS PICTURE.png" alt="Firebreaks" onerror="this.style.display='none'">
+        <div class="link-body">
+          <div class="link-title">Firebreaks</div>
+          <a class="link-go" href="Firebreaks.html">Open</a>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="firebase-init.js"></script>
 
   <script>
-    (async function(){
-      const role = await BaysideData.getMyRole();
-      if (role !== 'admin') { document.getElementById('roleGate').style.display = 'block'; return; }
-      document.getElementById('app').style.display = 'block';
+    (function(){
+      const emailEl = document.getElementById('userEmail');
+      const logoutBtn = document.getElementById('logoutBtn');
 
-      // Load existing operators
-      const ops = await BaysideData.listOperators();
-      const list = document.getElementById('operators');
-      list.innerHTML = ops.length ? ('<ul>' + ops.map(o => '<li>'+ (o.name||o.email||o.uid) +'</li>').join('') + '</ul>')
-                                  : '<div class="muted">No operators found yet.</div>';
-      const sel = document.getElementById('assignee');
-      sel.innerHTML = ops.map(o => `<option value="${o.uid}">${o.name || o.email || o.uid}</option>`).join('');
-
-      // Create assignment workflow
-      document.getElementById('assignForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const uid = sel.value;
-        const name = (ops.find(x => x.uid === uid) || {}).name || 'Operator';
-        const zone = document.getElementById('zone').value;
-        const parksSpec = document.getElementById('parksSpec').value;
-        const notes = document.getElementById('notes').value;
-        const msg = document.getElementById('msg'); msg.textContent = '';
-        try{
-          const id = await BaysideData.createAssignment({ assigneeUid: uid, assigneeName: name, zone, parksSpec, notes });
-          msg.className = 'msg ok'; msg.textContent = 'Assignment created: ' + id; e.target.reset();
-        }catch(err){
-          msg.className = 'msg err'; msg.textContent = err.message || 'Failed to create assignment';
+      firebase.auth().onAuthStateChanged(user=>{
+        if(!user){
+          window.location.href = 'login.html';
+          return;
         }
+        emailEl.textContent = user.email || 'Signed in';
       });
 
-      // Create operator via Callable Cloud Function
-      const functions = firebase.app().functions('australia-southeast1'); // set your region if needed
-      const createOp = functions.httpsCallable('adminCreateOperator');
-
-      document.getElementById('createOpForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const u = (document.getElementById('co_username').value || '').trim().toLowerCase();
-        const p = (document.getElementById('co_password').value || '').trim();
-        const d = (document.getElementById('co_display').value || '').trim();
-        const out = document.getElementById('co_msg'); out.textContent = ''; out.className = 'msg';
-        if (!/^[a-z0-9._-]{3,}$/.test(u)) { out.className='msg err'; out.textContent='Invalid username'; return; }
+      logoutBtn.addEventListener('click', async ()=>{
         try{
-          const res = await createOp({ username: u, password: p, displayName: d || null });
-          out.className='msg ok'; out.textContent = 'Created operator: ' + res.data.email + ' (uid ' + res.data.uid + ')';
-          e.target.reset();
-        }catch(err){
-          out.className='msg err'; out.textContent = (err.message || 'Failed') + (err.details ? (' — ' + JSON.stringify(err.details)) : '');
+          await firebase.auth().signOut();
+          window.location.href = 'login.html';
+        }catch(e){
+          console.warn(e);
+          alert('Logout failed. Please try again.');
         }
       });
     })();
