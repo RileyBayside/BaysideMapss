@@ -5,171 +5,97 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bayside — Sign in</title>
 
-  <!-- Type -->
+  <!-- Type & base styles -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
   <style>
     :root{
-      /* Palette echoes the logo: deep slate + neon red accent */
-      --ink: #0b1220;          /* main text */
-      --panel: rgba(15, 23, 42, 0.55); /* glass panel */
-      --card: rgba(255, 255, 255, 0.08);
-      --muted: #233044;
-      --field: rgba(255,255,255,.09);
-      --field-border: rgba(255,255,255,.15);
-      --accent: #ff2a3d;       /* neon red */
-      --accent-2:#ff6b75;      /* softer neon */
-      --white: #ffffff;
-      --shadow: 0 20px 60px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);
-      --radius: 18px;
-      --glow: 0 0 0px rgba(255, 42, 61, 0), 0 0 0px rgba(255, 107, 117, 0);
-      --glow-focus: 0 0 18px rgba(255, 42, 61, .35), 0 0 36px rgba(255, 107, 117, .25);
+      --ink:#0f172a;       /* deep slate */
+      --ink-2:#111827;
+      --muted:#e5e7eb;
+      --bg:#f6f7fb;       /* page background */
+      --card:#ffffff;     /* card background */
+      --accent:#d11e2b;   /* logo red */
+      --accent-600:#b71a24;
+      --focus:#e6f0ff;
     }
-
     *{box-sizing:border-box}
     html,body{height:100%}
     body{
-      margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--white);
-      display:flex; align-items:center; justify-content:center; padding:30px;
-      background: radial-gradient(1200px 800px at 10% -10%, #19233a 0%, #0b1220 45%, #070b16 100%),
-                  radial-gradient(900px 700px at 110% 110%, rgba(255,42,61,.15), rgba(255,107,117,.05) 60%, rgba(0,0,0,0) 75%);
-      background-attachment: fixed;
+      margin:0;
+      font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      background:var(--bg);
+      color:var(--ink);
+      display:flex;align-items:center;justify-content:center;
+      padding:24px;
     }
-
-    /* subtle animated grid background */
-    .grid::before{
-      content:""; position:fixed; inset:0; pointer-events:none; opacity:.5;
-      background-image:
-        linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
-      background-size: 22px 22px, 22px 22px;
-      animation: pan 40s linear infinite;
-    }
-    @keyframes pan { to { transform: translateX(22px) translateY(22px); } }
-
-    .wrap{ width:100%; max-width: 880px; position:relative }
-    .brand{
-      display:flex; align-items:center; justify-content:center; margin-bottom:16px;
-      filter: drop-shadow(0 8px 24px rgba(0,0,0,.35));
-    }
-    .brand img{ height:66px; display:block }
-
-    .glass{
-      backdrop-filter: blur(14px) saturate(120%);
-      -webkit-backdrop-filter: blur(14px) saturate(120%);
-      background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
-      border: 1px solid rgba(255,255,255,.1);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
+    .wrap{max-width:760px;width:100%}
+    .brand{display:flex;justify-content:center;margin-bottom:16px}
+    .brand img{height:60px;display:block}
+    .card{
+      background:var(--card);
+      border-radius:20px;
+      border:1px solid var(--muted);
+      box-shadow:0 10px 34px rgba(16,24,40,.10);
       overflow:hidden;
     }
-
-    .head{
-      padding: 18px 22px;
-      border-bottom: 1px solid rgba(255,255,255,.08);
-      display:flex; align-items:center; gap:12px;
-    }
-    .head .dot{
-      width:9px; height:9px; border-radius:50%;
-      background:var(--accent); box-shadow: 0 0 16px rgba(255,42,61,.6), 0 0 32px rgba(255,107,117,.35);
-    }
-    .head .title{
-      font-size: 14px; letter-spacing: .25em; text-transform: uppercase; opacity:.85;
-    }
-
-    .tabs{ display:flex; gap:12px; padding: 18px 18px 8px 18px; }
+    .tabs{display:flex;gap:8px;padding:16px 18px;border-bottom:1px solid var(--muted)}
     .tab{
-      flex:1; border:1px solid var(--field-border); background:var(--field); color:var(--white);
-      padding:12px 14px; border-radius: 14px; font-weight:800; letter-spacing:.02em; text-align:center;
-      cursor:pointer; transition: .18s ease;
+      flex:1;
+      border:1px solid var(--muted);
+      border-radius:12px;
+      background:#f8fafc;
+      padding:12px 14px;
+      text-align:center;
+      font-weight:700;
+      cursor:pointer;
+      transition:.15s;
     }
-    .tab:hover{ transform: translateY(-1px); box-shadow: 0 8px 22px rgba(0,0,0,.25) }
-    .tab.active{
-      background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.06));
-      border-color: rgba(255,255,255,.28);
-      box-shadow: 0 10px 24px rgba(0,0,0,.35), 0 0 24px rgba(255,42,61,.15) inset;
-      position:relative;
-    }
-    .tab.active::after{
-      content:""; position:absolute; left:14px; right:14px; bottom:-7px; height:3px;
-      background: radial-gradient(12px 8px at 0 50%, rgba(255,42,61,.0), rgba(255,42,61,.0)),
-                  linear-gradient(90deg, var(--accent), var(--accent-2));
-      border-radius:2px;
-      box-shadow: 0 0 18px rgba(255,42,61,.35), 0 0 36px rgba(255,107,117,.25);
-    }
-
-    .body{ padding: 18px; display:grid; gap:12px }
-    label{ font-weight:600; opacity:.95; margin: 6px 4px }
-    input{
-      width:100%; padding: 13px 14px; font-size:16px; color:var(--white);
-      background: var(--field); border:1px solid var(--field-border); border-radius: 12px;
-      transition: border-color .15s, box-shadow .15s;
-    }
-    input::placeholder{ color: rgba(255,255,255,.55) }
-    input:focus{
-      outline:none; border-color: rgba(255,255,255,.4); box-shadow: var(--glow-focus);
-    }
-
+    .tab:hover{filter:brightness(.98)}
+    .tab.active{background:var(--ink);border-color:var(--ink);color:#fff}
+    .accent{height:3px;background:linear-gradient(90deg,var(--accent),var(--accent-600))}
+    .body{padding:18px}
+    label{display:block;font-weight:600;margin:10px 0 6px}
+    input,button{width:100%;padding:12px 14px;border-radius:12px;font-size:16px}
+    input{border:1px solid var(--muted);background:#fff}
+    input:focus{outline:3px solid var(--focus);border-color:#94a3b8}
+    .btn{margin-top:16px;border:0;background:var(--ink);color:#fff;font-weight:800;cursor:pointer}
+    .btn:hover{background:#1f2937}
     .err{
-      display:none; padding:10px 12px; border-radius: 12px; font-weight:700;
-      color:#ffd0d4; background: rgba(255, 42, 61, .15); border:1px solid rgba(255, 42, 61, .35);
+      display:none;margin-top:12px;color:#7f1d1d;background:#fee2e2;border:1px solid #fecaca;
+      padding:10px 12px;border-radius:10px;font-weight:600
     }
-
-    .btn{
-      width:100%; padding: 13px 14px; font-size:16px; font-weight:800; letter-spacing:.02em;
-      border:0; border-radius: 12px; cursor:pointer; color:var(--white);
-      background: linear-gradient(180deg, var(--accent), var(--accent-2));
-      box-shadow: 0 12px 28px rgba(255,42,61,.28), inset 0 1px 0 rgba(255,255,255,.15);
-      transition: transform .05s ease, box-shadow .2s ease, filter .15s ease;
-    }
-    .btn:hover{ filter: brightness(1.04); box-shadow: 0 16px 36px rgba(255,42,61,.34) }
-    .btn:active{ transform: translateY(1px) }
-
-    /* spacing grid for form */
-    .stack{ display:grid; gap:6px }
-
-    @media (max-width:640px){
-      .tabs{ gap:10px }
-      .tab{ font-size:14px; padding:11px 12px }
+    @media (max-width:560px){
+      .tab{font-size:14px;padding:10px 12px}
     }
   </style>
 </head>
-<body class="grid">
+<body>
   <div class="wrap">
     <div class="brand">
-      <img src="assets/bayside-logo.png" alt="Bayside Slashing & Maintenance" onerror="this.style.display='none'">
+      <!-- Logo lives at the repo root -->
+      <img src="logo.png" alt="Bayside Slashing & Maintenance" onerror="this.style.display='none'">
     </div>
 
-    <div class="glass">
-      <div class="head">
-        <span class="dot"></span>
-        <div class="title">Secure Access</div>
-      </div>
-
+    <div class="card">
       <div class="tabs" role="tablist" aria-label="Sign in method">
         <button id="tab-operator" class="tab active" type="button">Operator</button>
         <button id="tab-admin" class="tab" type="button">Admin</button>
       </div>
+      <div class="accent"></div>
 
       <div class="body">
-        <form id="loginForm" autocomplete="on" class="stack">
-          <div class="stack">
-            <label id="lbl-email" for="email">Username</label>
-            <input id="email" name="email" type="text" inputmode="text" autocomplete="username"
-                   placeholder="e.g., riley" required />
-          </div>
+        <form id="loginForm" autocomplete="on">
+          <label id="lbl-email" for="email">Username</label>
+          <input id="email" name="email" type="text" autocomplete="username" placeholder="e.g., riley" required />
 
-          <div class="stack">
-            <label for="password">Password</label>
-            <input id="password" name="password" type="password" minlength="6" autocomplete="current-password"
-                   placeholder="Your password" required />
-          </div>
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" minlength="6" autocomplete="current-password" placeholder="Your password" required />
 
           <div id="error" class="err"></div>
-
-          <button class="btn" type="submit">Sign in</button>
+          <button type="submit" class="btn">Sign in</button>
         </form>
       </div>
     </div>
@@ -182,12 +108,12 @@
 
   <script>
     (function(){
-      const opTab   = document.getElementById('tab-operator');
-      const adTab   = document.getElementById('tab-admin');
-      const email   = document.getElementById('email');
-      const lbl     = document.getElementById('lbl-email');
-      const form    = document.getElementById('loginForm');
-      const errBox  = document.getElementById('error');
+      const opTab = document.getElementById('tab-operator');
+      const adTab = document.getElementById('tab-admin');
+      const email = document.getElementById('email');
+      const lbl   = document.getElementById('lbl-email');
+      const form  = document.getElementById('loginForm');
+      const errBox= document.getElementById('error');
 
       function setMode(mode){
         if(mode === 'operator'){
@@ -211,10 +137,9 @@
       adTab.onclick = () => setMode('admin');
 
       // Auto-switch to Admin if an '@' is typed
-      email.addEventListener('input', () => {
-        if (email.value.includes('@')) setMode('admin');
-      });
+      email.addEventListener('input', () => { if (email.value.includes('@')) setMode('admin'); });
 
+      // Submit → sign in → go to index.html
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
         errBox.style.display='none'; errBox.textContent='';
@@ -223,9 +148,7 @@
         const pass = document.getElementById('password').value.trim();
         if(!id || !pass) return;
 
-        // Admin (email) vs Operator (username@bayside.local)
         const signinEmail = id.includes('@') ? id : (id.toLowerCase() + '@bayside.local');
-
         try{
           await firebase.auth().signInWithEmailAndPassword(signinEmail, pass);
           window.location.href = 'index.html';
