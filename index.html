@@ -19,7 +19,6 @@
       --card:#ffffff;
       --accent:#d11e2b;   /* brand red */
       --accent-600:#b71a24;
-      --focus:#e6f0ff;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
@@ -30,18 +29,18 @@
       color:var(--ink);
     }
 
-    /* Header */
+    /* Header (taller to accommodate bigger logo) */
     .header{
       display:flex; align-items:center; justify-content:space-between;
-      gap:16px; padding:14px 20px; background:#fff; border-bottom:1px solid var(--muted);
+      gap:16px; padding:16px 22px; background:#fff; border-bottom:1px solid var(--muted);
       position:sticky; top:0; z-index:10;
     }
     .brand{
-      display:flex; align-items:center; gap:12px; min-width:0;
+      display:flex; align-items:center; gap:14px; min-width:0;
     }
-    .brand img{ height:38px; display:block }
+    .brand img{ height:56px; display:block }
     .brand .title{
-      font-size:20px; font-weight:800; color:var(--ink-2); letter-spacing:.2px;
+      font-size:22px; font-weight:800; color:var(--ink-2); letter-spacing:.2px;
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     }
     .userbox{
@@ -58,7 +57,7 @@
     .btn:hover{ background:#1f2937 }
 
     /* Layout */
-    .container{ max-width:1100px; margin: 22px auto; padding: 0 16px }
+    .container{ max-width:1120px; margin: 24px auto; padding: 0 16px }
     .section-title{ font-size:18px; font-weight:800; margin: 10px 2px 12px; color:var(--ink-2) }
 
     .card{
@@ -66,25 +65,31 @@
       box-shadow:0 8px 26px rgba(16,24,40,.08);
     }
 
-    /* Admin tools */
-    .tools{
-      display:grid; grid-template-columns: repeat(3, 1fr); gap:14px;
-    }
+    /* Admin tools: multiple actions per tool */
+    .tools{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px }
     .tool{ padding:16px }
     .tool h3{ margin:0 0 8px; font-size:15px; font-weight:800 }
     .tool p { margin:0 0 12px; color:#475569 }
-    .tool .btn{
-      width:100%; background:var(--accent);
+
+    .actions{ display:flex; flex-wrap:wrap; gap:10px; margin-top:6px }
+    .action{
+      display:inline-flex; align-items:center; justify-content:center;
+      padding:9px 12px; border-radius:10px; font-weight:800; text-decoration:none; color:#fff;
+      background:var(--accent);
     }
-    .tool .btn:hover{ background:var(--accent-600) }
+    .action:hover{ background:var(--accent-600) }
 
     /* Quick links grid */
-    .links{
-      display:grid; grid-template-columns: repeat(3, 1fr); gap:16px;
-    }
+    .links{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px }
     .link-card{ overflow:hidden; display:flex; flex-direction:column }
+    /* Consistent rectangle thumbnails, show full height nicely */
     .link-card img{
-      width:100%; height:180px; object-fit:cover; display:block; background:#e2e8f0;
+      width:100%;
+      height:220px;             /* uniform rectangle height */
+      object-fit:cover;         /* fill neatly without squishing */
+      object-position:center;   /* center focal point */
+      display:block;
+      background:#e2e8f0;
     }
     .link-body{ padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px }
     .link-title{ font-weight:800; font-size:16px; color:var(--ink-2) }
@@ -94,11 +99,11 @@
     .link-go:hover{ background:#1f2937 }
 
     /* Responsive */
-    @media (max-width:900px){
+    @media (max-width:980px){
       .tools{ grid-template-columns: 1fr }
       .links{ grid-template-columns: 1fr 1fr }
     }
-    @media (max-width:620px){
+    @media (max-width:640px){
       .links{ grid-template-columns: 1fr }
       .brand .title{ display:none } /* save space on very small screens */
     }
@@ -124,19 +129,32 @@
       <div class="card tool">
         <h3>Add users</h3>
         <p>Create operator accounts and set display names.</p>
-        <!-- Link this to your admin user creation page if you have one -->
-        <button class="btn" type="button" onclick="location.href='admin.html'">Open</button>
+        <div class="actions">
+          <a class="action" href="admin.html#create">Create operator</a>
+          <a class="action" href="admin.html#reset">Reset password</a>
+          <a class="action" href="admin.html#disable">Disable / delete</a>
+        </div>
       </div>
+
       <div class="card tool">
         <h3>Delegate work</h3>
         <p>Assign parks or zones to operators (e.g., Zone 1, Parks 1–50).</p>
-        <button class="btn" type="button" onclick="location.href='delegate.html'">Open</button>
+        <div class="actions">
+          <a class="action" href="delegate.html#zone">Assign by zone</a>
+          <a class="action" href="delegate.html#range">Assign by range</a>
+          <a class="action" href="delegate.html#view">View assignments</a>
+        </div>
       </div>
+
       <div class="card tool">
         <h3>Generate reports</h3>
         <p>Build PDFs (same options as your sidebar PDF actions).</p>
-        <!-- If you already have a page with the report UI, link it here -->
-        <button class="btn" type="button" onclick="location.href='reports.html'">Open</button>
+        <div class="actions">
+          <a class="action" href="reports.html?type=mowing">Mowing PDF</a>
+          <a class="action" href="reports.html?type=snipping">Snipping PDF</a>
+          <a class="action" href="reports.html?type=firebreaks">Firebreaks PDF</a>
+          <a class="action" href="reports.html?type=daily">Daily summary</a>
+        </div>
       </div>
     </section>
 
@@ -160,7 +178,8 @@
       </article>
 
       <article class="card link-card">
-        <img src="FIREBREAKS FICTURE.png" alt="Firebreaks" onerror="this.style.display='none'">
+        <!-- fixed filename per your note -->
+        <img src="FIREBREAKS PICTURE.png" alt="Firebreaks" onerror="this.style.display='none'">
         <div class="link-body">
           <div class="link-title">Firebreaks</div>
           <a class="link-go" href="Firebreaks.html">Open</a>
