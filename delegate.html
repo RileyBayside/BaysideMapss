@@ -257,31 +257,41 @@
       catch(e){ console.warn(e); toast('Logout failed'); }
     });
 
-    // --- Load operators from Firestore ---
-    async function loadOperators(){
-      try{
-        const snap = await db.collection('users').where('role','==','operator').orderBy('name','asc').get();
-        operatorSel.innerHTML = '<option value="" disabled selected>Select operator…</option>';
-        _operators = [];
-        snap.forEach(doc=>{
-          const d = doc.data() || {};
-          const opt = document.createElement('option');
-          opt.value = doc.id; // uid
-          opt.textContent = d.name ? `${d.name} (${d.email || 'no email'})` : (d.email || doc.id);
-          operatorSel.appendChild(opt);
-          _operators.push({ uid: doc.id, name: d.name || '', email: d.email || '' });
-        });
-        if(_operators.length === 0){
-          const opt = document.createElement('option');
-          opt.value=''; opt.disabled = true; opt.selected = true;
-          opt.textContent='No operators found';
-          operatorSel.appendChild(opt);
-        }
-      }catch(err){
-        console.warn(err);
-        operatorSel.innerHTML = '<option value="" disabled selected>Error loading users</option>';
-      }
+<script>
+async function loadOperators(){
+  try{
+    // NO orderBy here (avoids needing a composite index)
+    const snap = await db.collection('users')
+      .where('role','==','operator')
+      .get();
+
+    const rows = [];
+    snap.forEach(doc => {
+      const d = doc.data() || {};
+      rows.push({ uid: doc.id, name: d.name || '', email: d.email || '' });
+    });
+
+    // Sort client-side
+    rows.sort((a,b)=> (a.name || '').localeCompare(b.name || '') );
+
+    operatorSel.innerHTML = '';
+    if(rows.length === 0){
+      operatorSel.innerHTML = '<option value="" disabled selected>No operators found</option>';
+      return;
     }
+    operatorSel.innerHTML = '<option value="" disabled selected>Select operator…</option>';
+    rows.forEach(o=>{
+      const opt = document.createElement('option');
+      opt.value = o.uid;
+      opt.textContent = o.name ? `${o.name} (${o.email || 'no email'})` : (o.email || o.uid);
+      operatorSel.appendChild(opt);
+    });
+  }catch(err){
+    console.warn('loadOperators error:', err);
+    operatorSel.innerHTML = '<option value="" disabled selected>Error loading users</option>';
+  }
+}
+</script>
 
     // --- Basket UI ---
     function renderBasket(){
