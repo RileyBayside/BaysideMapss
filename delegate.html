@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bayside — Delegate tasks</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght:400;600;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --ink:#0f172a; --ink-2:#111827; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff;
+      --accent:#d11e2b; --accent-600:#b71a24; --focus:#e6f0ff;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{ margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink); }
+
+    /* Header */
+    .header{
+      display:flex; align-items:center; justify-content:space-between; gap:16px;
+      padding:16px 22px; background:#fff; border-bottom:1px solid var(--muted); position:sticky; top:0; z-index:10;
+    }
+    .brand{ display:flex; align-items:center; gap:14px }
+    .brand img{ height:56px; display:block }
+    .title{ font-size:22px; font-weight:800; color:var(--ink-2) }
+    .userbox{ display:flex; align-items:center; gap:12px; flex-wrap:wrap }
+    .email{ font-weight:600; color:#334155; background:#f1f5f9; border:1px solid #e2e8f0; padding:8px 10px; border-radius:10px; }
+    .btn{ border:0; border-radius:10px; padding:10px 14px; font-weight:800; cursor:pointer; color:#fff; background:var(--ink); }
+    .btn:hover{ background:#1f2937 }
+
+    /* Layout */
+    .container{ max-width:1200px; margin: 20px auto; padding: 0 16px }
+    .grid{ display:grid; grid-template-columns: 280px 1fr 360px; gap:16px }
+    .card{ background:var(--card); border:1px solid var(--muted); border-radius:16px; box-shadow:0 8px 26px rgba(16,24,40,.08); }
+    .card h3{ margin:14px 16px 10px; font-size:16px; font-weight:800; color:var(--ink-2) }
+    .card .body{ padding: 0 16px 16px }
+
+    /* Left: Filters / (optional) sidebar */
+    .side label{ display:block; font-weight:700; margin:12px 0 6px }
+    .side input, .side select{
+      width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--muted); background:#fff; font-size:14px;
+    }
+    .side input:focus, .side select:focus{ outline:3px solid var(--focus); border-color:#94a3b8 }
+
+    /* Center: map placeholder (you can replace this with your real map) */
+    .map-wrap{ height: 520px; display:flex; align-items:center; justify-content:center; color:#64748b; }
+    .map-wrap .placeholder{
+      text-align:center; border:2px dashed #cbd5e1; padding:20px; border-radius:16px; width:90%;
+    }
+
+    /* Right: operator + basket */
+    .stack{ display:grid; gap:10px }
+    .row{ display:flex; gap:10px }
+    .row > *{ flex:1 }
+    .strong{ font-weight:800 }
+    .pill{
+      display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px; font-weight:800;
+      background:#fee2e2; color:#7f1d1d; border:1px solid #fecaca;
+    }
+    .half{ display:grid; gap:6px }
+    .btn-accent{ background:var(--accent) }
+    .btn-accent:hover{ background:var(--accent-600) }
+
+    .basket{ display:grid; gap:8px; margin-top:6px; max-height:260px; overflow:auto; padding-right:6px }
+    .item{
+      display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1px solid #e2e8f0; border-radius:12px; background:#fff;
+      font-weight:700;
+    }
+    .item small{ font-weight:600; color:#64748b }
+    .item .del{
+      border:0; border-radius:8px; padding:6px 8px; font-weight:800; background:#f43f5e; color:#fff; cursor:pointer;
+    }
+    .item .del:hover{ background:#be123c }
+
+    .foot{ display:flex; gap:10px; margin-top:12px }
+    .grow{ flex:1 }
+
+    .toast{
+      position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#111827; color:#fff;
+      padding:12px 14px; border-radius:10px; font-weight:700; box-shadow:0 10px 24px rgba(0,0,0,.25); display:none; z-index:50;
+    }
+    .toast.show{ display:block }
+
+    @media (max-width:1100px){ .grid{ grid-template-columns: 1fr } .map-wrap{ height: 360px } }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="brand">
+      <img src="logo.png" alt="Bayside logo" onerror="this.style.display='none'">
+      <div class="title">Delegate tasks</div>
+    </div>
+    <div class="userbox">
+      <div id="userEmail" class="email">—</div>
+      <button id="logoutBtn" class="btn" type="button">Logout</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="grid">
+      <!-- Left column: filters / future sidebar -->
+      <aside class="card side">
+        <h3>Sites / Filters</h3>
+        <div class="body">
+          <label for="zoneFilter">Zone</label>
+          <select id="zoneFilter">
+            <option value="">All zones</option>
+            <option>Zone 1</option><option>Zone 2</option><option>Zone 3</option>
+          </select>
+
+          <label for="searchSite">Search</label>
+          <input id="searchSite" placeholder="Park, street, site id...">
+
+          <p class="hint" style="color:#64748b; margin-top:10px">
+            You can later plug your existing sidebar here. For now, use the form on the right to add tasks by zone/range or IDs.
+          </p>
+        </div>
+      </aside>
+
+      <!-- Center: Map placeholder -->
+      <section class="card">
+        <h3>Map</h3>
+        <div class="body">
+          <div class="map-wrap" id="map">
+            <div class="placeholder">
+              Map goes here.<br>
+              <small>Hook in your existing map and call <code>window.addToBasket({zone, range, siteIds})</code> on selection.</small>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right: Operator + Basket -->
+      <aside class="card">
+        <h3>Assignment</h3>
+        <div class="body">
+          <div class="stack">
+            <div class="half">
+              <label class="strong" for="operatorSel">Operator</label>
+              <select id="operatorSel">
+                <option value="" disabled selected>Loading operators…</option>
+              </select>
+              <small style="color:#64748b">Pulls from <b>users</b> where <code>role == "operator"</code>.</small>
+            </div>
+
+            <div class="half" id="quickAdd">
+              <label class="strong">Quick add — Zone & Range</label>
+              <div class="row">
+                <input id="qa_zone" placeholder="Zone 1" />
+                <input id="qa_range" placeholder="1–50" />
+              </div>
+              <button class="btn btn-accent" id="qa_add" type="button">Add to basket</button>
+            </div>
+
+            <div class="half">
+              <label class="strong">Add by specific site IDs</label>
+              <input id="ids_input" placeholder="e.g. 12, 18, 21" />
+              <button class="btn btn-accent" id="ids_add" type="button">Add to basket</button>
+            </div>
+
+            <div class="half">
+              <label>Notes (optional)</label>
+              <input id="note_input" placeholder="e.g., High priority, access after 10am" />
+            </div>
+
+            <div class="half">
+              <label>Due date (optional)</label>
+              <input id="due_input" type="date" />
+            </div>
+
+            <div class="half">
+              <label class="strong">Basket</label>
+              <div id="basket" class="basket"></div>
+            </div>
+
+            <div class="foot">
+              <button class="btn grow" id="assignBtn" type="button">Assign tasks</button>
+              <button class="btn" id="clearBtn" type="button" style="background:#64748b">Clear</button>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="firebase-init.js"></script>
+
+  <script>
+    // --- Tiny toast helper ---
+    function toast(msg, ms=2200){
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      setTimeout(()=>t.classList.remove('show'), ms);
+    }
+
+    // --- Global basket APIs (so your map/sidebar can push selections) ---
+    window.addToBasket = function(item){
+      // item: { zone?:string, range?:string, siteIds?:string[] }
+      const norm = {
+        zone: (item.zone||'').trim(),
+        range: (item.range||'').trim(),
+        siteIds: Array.isArray(item.siteIds) ? item.siteIds : []
+      };
+      _basket.push(norm);
+      renderBasket();
+    };
+
+    window.clearBasket = function(){ _basket.length = 0; renderBasket(); };
+
+    // --- App state ---
+    const db = firebase.firestore();
+    let currentUser = null;
+    let _operators = [];   // { uid, name, email }
+    let _basket = [];      // { zone, range, siteIds[] }
+
+    // --- DOM ---
+    const emailEl   = document.getElementById('userEmail');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    const operatorSel = document.getElementById('operatorSel');
+    const qaZone   = document.getElementById('qa_zone');
+    const qaRange  = document.getElementById('qa_range');
+    const qaAddBtn = document.getElementById('qa_add');
+
+    const idsInput = document.getElementById('ids_input');
+    const idsAdd   = document.getElementById('ids_add');
+
+    const noteInput = document.getElementById('note_input');
+    const dueInput  = document.getElementById('due_input');
+
+    const basketEl  = document.getElementById('basket');
+    const assignBtn = document.getElementById('assignBtn');
+    const clearBtn  = document.getElementById('clearBtn');
+
+    // --- Auth gate ---
+    firebase.auth().onAuthStateChanged(async (u)=>{
+      if(!u){ location.href = 'login.html'; return; }
+      currentUser = u;
+      emailEl.textContent = u.email || 'Signed in';
+
+      // (Optional) verify admin role here client-side if you want; rules should enforce anyway.
+      loadOperators();
+    });
+
+    logoutBtn.addEventListener('click', async ()=>{
+      try{ await firebase.auth().signOut(); location.href = 'login.html'; }
+      catch(e){ console.warn(e); toast('Logout failed'); }
+    });
+
+    // --- Load operators from Firestore ---
+    async function loadOperators(){
+      try{
+        const snap = await db.collection('users').where('role','==','operator').orderBy('name','asc').get();
+        operatorSel.innerHTML = '<option value="" disabled selected>Select operator…</option>';
+        _operators = [];
+        snap.forEach(doc=>{
+          const d = doc.data() || {};
+          const opt = document.createElement('option');
+          opt.value = doc.id; // uid
+          opt.textContent = d.name ? `${d.name} (${d.email || 'no email'})` : (d.email || doc.id);
+          operatorSel.appendChild(opt);
+          _operators.push({ uid: doc.id, name: d.name || '', email: d.email || '' });
+        });
+        if(_operators.length === 0){
+          const opt = document.createElement('option');
+          opt.value=''; opt.disabled = true; opt.selected = true;
+          opt.textContent='No operators found';
+          operatorSel.appendChild(opt);
+        }
+      }catch(err){
+        console.warn(err);
+        operatorSel.innerHTML = '<option value="" disabled selected>Error loading users</option>';
+      }
+    }
+
+    // --- Basket UI ---
+    function renderBasket(){
+      basketEl.innerHTML = '';
+      if(_basket.length === 0){
+        const p = document.createElement('p');
+        p.style.color = '#64748b';
+        p.textContent = 'Basket is empty. Add items by Zone & Range or by Site IDs.';
+        basketEl.appendChild(p);
+        return;
+      }
+      _basket.forEach((it, idx)=>{
+        const row = document.createElement('div');
+        row.className = 'item';
+        const left = document.createElement('div');
+        const z = it.zone ? `<span class="pill">${it.zone}</span>` : '';
+        const r = it.range ? ` — <small>${it.range}</small>` : '';
+        const s = (it.siteIds && it.siteIds.length) ? ` — <small>${it.siteIds.join(', ')}</small>` : '';
+        left.innerHTML = `${z}${r}${s}`;
+        const del = document.createElement('button');
+        del.className = 'del';
+        del.textContent = 'Remove';
+        del.onclick = ()=>{ _basket.splice(idx,1); renderBasket(); };
+        row.appendChild(left);
+        row.appendChild(del);
+        basketEl.appendChild(row);
+      });
+    }
+
+    // Quick add handlers
+    qaAddBtn.addEventListener('click', ()=>{
+      const z = (qaZone.value||'').trim(); const r = (qaRange.value||'').trim();
+      if(!z && !r){ toast('Enter Zone and/or Range'); return; }
+      addToBasket({ zone:z, range:r, siteIds:[] });
+      qaRange.value=''; // keep zone, clear range
+    });
+
+    idsAdd.addEventListener('click', ()=>{
+      const raw = (idsInput.value||'').trim();
+      if(!raw){ toast('Enter at least one site ID'); return; }
+      const ids = raw.split(',').map(s=>s.trim()).filter(Boolean);
+      addToBasket({ zone:'', range:'', siteIds: ids });
+      idsInput.value='';
+    });
+
+    clearBtn.addEventListener('click', ()=> clearBasket() );
+
+    // --- Assign button (writes to Firestore 'assignments') ---
+    assignBtn.addEventListener('click', async ()=>{
+      const uid = operatorSel.value;
+      if(!uid){ toast('Choose an operator'); return; }
+      if(_basket.length === 0){ toast('Basket is empty'); return; }
+
+      try{
+        const op = _operators.find(o=>o.uid === uid) || {name:'',email:''};
+        const batch = db.batch();
+        const now = firebase.firestore.FieldValue.serverTimestamp();
+        _basket.forEach(it=>{
+          const ref = db.collection('assignments').doc();
+          batch.set(ref, {
+            userId: uid,
+            userName: op.name || '',
+            zone: it.zone || '',
+            parksRange: it.range || '',
+            siteIds: it.siteIds || [],
+            notes: (noteInput.value||''),
+            dueDate: dueInput.value ? new Date(dueInput.value) : null,
+            status: 'assigned',
+            createdAt: now,
+            createdBy: currentUser.uid
+          });
+        });
+        await batch.commit();
+        toast('Tasks assigned');
+        clearBasket();
+        noteInput.value=''; dueInput.value='';
+      }catch(err){
+        console.warn(err);
+        toast('Assign failed: ' + (err.message || err.code || 'error'));
+      }
+    });
+
+    // Optional: deep links
+    if(location.hash === '#zone'){ qaZone.focus(); }
+    if(location.hash === '#select'){ /* when you wire map selection, focus there */ }
+  </script>
+</body>
+</html>
