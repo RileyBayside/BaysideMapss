@@ -61,25 +61,12 @@
       box-shadow:0 8px 26px rgba(16,24,40,.08);
     }
 
-    /* Admin tools (cards with multiple actions) */
-    .tools{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px }
-    .tool{ padding:16px; display:flex; flex-direction:column; gap:8px }
-    .tool h3{ margin:0; font-size:15px; font-weight:800 }
-    .tool p { margin:0 0 8px; color:#475569 }
-    .actions{ display:flex; flex-wrap:wrap; gap:10px }
-    .action{
-      display:inline-flex; align-items:center; justify-content:center;
-      padding:9px 12px; border-radius:10px; font-weight:800; text-decoration:none; color:#fff;
-      background:var(--accent);
-    }
-    .action:hover{ background:var(--accent-600) }
-
-    /* Quick links */
+    /* Work areas */
     .links{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px }
     .link-card{ overflow:hidden; display:flex; flex-direction:column }
     .link-card img{
       width:100%;
-      height:280px; object-fit:cover; object-position:center; display:block; background:#e2e8f0;
+      height:220px; object-fit:cover; object-position:center; display:block; background:#e2e8f0;
     }
     .link-body{ padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px }
     .link-title{ font-weight:800; font-size:16px; color:var(--ink-2) }
@@ -88,9 +75,23 @@
     }
     .link-go:hover{ background:#1f2937 }
 
+    /* Tasks */
+    .tasks{ margin-top:24px }
+    .task-card{ padding:16px }
+    .task-empty{
+      padding:14px; border:1px dashed #cbd5e1; border-radius:12px; background:#f8fafc; color:#475569; font-weight:600;
+    }
+    .task-list{ list-style:none; margin:0; padding:0; display:grid; gap:10px }
+    .task{
+      display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px;
+      border:1px solid #e2e8f0; background:#fff; font-weight:700; color:#0f172a;
+    }
+    .task .pill{
+      background:#fee2e2; color:#7f1d1d; border:1px solid #fecaca; padding:4px 8px; border-radius:999px; font-size:12px; font-weight:800;
+    }
+
     /* Responsive */
     @media (max-width:980px){
-      .tools{ grid-template-columns: 1fr }
       .links{ grid-template-columns: 1fr 1fr }
     }
     @media (max-width:640px){
@@ -113,43 +114,8 @@
   </header>
 
   <main class="container">
-    <!-- Admin tools (3 tools, each with multiple actions) -->
-    <h2 class="section-title">Admin tools</h2>
-    <section class="tools">
-      <div class="card tool">
-        <h3>Add users</h3>
-        <p>Create operator accounts and set display names.</p>
-        <div class="actions">
-          <a class="action" href="admin.html#create">Create operator</a>
-          <a class="action" href="admin.html#reset">Reset password</a>
-          <a class="action" href="admin.html#disable">Disable / delete</a>
-        </div>
-      </div>
-
-      <div class="card tool">
-        <h3>Delegate work</h3>
-        <p>Assign parks or zones to operators (e.g., Zone 1, Parks 1–50).</p>
-        <div class="actions">
-          <a class="action" href="delegate.html#zone">Assign by zone</a>
-          <a class="action" href="delegate.html#range">Assign by range</a>
-          <a class="action" href="delegate.html#view">View assignments</a>
-        </div>
-      </div>
-
-      <div class="card tool">
-        <h3>Generate reports</h3>
-        <p>Build PDFs (same options as your sidebar PDF actions).</p>
-        <div class="actions">
-          <a class="action" href="reports.html?type=mowing">Mowing PDF</a>
-          <a class="action" href="reports.html?type=snipping">Snipping PDF</a>
-          <a class="action" href="reports.html?type=firebreaks">Firebreaks PDF</a>
-          <a class="action" href="reports.html?type=daily">Daily summary</a>
-        </div>
-      </div>
-    </section>
-
-    <!-- Work areas -->
-    <h2 class="section-title" style="margin-top:22px">Work areas</h2>
+    <!-- Work areas (top of page) -->
+    <h2 class="section-title">Work areas</h2>
     <section class="links">
       <article class="card link-card">
         <img src="MOWING PICTURE.png" alt="Parks Mowing" onerror="this.style.display='none'">
@@ -175,24 +141,89 @@
         </div>
       </article>
     </section>
+
+    <!-- Tasks to complete -->
+    <section class="tasks">
+      <h2 class="section-title">Tasks to complete</h2>
+      <div class="card task-card">
+        <ul id="taskList" class="task-list" aria-live="polite">
+          <!-- Filled by Firestore; fallback placeholder added if none -->
+        </ul>
+        <div id="taskEmpty" class="task-empty" style="display:none">
+          No tasks found. Example: <b>Zone 1 — Numbers 1–50</b>
+        </div>
+      </div>
+    </section>
   </main>
 
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-init.js"></script>
 
   <script>
     (function(){
       const emailEl = document.getElementById('userEmail');
       const logoutBtn = document.getElementById('logoutBtn');
+      const taskList = document.getElementById('taskList');
+      const taskEmpty = document.getElementById('taskEmpty');
 
-      firebase.auth().onAuthStateChanged(user=>{
+      function renderTask(t){
+        // Expect fields: zone (e.g. "Zone 1"), range (e.g. "Numbers 1–50"), status
+        const li = document.createElement('li');
+        li.className = 'task';
+        const pill = document.createElement('span');
+        pill.className = 'pill';
+        pill.textContent = (t.zone || 'Zone ?');
+        const text = document.createElement('span');
+        text.textContent = '— ' + (t.range || 'Numbers ?');
+        li.appendChild(pill);
+        li.appendChild(text);
+        return li;
+      }
+
+      function showEmpty(show){
+        taskEmpty.style.display = show ? 'block' : 'none';
+      }
+
+      firebase.auth().onAuthStateChanged(async user=>{
         if(!user){
           window.location.href = 'login.html';
           return;
         }
         emailEl.textContent = user.email || 'Signed in';
+
+        // Load tasks from Firestore
+        try{
+          const db = firebase.firestore();
+          // assignments where userId == uid and status != 'done'
+          const snap = await db.collection('assignments')
+            .where('userId', '==', user.uid)
+            .where('status', 'in', ['open', 'assigned', 'in_progress'])
+            .orderBy('zone', 'asc')
+            .get();
+
+          taskList.innerHTML = '';
+          if(snap.empty){
+            // Show friendly placeholder
+            showEmpty(true);
+          }else{
+            showEmpty(false);
+            snap.forEach(doc=>{
+              const data = doc.data() || {};
+              taskList.appendChild(renderTask({
+                zone: data.zone || '',
+                range: data.range || data.parksRange || ''
+              }));
+            });
+          }
+        }catch(err){
+          console.warn('Task load error:', err);
+          // Fall back to example
+          taskList.innerHTML = '';
+          showEmpty(true);
+        }
       });
 
       logoutBtn.addEventListener('click', async ()=>{
