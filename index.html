@@ -7,6 +7,16 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="dashboard.css">
+  <script>
+    // Landing redirect to Login
+    if (
+      window.location.pathname.endsWith("/index.html") ||
+      window.location.pathname.endsWith("/") ||
+      window.location.pathname === ""
+    ) {
+      window.location.replace("./login.html");
+    }
+  </script>
 
   <!-- If you have an existing global style file, include it after this line -->
   <!-- <link rel="stylesheet" href="styles.css"> -->
@@ -14,103 +24,77 @@
 <body>
 
   <!-- Header / App Bar -->
-  <header class="appbar">
-    <div class="appbar__left">
-      <img class="logo" src="logo.png" alt="Bayside Slashing" />
-      <h1 class="appbar__title">Dashboard</h1>
+  <header class="app-bar">
+    <div class="app-bar__left">
+      <img src="logo.png" alt="Logo" class="logo" />
+      <span class="app-title">Dashboard</span>
     </div>
-
-    <div class="appbar__right">
-      <span class="user-pill" id="user-email">user@bayside.local</span>
-      <button class="btn btn-outline" id="logoutBtn" type="button">Logout</button>
+    <div class="app-bar__right">
+      <div class="user-pill">
+        <span class="user-pill__name">User</span>
+      </div>
+      <button id="logoutBtn" class="btn btn--ghost">Logout</button>
     </div>
   </header>
 
+  <!-- Main -->
   <main class="container">
+    <!-- Page Header -->
+    <div class="page-header">
+      <h1>Work areas</h1>
+      <p class="page-subtitle">Choose a work area to continue</p>
+    </div>
 
-<section class="section">
-  
-  <h2 class="section-title">Work areas</h2>
-
-  <div class="cards-row">
-
-    <!-- Parks Mowing -->
-    <a href="./ParksMowing.html" class="work-card">
-      <div class="work-card__img">
-        <img src="MOWING PICTURE.png" alt="Parks Mowing map" />
-      </div>
-      <div class="work-card__footer">
-        <span class="work-card__title">Parks Mowing</span>
-        <span class="btn btn-dark">Open</span>
-      </div>
-    </a>
-
-    <!-- Parks Snipping -->
-    <a href="./ParksSnipping.html" class="work-card">
-      <div class="work-card__img">
-        <img src="SNIPPING PICTURE.png" alt="Parks Snipping map" />
-      </div>
-      <div class="work-card__footer">
-        <span class="work-card__title">Parks Snipping</span>
-        <span class="btn btn-dark">Open</span>
-      </div>
-    </a>
-
-    <!-- Firebreaks -->
-    <a href="./Firebreaks.html" class="work-card">
-      <div class="work-card__img">
-        <img src="FIREBREAKS PICTURE.png" alt="Firebreaks map" />
-      </div>
-      <div class="work-card__footer">
-        <span class="work-card__title">Firebreaks</span>
-        <span class="btn btn-dark">Open</span>
-      </div>
-    </a>
-
-  </div>
-</section>
-
-
-    <!-- Tasks to complete -->
-    <section class="section">
-      <h2 class="section-title">Tasks to complete</h2>
-
-      <!-- Your existing JS can inject items into this list -->
-      <div id="tasks-list" class="tasks">
-        <!-- Example task markup for reference (leave commented out)
-        <div class="task">
-          <div class="task__left">
-            <div class="task__title">Zone 1 — Numbers 1–50</div>
-            <div class="task__meta">Assigned · Due 15 Oct</div>
-          </div>
-          <div class="task__right">
-            <span class="badge badge-amber">Assigned</span>
-          </div>
+    <!-- Work Area Cards -->
+    <section class="grid grid--three">
+      <!-- Parks Mowing -->
+      <a class="card" href="./ParksMowing.html">
+        <div class="card__media">
+          <img src="MOWING PICTURE.png" alt="Parks Mowing" />
         </div>
-        -->
-      </div>
-    </section>
+        <div class="card__body">
+          <h2 class="card__title">Parks Mowing</h2>
+          <p class="card__text">Mowing routes, specs, and reporting</p>
+        </div>
+      </a>
 
+      <!-- Parks Snipping -->
+      <a class="card" href="./ParksSnipping.html">
+        <div class="card__media">
+          <img src="SNIPPING PICTURE.png" alt="Parks Snipping" />
+        </div>
+        <div class="card__body">
+          <h2 class="card__title">Parks Snipping</h2>
+          <p class="card__text">Snipping tasks, search, and PDF exports</p>
+        </div>
+      </a>
+
+      <!-- Firebreaks -->
+      <a class="card" href="./Firebreaks.html">
+        <div class="card__media">
+          <img src="FIREBREAKS PICTURE.png" alt="Firebreaks" />
+        </div>
+        <div class="card__body">
+          <h2 class="card__title">Firebreaks</h2>
+          <p class="card__text">Firebreak inspection and notes</p>
+        </div>
+      </a>
+    </section>
   </main>
 
-  <footer class="footer-space"></footer>
+  <!-- Footer -->
+  <footer class="footer">
+    <p>© Bayside</p>
+  </footer>
 
-  <!-- Optional tiny script: hook up logout if you already expose a logout() -->
   <script>
-    (function() {
-      // Fill the email pill if your login code stores it (adjust as needed)
-      try {
-        const emailEl = document.getElementById('user-email');
-        const stored = localStorage.getItem('bayside:userEmail');
-        if (stored && emailEl) emailEl.textContent = stored;
-      } catch (e) {}
-
+    (function(){
+      // If you have an existing global logout function, this will call it.
+      // Otherwise, it will route to login.html.
       const logoutBtn = document.getElementById('logoutBtn');
       if (logoutBtn) {
         logoutBtn.addEventListener('click', function(){
-          // If you already have a global logout function, call it:
           if (window.logout) { window.logout(); return; }
-          // Fallback: route back to login
           window.location.href = './login.html';
         });
       }
