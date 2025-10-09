@@ -10,35 +10,32 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 
   <style>
-    :root{
-      --ink:#0f172a; --ink-2:#111827; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff; --accent:#d11e2b; --accent-600:#b71a24;
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
+    :root{ --ink:#0f172a; --ink-2:#111827; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff; --accent:#d11e2b; --accent-600:#b71a24; }
+    *{ box-sizing:border-box }
+    html,body{ height:100% }
     body{ margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink); }
-    .container{ max-width:720px; margin: 24px auto; padding: 0 16px }
-    .card{ background:var(--card); border:1px solid var(--muted); border-radius:16px; box-shadow:0 8px 26px rgba(16,24,40,.08); padding:20px }
+    .container{ max-width:720px; margin:24px auto; padding:0 16px }
     .header{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px 0 }
     .title{ font-size:22px; font-weight:800; color:var(--ink-2) }
+    .btn{ cursor:pointer; border:0; background:#111827; color:#fff; font-weight:800; padding:10px 12px; border-radius:10px }
+    .card{ background:var(--card); border:1px solid var(--muted); border-radius:16px; box-shadow:0 8px 26px rgba(16,24,40,.08); padding:20px }
     form{ display:grid; gap:12px; margin-top:10px }
     label{ display:grid; gap:6px; font-weight:600 }
-    input, select, button{ padding:10px 12px; border-radius:10px; border:1px solid var(--muted); font-size:1rem }
-    .btn{ cursor:pointer; border:0; background:var(--accent); color:#fff; font-weight:800 }
-    .btn:hover{ background:var(--accent-600) }
-    .row{ display:flex; gap:8px; flex-wrap:wrap }
+    input,select,button{ padding:10px 12px; border-radius:10px; border:1px solid var(--muted); font-size:1rem }
+    .primary{ background:var(--accent); color:#fff; font-weight:800; border:0 }
+    .primary:hover{ background:var(--accent-600) }
     .muted{ color:#475569 }
     .error{ color:#c62828; margin:6px 0 0 }
     .success{ color:#2e7d32; margin:6px 0 0 }
-    .info{ border:1px solid #dbeafe; background:#eff6ff; color:#1e3a8a; padding:10px 12px; border-radius:10px; margin-bottom:12px }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
       <div class="title">Create a User</div>
-      <div class="row">
-        <a href="admin.html"><button class="btn" style="background:#111827">Back to Admin</button></a>
-        <a href="login.html"><button class="btn" style="background:#111827">Go to Login</button></a>
+      <div style="display:flex; gap:8px">
+        <a href="admin.html"><button class="btn">Back to Admin</button></a>
+        <a href="login.html"><button class="btn">Go to Login</button></a>
       </div>
     </div>
 
@@ -48,85 +45,106 @@
         <code>adminCreateUser</code> in <b>us-central1</b>.
       </p>
 
-      <div id="signinNote" class="info" style="display:none">
-        You’re not signed in. Please <a href="grant-admin.html">sign in here</a> (or use login.html) and come back.
-      </div>
-
-      <form id="createForm">
+      <form id="createForm" autocomplete="on">
         <label>Role
           <select id="role" required>
-            <option value="">Select role…</option>
+            <option value="operator" selected>Operator</option>
             <option value="admin">Admin</option>
-            <option value="user">User</option>
           </select>
         </label>
 
-        <label>Username (email)
-          <input type="email" id="usernameEmail" required placeholder="name@example.com" />
+        <label id="userLabel">Username
+          <!-- type is switched by JS; start as text so there is NO email validation for operator -->
+          <input id="username" type="text" required placeholder="username" autocomplete="username">
         </label>
 
         <label>Password
-          <input type="password" id="password" minlength="6" required autocomplete="new-password" />
+          <input id="password" type="password" minlength="6" required autocomplete="new-password">
         </label>
 
-        <button type="submit" class="btn">Create</button>
+        <button class="primary" type="submit">Create</button>
         <p id="msg" class="success"></p>
         <p id="err" class="error"></p>
       </form>
     </div>
   </div>
 
-  <!-- Firebase compat to match the rest of your site -->
+  <!-- Firebase (compat) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-functions-compat.js"></script>
   <script src="firebase-init.js"></script>
 
   <script>
-  (function(){
-    const auth = firebase.auth();
-    const functions = firebase.app().functions('us-central1');
-    const adminCreateUser = functions.httpsCallable('adminCreateUser');
+    (function(){
+      const auth = firebase.auth();
+      const functions = firebase.app().functions('us-central1');
+      const adminCreateUser = functions.httpsCallable('adminCreateUser');
 
-    const form = document.getElementById('createForm');
-    const msg  = document.getElementById('msg');
-    const err  = document.getElementById('err');
-    const signinNote = document.getElementById('signinNote');
+      const form = document.getElementById('createForm');
+      const roleSel = document.getElementById('role');
+      const userInput = document.getElementById('username');
+      const userLabel = document.getElementById('userLabel');
+      const msg = document.getElementById('msg');
+      const err = document.getElementById('err');
 
-    // No admin check. Only ensure the user is signed in so the callable has a token.
-    auth.onAuthStateChanged(async (user)=>{
-      if (!user) {
-        signinNote.style.display = 'block';
-        Array.from(form.elements).forEach(el => el.disabled = true);
-      } else {
-        signinNote.style.display = 'none';
-        Array.from(form.elements).forEach(el => el.disabled = false);
+      function configureFieldForRole() {
+        const isAdmin = roleSel.value === 'admin';
+
+        // Change label text
+        userLabel.firstChild.nodeValue = isAdmin ? 'Email ' : 'Username ';
+
+        // Switch input type/placeholder/validation
+        userInput.value = '';
+        userInput.setAttribute('autocomplete', isAdmin ? 'email' : 'username');
+        userInput.placeholder = isAdmin ? 'name@example.com' : 'username';
+
+        if (isAdmin) {
+          userInput.type = 'email'; // enables browser email validation
+        } else {
+          userInput.type = 'text';  // NO email validation
+          userInput.removeAttribute('pattern');
+        }
       }
-    });
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      msg.textContent = '';
-      err.textContent = '';
-      try {
-        const role = document.getElementById('role').value;
-        const usernameEmail = document.getElementById('usernameEmail').value.trim();
+      roleSel.addEventListener('change', configureFieldForRole);
+      configureFieldForRole(); // initialize on load
+
+      // Require sign-in (but no admin requirement)
+      auth.onAuthStateChanged((user)=>{
+        if (!user) { window.location.href = 'login.html'; }
+      });
+
+      form.addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        msg.textContent = '';
+        err.textContent = '';
+
+        const role = roleSel.value; // 'operator' or 'admin'
+        const username = userInput.value.trim();
         const password = document.getElementById('password').value;
 
-        const res = await adminCreateUser({ role, usernameEmail, password });
-        if (res && res.data && res.data.ok) {
-          msg.textContent = `User “${usernameEmail}” created as ${role}.`;
-          form.reset();
-        } else {
-          err.textContent = 'Failed to create user.';
+        if (!username || !password) {
+          err.textContent = 'Please fill all fields.';
+          return;
         }
-      } catch (e2) {
-        // If your Cloud Function still requires admin, you’ll see "permission-denied" here.
-        err.textContent = e2?.message || 'Failed to create user';
-      }
-    });
-  })();
+
+        try {
+          const res = await adminCreateUser({ role, usernameEmail: username, password });
+          if (res && res.data && res.data.ok) {
+            msg.textContent = role === 'admin'
+              ? `Admin “${username}” created.`
+              : `Operator “${username}” created.`;
+            form.reset();
+            configureFieldForRole();
+          } else {
+            err.textContent = 'Failed to create user.';
+          }
+        } catch (e2) {
+          err.textContent = e2?.message || 'Failed to create user';
+        }
+      });
+    })();
   </script>
 </body>
 </html>
-
