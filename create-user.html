@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bayside — Create User</title>
 
-  <!-- Type -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
@@ -30,6 +29,7 @@
     .muted{ color:#475569 }
     .error{ color:#c62828; margin:6px 0 0 }
     .success{ color:#2e7d32; margin:6px 0 0 }
+    .info{ border:1px solid #dbeafe; background:#eff6ff; color:#1e3a8a; padding:10px 12px; border-radius:10px; margin-bottom:12px }
   </style>
 </head>
 <body>
@@ -43,7 +43,15 @@
     </div>
 
     <div class="card">
-      <p class="muted">Admins can create users with a role. This uses your deployed Firebase callable <code>adminCreateUser</code> in <b>us-central1</b>.</p>
+      <p class="muted">
+        Anyone who is signed in can create users here. This calls your Firebase callable
+        <code>adminCreateUser</code> in <b>us-central1</b>.
+      </p>
+
+      <div id="signinNote" class="info" style="display:none">
+        You’re not signed in. Please <a href="grant-admin.html">sign in here</a> (or use login.html) and come back.
+      </div>
+
       <form id="createForm">
         <label>Role
           <select id="role" required>
@@ -58,7 +66,7 @@
         </label>
 
         <label>Password
-          <input type="password" id="password" minlength="6" required />
+          <input type="password" id="password" minlength="6" required autocomplete="new-password" />
         </label>
 
         <button type="submit" class="btn">Create</button>
@@ -68,52 +76,52 @@
     </div>
   </div>
 
-  <!-- Firebase (compat like your existing pages) -->
+  <!-- Firebase compat to match the rest of your site -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-functions-compat.js"></script>
   <script src="firebase-init.js"></script>
 
   <script>
-  (async function(){
-    // Gate: only signed-in users with admin claim should access
-    firebase.auth().onAuthStateChanged(async (user)=>{
-      if(!user){ window.location.href = 'login.html'; return; }
-      // refresh token & check custom claim
-      const token = await user.getIdTokenResult(true);
-      if(token.claims.role !== 'admin'){
-        alert('Admin role required.');
-        window.location.href = 'login.html';
-        return;
-      }
-    });
-
-    const form = document.getElementById('createForm');
-    const msg = document.getElementById('msg');
-    const err = document.getElementById('err');
-
-    // region must match your deploy
+  (function(){
+    const auth = firebase.auth();
     const functions = firebase.app().functions('us-central1');
     const adminCreateUser = functions.httpsCallable('adminCreateUser');
 
-    form.addEventListener('submit', async (e)=>{
+    const form = document.getElementById('createForm');
+    const msg  = document.getElementById('msg');
+    const err  = document.getElementById('err');
+    const signinNote = document.getElementById('signinNote');
+
+    // No admin check. Only ensure the user is signed in so the callable has a token.
+    auth.onAuthStateChanged(async (user)=>{
+      if (!user) {
+        signinNote.style.display = 'block';
+        Array.from(form.elements).forEach(el => el.disabled = true);
+      } else {
+        signinNote.style.display = 'none';
+        Array.from(form.elements).forEach(el => el.disabled = false);
+      }
+    });
+
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      msg.textContent=''; err.textContent='';
+      msg.textContent = '';
+      err.textContent = '';
+      try {
+        const role = document.getElementById('role').value;
+        const usernameEmail = document.getElementById('usernameEmail').value.trim();
+        const password = document.getElementById('password').value;
 
-      const role = document.getElementById('role').value;
-      const usernameEmail = document.getElementById('usernameEmail').value.trim();
-      const password = document.getElementById('password').value;
-
-      try{
         const res = await adminCreateUser({ role, usernameEmail, password });
-        if(res?.data?.ok){
+        if (res && res.data && res.data.ok) {
           msg.textContent = `User “${usernameEmail}” created as ${role}.`;
           form.reset();
-        }else{
+        } else {
           err.textContent = 'Failed to create user.';
         }
-      }catch(e2){
-        console.warn(e2);
+      } catch (e2) {
+        // If your Cloud Function still requires admin, you’ll see "permission-denied" here.
         err.textContent = e2?.message || 'Failed to create user';
       }
     });
@@ -121,3 +129,4 @@
   </script>
 </body>
 </html>
+
