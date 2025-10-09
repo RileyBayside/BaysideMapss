@@ -1,14 +1,14 @@
+// firebase-init.js  (ES module)
+import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
 
-/* firebase-init.js — project config only (no App Check, no Firestore on login) */
-(function(){
-  const firebaseConfig = {
-    apiKey: "AIzaSyDSuG2VGa6-8RRyTYyy05oXqCTXIvS2RJI",
-    authDomain: "bayside-maps.firebaseapp.com",
-    projectId: "bayside-maps",
-    storageBucket: "bayside-maps.firebasestorage.app",
-    messagingSenderId: "204164908023",
-    appId: "1:204164908023:web:c8644566317c5b1c80264a",
-    measurementId: "G-BZG5XPX49P"
-  };
-  if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
-})();
+// ⬇️ Put your real config here (from Firebase Console → Project settings)
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID",
+};
+
+export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
