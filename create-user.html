@@ -41,7 +41,7 @@
 
     <div class="card">
       <p class="muted">
-        Anyone who is signed in can create users here. This calls your Firebase callable
+        Anyone who is signed in can create users here. This calls your Firebase function
         <code>adminCreateUser</code> in <b>us-central1</b>.
       </p>
 
@@ -71,14 +71,11 @@
   <!-- Firebase (compat) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-functions-compat.js"></script>
   <script src="firebase-init.js"></script>
 
   <script>
     (function(){
       const auth = firebase.auth();
-      const functions = firebase.app().functions('us-central1');
-      const adminCreateUser = functions.httpsCallable('adminCreateUser');
 
       const form = document.getElementById('createForm');
       const roleSel = document.getElementById('role');
@@ -95,15 +92,40 @@
         userInput.placeholder = isAdmin ? 'name@example.com' : 'username';
         userInput.type = isAdmin ? 'email' : 'text'; // email validation only for admins
       }
-
       roleSel.addEventListener('change', configureFieldForRole);
       configureFieldForRole();
 
-      // Verify sign-in and log who it is
+      // Verify sign-in
       auth.onAuthStateChanged(async (user)=>{
         if (!user) { window.location.href = 'login.html'; return; }
         console.log('[auth] signed in as', user.email || user.uid);
       });
+
+      // Direct call to the HTTPS endpoint with Authorization: Bearer <token>
+      async function callCreateUser(data) {
+        const user = auth.currentUser;
+        if (!user) throw new Error('Sign in required.');
+        const idToken = await user.getIdToken(true); // force refresh
+
+        const url = 'https://us-central1-bayside-maps.cloudfunctions.net/adminCreateUser';
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + idToken,
+            // If you later enforce App Check, add:
+            // 'X-Firebase-AppCheck': await firebase.appCheck().getToken(true).then(t => t.token)
+          },
+          // Callable wire format expects { data: ... }
+          body: JSON.stringify({ data })
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(()=> '');
+          throw new Error(text || ('HTTP ' + res.status));
+        }
+        return res.json(); // { result: {...} } per callable protocol
+      }
 
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
@@ -120,14 +142,9 @@
         }
 
         try {
-          const user = auth.currentUser;
-          if (!user) { err.textContent = 'Please sign in first.'; return; }
-
-          // Force-refresh ID token so the callable definitely gets it
-          await user.getIdToken(true);
-
-          const res = await adminCreateUser({ role, usernameEmail: username, password });
-          if (res && res.data && res.data.ok) {
+          const out = await callCreateUser({ role, usernameEmail: username, password });
+          const payload = out && out.result ? out.result : out;
+          if (payload && payload.ok) {
             msg.textContent = role === 'admin'
               ? `Admin “${username}” created.`
               : `Operator “${username}” created.`;
@@ -138,7 +155,9 @@
           }
         } catch (e2) {
           console.warn(e2);
-          err.textContent = e2?.message || 'Failed to create user';
+          // Try to show server-provided message if present
+          const m = (e2 && e2.message) ? e2.message : 'Failed to create user';
+          err.textContent = m.includes('UNAUTHENTICATED') ? 'Sign in required.' : m;
         }
       });
     })();
