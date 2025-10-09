@@ -10,9 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 
   <style>
-    :root{
-      --ink:#0f172a; --ink-2:#111827; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff;
-    }
+    :root{ --ink:#0f172a; --ink-2:#111827; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff; }
     *{box-sizing:border-box}
     html,body{height:100%}
     body{
@@ -91,16 +89,13 @@
   <script src="firebase-init.js"></script>
 
   <script>
-    // ------------------------
     // Username -> synthetic email mapping for Operators
-    // Must match OP_DOMAIN used in Cloud Function adminCreateUser
+    // Must match OP_DOMAIN in Cloud Function adminCreateUser
     const OP_DOMAIN = 'operators.bayside-maps.local';
-
-    function toIdentifier(raw) {
-      const trimmed = String(raw || '').trim();
-      return trimmed.includes('@') ? trimmed : `${trimmed}@${OP_DOMAIN}`;
+    function toIdentifier(raw){
+      const t = String(raw || '').trim();
+      return t.includes('@') ? t : `${t}@${OP_DOMAIN}`;
     }
-    // ------------------------
 
     // Tabs
     const tabOp = document.getElementById('tabOperator');
@@ -114,16 +109,14 @@
     tabOp.addEventListener('click', ()=>show(true));
     tabAd.addEventListener('click', ()=>show(false));
 
-    // Operator → index.html (username allowed)
+    // Operator → index.html
     formOp.addEventListener('submit', async (e)=>{
       e.preventDefault();
       const u = document.getElementById('op_user').value.trim().toLowerCase();
       const p = document.getElementById('op_pass').value;
       if(!u || !p){ alert('Enter username and password'); return; }
 
-      // Map username -> synthetic email
-      const identifier = toIdentifier(u);
-
+      const identifier = toIdentifier(u); // username -> synthetic email
       try{
         await firebase.auth().signInWithEmailAndPassword(identifier, p);
         window.location.replace('index.html');
@@ -132,30 +125,25 @@
       }
     });
 
-    // Admin → admin.html (email required)
+    // Admin → admin.html
     formAd.addEventListener('submit', async (e)=>{
       e.preventDefault();
       const email = document.getElementById('ad_email').value.trim();
       const pass  = document.getElementById('ad_pass').value;
       if(!email || !pass){ alert('Enter email and password'); return; }
 
-      // post-login target (if you use any bridge)
       try {
         sessionStorage.setItem('bayside_next', 'admin.html');
         localStorage.setItem('bayside_next', 'admin.html');
       } catch(_) {}
 
       try{
-        // Admins log in with real email (already contains "@")
         await firebase.auth().signInWithEmailAndPassword(email, pass);
         window.location.replace('admin.html');
       }catch(err){
         console.warn(err); alert(err.message || 'Sign in failed');
       }
     });
-
-    // Optional: if already signed in, you can auto-redirect here if desired
   </script>
 </body>
 </html>
-
