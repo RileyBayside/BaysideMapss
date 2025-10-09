@@ -60,14 +60,13 @@
       background:var(--card); border:1px solid var(--muted); border-radius:16px;
       box-shadow:0 8px 26px rgba(16,24,40,.08);
     }
-    .tool{ padding:16px }
-    .tool h3{ margin:6px 0 8px; font-size:16px }
-    .tool p{ margin:0 0 12px; color:#475569; font-size:14px }
-    .tools{
-      display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px;
-    }
 
-    .actions{ display:flex; gap:10px; flex-wrap:wrap; }
+    /* Admin tools (cards with multiple actions) */
+    .tools{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px }
+    .tool{ padding:16px; display:flex; flex-direction:column; gap:8px }
+    .tool h3{ margin:0; font-size:15px; font-weight:800 }
+    .tool p { margin:0 0 8px; color:#475569 }
+    .actions{ display:flex; flex-wrap:wrap; gap:10px }
     .action{
       display:inline-flex; align-items:center; justify-content:center;
       padding:9px 12px; border-radius:10px; font-weight:800; text-decoration:none; color:#fff;
@@ -101,26 +100,27 @@
   </style>
 </head>
 <body>
+  <!-- Header -->
   <header class="header">
     <div class="brand">
       <img src="logo.png" alt="Bayside logo" onerror="this.style.display='none'">
-      <div class="title">Admin dashboard</div>
+      <div class="title">Dashboard</div>
     </div>
     <div class="userbox">
-      <span id="signedInEmail" class="email">—</span>
-      <button id="logoutBtn" class="btn">Logout</button>
+      <div id="userEmail" class="email">—</div>
+      <button id="logoutBtn" class="btn" type="button">Logout</button>
     </div>
   </header>
 
   <main class="container">
-
+    <!-- Admin tools (3 tools, each with multiple actions) -->
     <h2 class="section-title">Admin tools</h2>
     <section class="tools">
       <div class="card tool">
         <h3>Add users</h3>
         <p>Create operator accounts and set display names.</p>
         <div class="actions">
-          <a class="action" href="admin-create-operator.html">Create operator</a>
+          <a class="action" href="admin.html#create">Create operator</a>
           <a class="action" href="admin.html#reset">Reset password</a>
           <a class="action" href="admin.html#disable">Disable / delete</a>
         </div>
@@ -148,47 +148,64 @@
       </div>
     </section>
 
-    <h2 class="section-title">Quick links</h2>
-    <section class="links">
-      <div class="link-card card">
-        <img src="MOWING PICTURE.png" alt="Mowing">
-        <div class="link-body">
-          <div class="link-title">Parks Mowing</div>
-          <a class="link-go" href="ParksMowing.html">Open</a>
-        </div>
+   <section class="section">
+  <h2 class="section-title">Work areas</h2>
+
+  <div class="cards-row">
+
+    <!-- Parks Mowing -->
+    <a href="./ParksMowing.html" class="work-card">
+      <div class="work-card__img">
+        <img src="MOWING PICTURE.png" alt="Parks Mowing map" />
       </div>
-      <div class="link-card card">
-        <img src="SNIPPING PICTURE.png" alt="Snipping">
-        <div class="link-body">
-          <div class="link-title">Parks Snipping</div>
-          <a class="link-go" href="ParksSnipping.html">Open</a>
-        </div>
+      <div class="work-card__footer">
+        <span class="work-card__title">Parks Mowing</span>
+        <span class="btn btn-dark">Open</span>
       </div>
-      <div class="link-card card">
-        <img src="FIREBREAKS PICTURE.png" alt="Firebreaks">
-        <div class="link-body">
-          <div class="link-title">Firebreaks</div>
-          <a class="link-go" href="Firebreaks.html">Open</a>
-        </div>
+    </a>
+
+    <!-- Parks Snipping -->
+    <a href="./ParksSnipping.html" class="work-card">
+      <div class="work-card__img">
+        <img src="SNIPPING PICTURE.png" alt="Parks Snipping map" />
       </div>
-    </section>
-  </main>
+      <div class="work-card__footer">
+        <span class="work-card__title">Parks Snipping</span>
+        <span class="btn btn-dark">Open</span>
+      </div>
+    </a>
+
+    <!-- Firebreaks -->
+    <a href="./Firebreaks.html" class="work-card">
+      <div class="work-card__img">
+        <img src="FIREBREAKS PICTURE.png" alt="Firebreaks map" />
+      </div>
+      <div class="work-card__footer">
+        <span class="work-card__title">Firebreaks</span>
+        <span class="btn btn-dark">Open</span>
+      </div>
+    </a>
+
+  </div>
+</section>
+
 
   <!-- Firebase -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
-
-  <!-- Project init -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="firebase-init.js"></script>
 
   <script>
     (function(){
-      const emailSpan = document.getElementById('signedInEmail');
+      const emailEl = document.getElementById('userEmail');
       const logoutBtn = document.getElementById('logoutBtn');
 
-      firebase.auth().onAuthStateChanged(async (u)=>{
-        emailSpan.textContent = u?.email || '—';
+      firebase.auth().onAuthStateChanged(user=>{
+        if(!user){
+          window.location.href = 'login.html';
+          return;
+        }
+        emailEl.textContent = user.email || 'Signed in';
       });
 
       logoutBtn.addEventListener('click', async ()=>{

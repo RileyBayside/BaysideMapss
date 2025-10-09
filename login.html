@@ -86,16 +86,9 @@
   </main>
 
   <!-- Firebase -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-check-compat.js"></script>
-
-  <!-- Project init + helpers -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="firebase-init.js"></script>
-  <!-- removed: <script src="appcheck.js"></script> -->
-  <script src="auth.js"></script>
-  <script src="auth-bridge.js"></script>
 
   <script>
     // Tabs
@@ -119,13 +112,6 @@
       const email = `${u}@bayside.local`;
       try{
         await firebase.auth().signInWithEmailAndPassword(email, p);
-        // ensure local gate knows we're signed in (so index.html is reachable)
-        try{
-          if(window.BaysideAuth && BaysideAuth.setAuth){
-            const name = u ? (u.charAt(0).toUpperCase()+u.slice(1)) : 'Operator';
-            BaysideAuth.setAuth({ name, ttlHours: 0.5 });
-          }
-        }catch(_){/* non-fatal */}
         window.location.replace('index.html');
       }catch(err){
         console.warn(err); alert(err.message || 'Sign in failed');
