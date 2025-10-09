@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Grant Admin</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root{ --ink:#0f172a; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff; }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{ margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink); }
+    .container{ max-width:720px; margin: 24px auto; padding: 0 16px }
+    .card{ background:var(--card); border:1px solid var(--muted); border-radius:16px; box-shadow:0 8px 26px rgba(16,24,40,.08); padding:20px }
+    .btn{ padding:10px 12px; border-radius:10px; border:0; font-weight:800; background:#0f172a; color:#fff; cursor:pointer }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1 style="margin:0 0 10px;font-size:22px;font-weight:800">Grant Admin (one-time)</h1>
+      <p>Sign in first on <a href="login.html">login.html</a> using the email configured in <code>seed.admin_email</code>, then click the button below.</p>
+      <button id="grant" class="btn">Grant me admin</button>
+      <p id="msg" style="color:#2e7d32"></p>
+      <p id="err" style="color:#c62828"></p>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-functions-compat.js"></script>
+  <script src="firebase-init.js"></script>
+  <script>
+    (function(){
+      const grant = document.getElementById('grant');
+      const msg = document.getElementById('msg');
+      const err = document.getElementById('err');
+
+      const functions = firebase.app().functions('us-central1');
+      const seedGrantAdmin = functions.httpsCallable('seedGrantAdmin');
+
+      grant.addEventListener('click', async ()=>{
+        msg.textContent=''; err.textContent='';
+        const user = firebase.auth().currentUser;
+        if(!user){ err.textContent = 'Please sign in first.'; return; }
+        try{
+          await user.getIdToken(true); // refresh
+          const res = await seedGrantAdmin({});
+          if(res?.data?.ok){
+            msg.textContent = 'Admin granted. Sign out/in once, then open admin.html';
+          }else{
+            err.textContent = 'Could not grant admin.';
+          }
+        }catch(e){
+          console.warn(e);
+          err.textContent = e?.message || 'Error granting admin';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
