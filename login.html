@@ -44,6 +44,83 @@
     @media (max-width:520px){ .panel{padding:18px 16px 22px} .panel-head img{height:56px} .panel-title{font-size:20px} }
   </style>
 </head>
+  
+<script type="module">
+  import { app } from "./firebase-init.js"; // adjust path if login.html is in a subfolder
+  import {
+    getAuth,
+    signInWithEmailAndPassword,
+    onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+  import {
+    getFirestore,
+    doc,
+    getDoc
+  } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
+
+  // Grab form elements (adjust IDs if different)
+  const adminTabBtn = document.querySelector('#adminTabBtn');     // optional
+  const operatorTabBtn = document.querySelector('#operatorTabBtn'); // optional
+  const emailInput = document.querySelector('#email');            // e.g. <input id="email">
+  const passwordInput = document.querySelector('#password');      // e.g. <input id="password">
+  const loginBtn = document.querySelector('#loginBtn');           // e.g. <button id="loginBtn">
+
+  // Track which tab the user chose (admin vs operator). Default to admin if your UI does that.
+  let currentMode = 'admin';
+  if (adminTabBtn)   adminTabBtn.addEventListener('click', () => currentMode = 'admin');
+  if (operatorTabBtn) operatorTabBtn.addEventListener('click', () => currentMode = 'operator');
+
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
+
+  // Optional: if already signed in, route to the right page
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) return;
+    try {
+      const snap = await getDoc(doc(db, "users", user.uid));
+      const role = snap.exists() ? snap.data().role : null;
+      if (role === "admin") {
+        window.location.href = "/BaysideMapss/admin.html";
+      } else {
+        window.location.href = "/BaysideMapss/index.html";
+      }
+    } catch (e) {
+      console.warn("Role check on existing session failed:", e);
+    }
+  });
+
+  loginBtn?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const email = emailInput?.value?.trim();
+    const password = passwordInput?.value ?? "";
+    if (!email || !password) {
+      alert("Please enter your email and password.");
+      return;
+    }
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const uid = cred.user.uid;
+      const snap = await getDoc(doc(db, "users", uid));
+      const role = snap.exists() ? snap.data().role : null;
+
+      if (currentMode === 'admin') {
+        // If they clicked admin tab, ensure they are actually an admin
+        if (role !== "admin") {
+          alert("This account is not an admin.");
+          return;
+        }
+        window.location.href = "/BaysideMapss/admin.html";
+      } else {
+        // operator mode
+        window.location.href = "/BaysideMapss/index.html";
+      }
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "Sign-in failed.");
+    }
+  });
+</script>
+  
 <body>
   <main class="panel">
     <div class="panel-head">
