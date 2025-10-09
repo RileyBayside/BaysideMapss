@@ -166,58 +166,65 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
 
-  <script>
-    // Tabs
-    const tabOp = document.getElementById('tabOperator');
-    const tabAd = document.getElementById('tabAdmin');
-    const formOp = document.getElementById('formOperator');
-    const formAd = document.getElementById('formAdmin');
-    function show(opMode){
-      if(opMode){ tabOp.classList.add('active'); tabAd.classList.remove('active'); formOp.classList.remove('hidden'); formAd.classList.add('hidden'); }
-      else { tabAd.classList.add('active'); tabOp.classList.remove('active'); formAd.classList.remove('hidden'); formOp.classList.add('hidden'); }
+<script type="module">
+  import { app } from "./firebase-init.js";  // adjust path if needed
+  import {
+    getAuth,
+    signInWithEmailAndPassword,
+    onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+  import {
+    getFirestore,
+    doc,
+    getDoc
+  } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
+
+  // Update these selectors to match your inputs/buttons
+  const emailInput   = document.querySelector('#email');
+  const passwordInput= document.querySelector('#password');
+  const loginBtn     = document.querySelector('#loginBtn');
+
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
+
+  // If already signed in, route based on role
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) return;
+    try {
+      const snap = await getDoc(doc(db, "users", user.uid));
+      const role = snap.exists() ? snap.data().role : null;
+      if (role === "admin") {
+        window.location.href = "/BaysideMapss/admin.html";
+      } else {
+        window.location.href = "/BaysideMapss/index.html";
+      }
+    } catch (e) {
+      console.warn("Role check failed:", e);
     }
-    tabOp.addEventListener('click', ()=>show(true));
-    tabAd.addEventListener('click', ()=>show(false));
+  });
 
-    // Operator → index.html
-    formOp.addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      const u = document.getElementById('op_user').value.trim().toLowerCase();
-      const p = document.getElementById('op_pass').value;
-      if(!u || !p){ alert('Enter username and password'); return; }
-      const email = `${u}@bayside.local`;
-      try{
-        await firebase.auth().signInWithEmailAndPassword(email, p);
-        window.location.replace('index.html');
-      }catch(err){
-        console.warn(err); alert(err.message || 'Sign in failed');
+  loginBtn?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const email = emailInput?.value?.trim();
+    const password = passwordInput?.value ?? "";
+    if (!email || !password) {
+      alert("Please enter your email and password.");
+      return;
+    }
+    try {
+      const { user } = await signInWithEmailAndPassword(auth, email, password);
+      const snap = await getDoc(doc(db, "users", user.uid));
+      const role = snap.exists() ? snap.data().role : null;
+      if (role === "admin") {
+        window.location.href = "/BaysideMapss/admin.html";
+      } else {
+        window.location.href = "/BaysideMapss/index.html";
       }
-    });
-
-    // Admin → admin.html (force target + redirect)
-    formAd.addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      const email = document.getElementById('ad_email').value.trim();
-      const pass  = document.getElementById('ad_pass').value;
-      if(!email || !pass){ alert('Enter email and password'); return; }
-
-      // set a post-login target for any auth-bridge that might run
-      try {
-        sessionStorage.setItem('bayside_next', 'admin.html');
-        localStorage.setItem('bayside_next', 'admin.html'); // fallback
-      } catch(_) {}
-
-      try{
-        await firebase.auth().signInWithEmailAndPassword(email, pass);
-        // force navigation immediately
-        window.location.replace('admin.html');
-      }catch(err){
-        console.warn(err); alert(err.message || 'Sign in failed');
-      }
-    });
-
-    // (Optional) If someone is already signed in and opens login.html,
-    // we do nothing to avoid loops. If you prefer auto-redirect, we can add it.
-  </script>
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "Sign-in failed.");
+    }
+  });
+</script>
 </body>
 </html>
