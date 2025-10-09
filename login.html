@@ -91,6 +91,17 @@
   <script src="firebase-init.js"></script>
 
   <script>
+    // ------------------------
+    // Username -> synthetic email mapping for Operators
+    // Must match OP_DOMAIN used in Cloud Function adminCreateUser
+    const OP_DOMAIN = 'operators.bayside-maps.local';
+
+    function toIdentifier(raw) {
+      const trimmed = String(raw || '').trim();
+      return trimmed.includes('@') ? trimmed : `${trimmed}@${OP_DOMAIN}`;
+    }
+    // ------------------------
+
     // Tabs
     const tabOp = document.getElementById('tabOperator');
     const tabAd = document.getElementById('tabAdmin');
@@ -103,45 +114,48 @@
     tabOp.addEventListener('click', ()=>show(true));
     tabAd.addEventListener('click', ()=>show(false));
 
-    // Operator → index.html
+    // Operator → index.html (username allowed)
     formOp.addEventListener('submit', async (e)=>{
       e.preventDefault();
       const u = document.getElementById('op_user').value.trim().toLowerCase();
       const p = document.getElementById('op_pass').value;
       if(!u || !p){ alert('Enter username and password'); return; }
-      const email = `${u}@bayside.local`;
+
+      // Map username -> synthetic email
+      const identifier = toIdentifier(u);
+
       try{
-        await firebase.auth().signInWithEmailAndPassword(email, p);
+        await firebase.auth().signInWithEmailAndPassword(identifier, p);
         window.location.replace('index.html');
       }catch(err){
         console.warn(err); alert(err.message || 'Sign in failed');
       }
     });
 
-    // Admin → admin.html (force target + redirect)
+    // Admin → admin.html (email required)
     formAd.addEventListener('submit', async (e)=>{
       e.preventDefault();
       const email = document.getElementById('ad_email').value.trim();
       const pass  = document.getElementById('ad_pass').value;
       if(!email || !pass){ alert('Enter email and password'); return; }
 
-      // set a post-login target for any auth-bridge that might run
+      // post-login target (if you use any bridge)
       try {
         sessionStorage.setItem('bayside_next', 'admin.html');
-        localStorage.setItem('bayside_next', 'admin.html'); // fallback
+        localStorage.setItem('bayside_next', 'admin.html');
       } catch(_) {}
 
       try{
+        // Admins log in with real email (already contains "@")
         await firebase.auth().signInWithEmailAndPassword(email, pass);
-        // force navigation immediately
         window.location.replace('admin.html');
       }catch(err){
         console.warn(err); alert(err.message || 'Sign in failed');
       }
     });
 
-    // (Optional) If someone is already signed in and opens login.html,
-    // we do nothing to avoid loops. If you prefer auto-redirect, we can add it.
+    // Optional: if already signed in, you can auto-redirect here if desired
   </script>
 </body>
 </html>
+
