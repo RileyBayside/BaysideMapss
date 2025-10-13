@@ -45,7 +45,7 @@
     }
     .side input:focus, .side select:focus{ outline:3px solid var(--focus); border-color:#94a3b8 }
 
-    /* Center: map placeholder (you can replace this with your real map) */
+    /* Center: map placeholder (replace with your real map) */
     .map-wrap{ height: 520px; display:flex; align-items:center; justify-content:center; color:#64748b; }
     .map-wrap .placeholder{
       text-align:center; border:2px dashed #cbd5e1; padding:20px; border-radius:16px; width:90%;
@@ -88,13 +88,14 @@
   </style>
 </head>
 <body>
-  
- <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-<script src="firebase-init.js"></script>
-<script src="auth-guard.js"></script>
-  
+
+  <!-- Firebase + guard (load ONCE) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="firebase-init.js"></script>
+  <script src="auth-guard.js"></script>
+
   <!-- Header -->
   <header class="header">
     <div class="brand">
@@ -147,7 +148,7 @@
         <div class="body">
           <div class="stack">
             <div class="half">
-              <label class="strong" for="operatorSel">Operator</label>
+              <label class="strong" for="operatorSelect">Operator</label>
               <select id="operatorSelect" required>
                 <option disabled selected>Loading operators…</option>
               </select>
@@ -196,12 +197,6 @@
 
   <div id="toast" class="toast"></div>
 
-  <!-- Firebase -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-  <script src="firebase-init.js"></script>
-
   <script>
     // --- Tiny toast helper ---
     function toast(msg, ms=2200){
@@ -221,20 +216,19 @@
       _basket.push(norm);
       renderBasket();
     };
-
     window.clearBasket = function(){ _basket.length = 0; renderBasket(); };
 
     // --- App state ---
     const db = firebase.firestore();
     let currentUser = null;
-    let _operators = [];   // { uid, name, email }
     let _basket = [];      // { zone, range, siteIds[] }
+    let _operators = [];   // cached operators for later use (name/email lookup)
 
     // --- DOM ---
     const emailEl   = document.getElementById('userEmail');
     const logoutBtn = document.getElementById('logoutBtn');
 
-    const operatorSel = document.getElementById('operatorSel');
+    const operatorSelect = document.getElementById('operatorSelect');
     const qaZone   = document.getElementById('qa_zone');
     const qaRange  = document.getElementById('qa_range');
     const qaAddBtn = document.getElementById('qa_add');
@@ -254,8 +248,6 @@
       if(!u){ location.href = 'login.html'; return; }
       currentUser = u;
       emailEl.textContent = u.email || 'Signed in';
-
-      // (Optional) verify admin role here client-side if you want; rules should enforce anyway.
       loadOperators();
     });
 
@@ -264,41 +256,44 @@
       catch(e){ console.warn(e); toast('Logout failed'); }
     });
 
-<script>
-async function loadOperators(){
-  try{
-    // NO orderBy here (avoids needing a composite index)
-    const snap = await db.collection('users')
-      .where('role','==','operator')
-      .get();
-
-    const rows = [];
-    snap.forEach(doc => {
-      const d = doc.data() || {};
-      rows.push({ uid: doc.id, name: d.name || '', email: d.email || '' });
-    });
-
-    // Sort client-side
-    rows.sort((a,b)=> (a.name || '').localeCompare(b.name || '') );
-
-    operatorSel.innerHTML = '';
-    if(rows.length === 0){
-      operatorSel.innerHTML = '<option value="" disabled selected>No operators found</option>';
-      return;
-    }
-    operatorSel.innerHTML = '<option value="" disabled selected>Select operator…</option>';
-    rows.forEach(o=>{
-      const opt = document.createElement('option');
-      opt.value = o.uid;
-      opt.textContent = o.name ? `${o.name} (${o.email || 'no email'})` : (o.email || o.uid);
-      operatorSel.appendChild(opt);
-    });
-  }catch(err){
-    console.warn('loadOperators error:', err);
-    operatorSel.innerHTML = '<option value="" disabled selected>Error loading users</option>';
-  }
-}
-</script>
+    // --- Operators loader (live)
+    (function () {
+      const OP_DOMAIN = 'operators.bayside-maps.local'; // for synthetic usernames
+      function labelForUser(u){
+        if (u.username) return u.username;
+        if (u.email && u.email.endsWith('@'+OP_DOMAIN)) return u.email.replace('@'+OP_DOMAIN,'');
+        return u.email || 'unknown';
+      }
+      window.loadOperators = function(){
+        db.collection('users').where('role','==','operator').onSnapshot(
+          (snap)=>{
+            const ops=[]; snap.forEach(doc=>ops.push({ uid: doc.id, ...doc.data() }));
+            _operators = ops.slice(); // cache for later
+            ops.sort((a,b)=> labelForUser(a).localeCompare(labelForUser(b)));
+            operatorSelect.innerHTML = '';
+            if(!ops.length){
+              operatorSelect.innerHTML = '<option disabled selected>No operators found</option>';
+              return;
+            }
+            const ph = document.createElement('option');
+            ph.disabled = true; ph.selected = true; ph.textContent = 'Select operator…';
+            operatorSelect.appendChild(ph);
+            for(const u of ops){
+              const opt = document.createElement('option');
+              opt.value = u.uid;
+              opt.textContent = labelForUser(u);
+              opt.dataset.email = u.email || '';
+              opt.dataset.username = u.username || '';
+              operatorSelect.appendChild(opt);
+            }
+          },
+          (err)=>{
+            console.error('load operators error', err);
+            operatorSelect.innerHTML = '<option disabled selected>Error loading operators</option>';
+          }
+        );
+      };
+    })();
 
     // --- Basket UI ---
     function renderBasket(){
@@ -348,7 +343,7 @@ async function loadOperators(){
 
     // --- Assign button (writes to Firestore 'assignments') ---
     assignBtn.addEventListener('click', async ()=>{
-      const uid = operatorSel.value;
+      const uid = operatorSelect.value;
       if(!uid){ toast('Choose an operator'); return; }
       if(_basket.length === 0){ toast('Basket is empty'); return; }
 
@@ -360,7 +355,7 @@ async function loadOperators(){
           const ref = db.collection('assignments').doc();
           batch.set(ref, {
             userId: uid,
-            userName: op.name || '',
+            userName: op.name || op.username || '',
             zone: it.zone || '',
             parksRange: it.range || '',
             siteIds: it.siteIds || [],
@@ -383,70 +378,6 @@ async function loadOperators(){
 
     // Optional: deep links
     if(location.hash === '#zone'){ qaZone.focus(); }
-    if(location.hash === '#select'){ /* when you wire map selection, focus there */ }
-  </script>  
-  
-<script>
-(function () {
-  const db = firebase.firestore();
-  const auth = firebase.auth();
-  const OP_DOMAIN = 'operators.bayside-maps.local'; // used when displaying synthetic emails
-
-  function labelForUser(u) {
-    // Prefer username; otherwise trim the synthetic operator domain
-    if (u.username) return u.username;
-    if (u.email && u.email.endsWith('@' + OP_DOMAIN)) {
-      return u.email.replace('@' + OP_DOMAIN, '');
-    }
-    return u.email || 'unknown';
-  }
-
-  function fillOperators(selectEl, users) {
-    // Clear then add options
-    selectEl.innerHTML = '';
-    if (!users.length) {
-      selectEl.innerHTML = '<option disabled>(no operators found)</option>';
-      return;
-    }
-    // Sort by display label
-    users.sort((a, b) => labelForUser(a).localeCompare(labelForUser(b)));
-
-    // Optional: add a placeholder
-    const ph = document.createElement('option');
-    ph.disabled = true; ph.selected = true; ph.textContent = 'Select operator…';
-    selectEl.appendChild(ph);
-
-    for (const u of users) {
-      const opt = document.createElement('option');
-      opt.textContent = labelForUser(u);
-      // value: choose what your assignment code needs. uid is usually best.
-      opt.value = u.uid;
-      // keep useful extras
-      opt.dataset.email = u.email || '';
-      opt.dataset.username = u.username || '';
-      selectEl.appendChild(opt);
-    }
-  }
-
-  auth.onAuthStateChanged(async (user) => {
-    if (!user) return; // auth-guard will redirect
-    const select = document.getElementById('operatorSelect');
-    if (!select) return;
-
-    // Live updates (or use .get() once if you prefer)
-    db.collection('users')
-      .where('role', '==', 'operator')
-      .onSnapshot((snap) => {
-        const ops = [];
-        snap.forEach((doc) => ops.push({ uid: doc.id, ...doc.data() }));
-        fillOperators(select, ops);
-      }, (err) => {
-        console.error('load operators error', err);
-        select.innerHTML = '<option disabled>Error loading operators</option>';
-      });
-  });
-})();
-</script>
-
+  </script>
 </body>
 </html>
