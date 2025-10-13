@@ -89,10 +89,11 @@
 </head>
 <body>
   
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-  <script src="firebase-init.js"></script>
-  <script src="auth-guard.js"></script>
+ <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="firebase-init.js"></script>
+<script src="auth-guard.js"></script>
   
   <!-- Header -->
   <header class="header">
@@ -147,8 +148,8 @@
           <div class="stack">
             <div class="half">
               <label class="strong" for="operatorSel">Operator</label>
-              <select id="operatorSel">
-                <option value="" disabled selected>Loading operators…</option>
+              <select id="operatorSelect" required>
+                <option disabled selected>Loading operators…</option>
               </select>
               <small style="color:#64748b">Pulls from <b>users</b> where <code>role == "operator"</code>.</small>
             </div>
@@ -383,6 +384,77 @@ async function loadOperators(){
     // Optional: deep links
     if(location.hash === '#zone'){ qaZone.focus(); }
     if(location.hash === '#select'){ /* when you wire map selection, focus there */ }
-  </script>
+  </script>  
+  
+<script>
+(function () {
+  const db = firebase.firestore();
+  const auth = firebase.auth();
+  const OP_DOMAIN = 'operators.bayside-maps.local'; // used when displaying synthetic emails
+
+  function labelForUser(u) {
+    // Prefer username; otherwise trim the synthetic operator domain
+    if (u.username) return u.username;
+    if (u.email && u.email.endsWith('@' + OP_DOMAIN)) {
+      return u.email.replace('@' + OP_DOMAIN, '');
+    }
+    return u.email || 'unknown';
+  }
+
+  function fillOperators(selectEl, users) {
+    // Clear then add options
+    selectEl.innerHTML = '';
+    if (!users.length) {
+      selectEl.innerHTML = '<option disabled>(no operators found)</option>';
+      return;
+    }
+    // Sort by display label
+    users.sort((a, b) => labelForUser(a).localeCompare(labelForUser(b)));
+
+    // Optional: add a placeholder
+    const ph = document.createElement('option');
+    ph.disabled = true; ph.selected = true; ph.textContent = 'Select operator…';
+    selectEl.appendChild(ph);
+
+    for (const u of users) {
+      const opt = document.createElement('option');
+      opt.textContent = labelForUser(u);
+      // value: choose what your assignment code needs. uid is usually best.
+      opt.value = u.uid;
+      // keep useful extras
+      opt.dataset.email = u.email || '';
+      opt.dataset.username = u.username || '';
+      selectEl.appendChild(opt);
+    }
+  }
+
+  auth.onAuthStateChanged(async (user) => {
+    if (!user) return; // auth-guard will redirect
+    const select = document.getElementById('operatorSelect');
+    if (!select) return;
+
+    // Live updates (or use .get() once if you prefer)
+    db.collection('users')
+      .where('role', '==', 'operator')
+      .onSnapshot((snap) => {
+        const ops = [];
+        snap.forEach((doc) => ops.push({ uid: doc.id, ...doc.data() }));
+        fillOperators(select, ops);
+      }, (err) => {
+        console.error('load operators error', err);
+        select.innerHTML = '<option disabled>Error loading operators</option>';
+      });
+  });
+})();
+</script>
+  
+<script>
+firebase.auth().onAuthStateChanged(async (user) => {
+  if (!user) return;
+  const tok = await user.getIdTokenResult(true);
+  if (tok.claims.role !== 'admin') location.replace('index.html');
+});
+</script>
+
 </body>
 </html>
