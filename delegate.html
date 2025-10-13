@@ -447,12 +447,6 @@ async function loadOperators(){
   });
 })();
 </script>
-  
-<script>
-firebase.auth().onAuthStateChanged(async (user) => {
-  if (!user) return;
-  const tok = await user.getIdTokenResult(true);
-  if (tok.claims.role !== 'admin') location.replace('index.html');
 });
 </script>
 
