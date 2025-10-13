@@ -37,7 +37,16 @@
     .card{ background:var(--card); border:1px solid var(--muted); border-radius:16px; box-shadow:0 8px 26px rgba(16,24,40,.08); }
     .card h3{ margin:14px 16px 10px; font-size:16px; font-weight:800; color:var(--ink-2) }
     .card .body{ padding: 0 16px 16px }
-
+    
+    .grid{
+  display:grid;
+  grid-template-columns: 1fr 360px;  /* Map grows, right panel fixed */
+  gap:16px;
+}
+@media (max-width:1100px){
+  .grid{ grid-template-columns: 1fr; }
+}
+    
     /* Left: Filters / (optional) sidebar */
     .side label{ display:block; font-weight:700; margin:12px 0 6px }
     .side input, .side select{
@@ -46,7 +55,10 @@
     .side input:focus, .side select:focus{ outline:3px solid var(--focus); border-color:#94a3b8 }
 
     /* Center: map placeholder (replace with your real map) */
-    .map-wrap{ height: 520px; display:flex; align-items:center; justify-content:center; color:#64748b; }
+    .map-wrap{  
+      height: min(70vh, 800px);
+      display:flex; align-items:center; justify-content:center; color:#64748b; 
+    }
     .map-wrap .placeholder{
       text-align:center; border:2px dashed #cbd5e1; padding:20px; border-radius:16px; width:90%;
     }
@@ -111,23 +123,7 @@
   <main class="container">
     <section class="grid">
       <!-- Left column: filters / future sidebar -->
-      <aside class="card side">
-        <h3>Sites / Filters</h3>
-        <div class="body">
-          <label for="zoneFilter">Zone</label>
-          <select id="zoneFilter">
-            <option value="">All zones</option>
-            <option>Zone 1</option><option>Zone 2</option><option>Zone 3</option>
-          </select>
-
-          <label for="searchSite">Search</label>
-          <input id="searchSite" placeholder="Park, street, site id...">
-
-          <p class="hint" style="color:#64748b; margin-top:10px">
-            You can later plug your existing sidebar here. For now, use the form on the right to add tasks by zone/range or IDs.
-          </p>
-        </div>
-      </aside>
+     
 
       <!-- Center: Map placeholder -->
       <section class="card">
