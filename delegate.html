@@ -493,6 +493,68 @@
 })();
 </script>
 
-  
+<!-- Leaflet (same as ParksMowing) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<!-- Your shared Parks Mowing logic -->
+<script src="script.js"></script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    BaysideMaps.initParksMowingMap({
+      containerId: 'leafletMap',     // mount into delegate map area
+      geojsonUrl: 'data.geojson',    // same data as ParksMowing
+      onFeatureClick: (feature, layer, evt) => {
+        // Pick your site ID field (adjust if yours is called something else)
+        const p = feature.properties || {};
+        const siteId = p.id || p.siteId || p.NAME || feature.id;
+        if (!siteId) return;
+
+        // Send to your existing basket flow
+        window.addToBasket({
+          zone: p.zone || '',         // keep if you have it in properties
+          range: '',
+          siteIds: [String(siteId)]
+        });
+
+        // Optional: quick visual feedback
+        layer.setStyle({ color: '#b91c1c', weight: 3, fillColor: '#ef4444', fillOpacity: 0.35 });
+      }
+    });
+  });
+</script>
+<!-- Leaflet (same as ParksMowing) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<!-- Your shared Parks Mowing logic -->
+<script src="script.js"></script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    BaysideMaps.initParksMowingMap({
+      containerId: 'leafletMap',     // mount into delegate map area
+      geojsonUrl: 'data.geojson',    // same data as ParksMowing
+      onFeatureClick: (feature, layer, evt) => {
+        // Pick your site ID field (adjust if yours is called something else)
+        const p = feature.properties || {};
+        const siteId = p.id || p.siteId || p.NAME || feature.id;
+        if (!siteId) return;
+
+        // Send to your existing basket flow
+        window.addToBasket({
+          zone: p.zone || '',         // keep if you have it in properties
+          range: '',
+          siteIds: [String(siteId)]
+        });
+
+        // Optional: quick visual feedback
+        layer.setStyle({ color: '#b91c1c', weight: 3, fillColor: '#ef4444', fillOpacity: 0.35 });
+      }
+    });
+  });
+</script>  
+
 </body>
 </html>
