@@ -102,30 +102,27 @@
       });
 
       // Direct call to the HTTPS endpoint with Authorization: Bearer <token>
-      async function callCreateUser(data) {
-        const user = auth.currentUser;
-        if (!user) throw new Error('Sign in required.');
-        const idToken = await user.getIdToken(true); // force refresh
+     async function callCreateUser(data) {
+  const user = firebase.auth().currentUser;
+  if (!user) throw new Error('Sign in required.');
+  const idToken = await user.getIdToken(true); // refresh
 
-        const url = 'https://us-central1-bayside-maps.cloudfunctions.net/adminCreateUser';
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + idToken,
-            // If you later enforce App Check, add:
-            // 'X-Firebase-AppCheck': await firebase.appCheck().getToken(true).then(t => t.token)
-          },
-          // Callable wire format expects { data: ... }
-          body: JSON.stringify({ data })
-        });
+  const url = 'https://us-central1-bayside-maps.cloudfunctions.net/createUserHttp';
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + idToken
+    },
+    body: JSON.stringify(data)
+  });
 
-        if (!res.ok) {
-          const text = await res.text().catch(()=> '');
-          throw new Error(text || ('HTTP ' + res.status));
-        }
-        return res.json(); // { result: {...} } per callable protocol
-      }
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json.ok !== true) {
+    throw new Error(json?.error || ('HTTP ' + res.status));
+  }
+  return json; // { ok:true, uid, loginHint }
+}
 
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
