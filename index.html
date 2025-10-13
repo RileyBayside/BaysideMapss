@@ -13,10 +13,34 @@
 </head>
 <body>
 
+  <!-- Firebase + guard (keep order) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
+
+  <!-- NEW: redirect unsigned visitors to login.html?next=index.html -->
+  <script>
+    (function () {
+      function redirectIfSignedOut() {
+        try {
+          const auth = firebase.auth();
+          auth.onAuthStateChanged(function(user){
+            if (!user) {
+              const base = location.pathname.replace(/[^/]+$/, '');
+              const loginURL = new URL('login.html', location.origin + base);
+              loginURL.searchParams.set('next', 'index.html');
+              location.replace(loginURL.toString());
+            }
+          });
+        } catch (e) {
+          // If firebase isn't ready yet, try again shortly
+          setTimeout(redirectIfSignedOut, 50);
+        }
+      }
+      redirectIfSignedOut();
+    })();
+  </script>
   
   <!-- Header / App Bar -->
   <header class="appbar">
