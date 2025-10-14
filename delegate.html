@@ -799,14 +799,14 @@ document.addEventListener('DOMContentLoaded', async () => {
           label.setAttribute('for', id); label.textContent = name;
           left.appendChild(cbSuburb); left.appendChild(label);
 
-          // right: [ ] Select all
+          // right: [ ] Select All
           const right = document.createElement('div');
           right.className = 'summary-right';
           const selAll = document.createElement('input');
           selAll.type = 'checkbox'; selAll.id = 'thorn_select_all';
           const salabel = document.createElement('label');
           salabel.setAttribute('for', 'thorn_select_all');
-          salabel.textContent = 'Select all';
+          salabel.textContent = 'Select All';
           right.appendChild(salabel.previousSibling || document.createTextNode('')); // keeps spacing consistent
           right.appendChild(selAll);
           right.appendChild(salabel);
