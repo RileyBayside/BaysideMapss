@@ -8,59 +8,57 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="dashboard.css">
 
-  <!-- If you have an existing global style file, include it after this line -->
-  <!-- <link rel="stylesheet" href="styles.css"> -->
-  
-<style>
-  :root{
-    --ink:#0f172a; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff;
-    --accent:#d11e2b; --accent-600:#b71a24;
-  }
+  <!-- Optional page styles for the Tasks card -->
+  <style>
+    :root{
+      --ink:#0f172a; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff;
+      --accent:#d11e2b; --accent-600:#b71a24;
+    }
 
-  /* Card (matches delegate.html look) */
-  .card{ background:var(--card); border:1px solid var(--muted);
-    border-radius:16px; box-shadow:0 8px 26px rgba(16,24,40,.08); }
-  .card h3{ margin:14px 16px 10px; font-size:16px; font-weight:800; color:#0f172a;
-    display:flex; align-items:center; gap:10px; }
-  .card h3::before{ content:""; width:10px; height:10px; border-radius:50%;
-    background:var(--accent); display:inline-block; }
-  .card .body{ padding:0 16px 16px; }
+    /* Card (delegate.html look) */
+    .card{ background:var(--card); border:1px solid var(--muted);
+      border-radius:16px; box-shadow:0 8px 26px rgba(16,24,40,.08); }
+    .card h3{ margin:14px 16px 10px; font-size:16px; font-weight:800; color:#0f172a;
+      display:flex; align-items:center; gap:10px; }
+    .card h3::before{ content:""; width:10px; height:10px; border-radius:50%;
+      background:var(--accent); display:inline-block; }
+    .card .body{ padding:0 16px 16px; }
 
-  /* Tasks list inside the card */
-  .tasks-list{ display:grid; gap:8px; }
-  .task-row{
-    display:flex; align-items:center; justify-content:space-between; gap:12px;
-    padding:12px; border:1px solid #e2e8f0; border-radius:12px; background:#fff;
-  }
-  .task-main{ display:flex; flex-direction:column; }
-  .task-title{ font-weight:800; color:#111827; }
-  .task-meta{ color:#64748b; font-size:13px; margin-top:2px; }
+    /* Tasks list inside the card */
+    .tasks-list{ display:grid; gap:8px; }
+    .task-row{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding:12px; border:1px solid #e2e8f0; border-radius:12px; background:#fff;
+    }
+    .task-main{ display:flex; flex-direction:column; }
+    .task-title{ font-weight:800; color:#111827; }
+    .task-meta{ color:#64748b; font-size:13px; margin-top:2px; }
 
-  .badge{ border-radius:999px; padding:4px 8px; font-weight:800; font-size:12px; }
-  .badge-amber{ background:#fee2e2; color:#7f1d1d; border:1px solid #fecaca; }
+    .badge{ border-radius:999px; padding:4px 8px; font-weight:800; font-size:12px; }
+    .badge-amber{ background:#fee2e2; color:#7f1d1d; border:1px solid #fecaca; }
 
-  .task-note{
-  margin-top:6px;
-  padding:8px 10px;
-  background:#f8fafc;
-  border-left:3px solid var(--accent);
-  border-radius:8px;
-  color:#334155;
-  font-size:13px;
-  white-space:pre-wrap;
-}
-  
-</style>
-  
+    /* Notes block under each task */
+    .task-note{
+      margin-top:6px;
+      padding:8px 10px;
+      background:#f8fafc;
+      border-left:3px solid var(--accent);
+      border-radius:8px;
+      color:#334155;
+      font-size:13px;
+      white-space:pre-wrap;
+    }
+  </style>
 </head>
 <body>
 
+  <!-- Firebase + guard -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
-  
+
   <!-- Header / App Bar -->
   <header class="appbar">
     <div class="appbar__left">
@@ -76,67 +74,52 @@
 
   <main class="container">
 
-<section class="section">
-  
-  <h2 class="section-title">Work areas</h2>
+    <section class="section">
+      <h2 class="section-title">Work areas</h2>
 
-  <div class="cards-row">
+      <div class="cards-row">
 
-    <!-- Parks Mowing -->
-    <a href="./ParksMowing.html" class="work-card">
-      <div class="work-card__img">
-        <img src="MOWING PICTURE.png" alt="Parks Mowing map" />
-      </div>
-      <div class="work-card__footer">
-        <span class="work-card__title">Parks Mowing</span>
-        <span class="btn btn-dark">Open</span>
-      </div>
-    </a>
+        <!-- Parks Mowing -->
+        <a href="./ParksMowing.html" class="work-card">
+          <div class="work-card__img">
+            <img src="MOWING PICTURE.png" alt="Parks Mowing map" />
+          </div>
+          <div class="work-card__footer">
+            <span class="work-card__title">Parks Mowing</span>
+            <span class="btn btn-dark">Open</span>
+          </div>
+        </a>
 
-    <!-- Parks Snipping -->
-    <a href="./ParksSnipping.html" class="work-card">
-      <div class="work-card__img">
-        <img src="SNIPPING PICTURE.png" alt="Parks Snipping map" />
-      </div>
-      <div class="work-card__footer">
-        <span class="work-card__title">Parks Snipping</span>
-        <span class="btn btn-dark">Open</span>
-      </div>
-    </a>
+        <!-- Parks Snipping -->
+        <a href="./ParksSnipping.html" class="work-card">
+          <div class="work-card__img">
+            <img src="SNIPPING PICTURE.png" alt="Parks Snipping map" />
+          </div>
+          <div class="work-card__footer">
+            <span class="work-card__title">Parks Snipping</span>
+            <span class="btn btn-dark">Open</span>
+          </div>
+        </a>
 
-    <!-- Firebreaks -->
-    <a href="./Firebreaks.html" class="work-card">
-      <div class="work-card__img">
-        <img src="FIREBREAKS PICTURE.png" alt="Firebreaks map" />
-      </div>
-      <div class="work-card__footer">
-        <span class="work-card__title">Firebreaks</span>
-        <span class="btn btn-dark">Open</span>
-      </div>
-    </a>
+        <!-- Firebreaks -->
+        <a href="./Firebreaks.html" class="work-card">
+          <div class="work-card__img">
+            <img src="FIREBREAKS PICTURE.png" alt="Firebreaks map" />
+          </div>
+          <div class="work-card__footer">
+            <span class="work-card__title">Firebreaks</span>
+            <span class="btn btn-dark">Open</span>
+          </div>
+        </a>
 
-  </div>
-</section>
-
+      </div>
+    </section>
 
     <!-- Tasks to complete -->
-       <section class="card" id="tasksCard">
-       <h3>Tasks to complete</h3>
-       <div class="body">
-         
-      <!-- Your existing JS can inject items into this list -->
-      <div id="tasks-list" class="tasks">
-        <!-- Example task markup for reference (leave commented out)
-        <div class="task">
-          <div class="task__left">
-            <div class="task__title">Zone 1 — Numbers 1–50</div>
-            <div class="task__meta">Assigned · Due 15 Oct</div>
-          </div>
-          <div class="task__right">
-            <span class="badge badge-amber">Assigned</span>
-          </div>
-        </div>
-        -->
+    <section class="card" id="tasksCard">
+      <h3>Tasks to complete</h3>
+      <div class="body">
+        <div id="tasks-list" class="tasks-list"></div>
       </div>
     </section>
 
@@ -144,174 +127,168 @@
 
   <footer class="footer-space"></footer>
 
-<script>
-  (function () {
-    // Show a nice display name in the pill (top-right)
-    async function setDisplayName(u) {
-      const el = document.getElementById('user-email');
-      if (!el) return;
+  <!-- Display name + logout -->
+  <script>
+    (function () {
+      // Show a nice display name in the pill (top-right)
+      async function setDisplayName(u) {
+        const el = document.getElementById('user-email');
+        if (!el) return;
 
-      // default while we look it up
-      el.textContent = 'Signed in';
+        el.textContent = 'Signed in'; // temporary while loading
 
-      try {
-        // try Firestore users/{uid} first
-        const snap = await firebase.firestore().collection('users').doc(u.uid).get();
-        const d = snap.data() || {};
-        const display =
-          d.name ||
-          d.username ||
-          u.displayName ||
-          (u.email ? u.email.split('@')[0] : '') ||
-          u.email ||
-          u.uid;
+        try {
+          const snap = await firebase.firestore().collection('users').doc(u.uid).get();
+          const d = snap.data() || {};
+          const display =
+            d.name ||
+            d.username ||
+            u.displayName ||
+            (u.email ? u.email.split('@')[0] : '') ||
+            u.email ||
+            u.uid;
 
-        el.textContent = display;
-      } catch (e) {
-        // graceful fallback
-        el.textContent =
-          u.displayName ||
-          (u.email ? u.email.split('@')[0] : '') ||
-          u.email ||
-          u.uid;
-      }
-    }
-
-    // When auth state is ready, update the pill (auth-guard handles redirects)
-    firebase.auth().onAuthStateChanged((u) => {
-      if (u) setDisplayName(u);
-    });
-
-    // Reusable logout (keeps your earlier fix)
-    window.logout = async function () {
-      try {
-        await firebase.auth().signOut();
-      } catch (e) {
-        console.warn('signOut failed (will still redirect):', e);
-      }
-      try {
-        sessionStorage.removeItem('bayside_next');
-        localStorage.removeItem('bayside_next');
-      } catch (_) {}
-      location.replace('./login.html');
-    };
-
-    // Wire the button
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-      logoutBtn.addEventListener('click', () => window.logout());
-    }
-  })();
-</script>
-  
-<script>
-  // ---- Tasks for the signed-in operator ----
-  (function () {
-    const db = firebase.firestore();
-
-    <script>
-  // Replace JUST this function
-  function renderTasks(items) {
-    const el = document.getElementById('tasks-list');
-    if (!el) return;
-
-    el.innerHTML = '';
-    if (!items.length) {
-      const p = document.createElement('p');
-      p.style.color = '#64748b';
-      p.textContent = 'No tasks assigned yet.';
-      el.appendChild(p);
-      return;
-    }
-
-    items.forEach(t => {
-      const row = document.createElement('div');
-      row.className = 'task-row';
-
-      const left = document.createElement('div');
-      left.className = 'task-main';
-
-      // Title: Zone + site IDs
-      const title = document.createElement('div');
-      title.className = 'task-title';
-      const ids = Array.isArray(t.siteIds) && t.siteIds.length ? (' — ' + t.siteIds.join(', ')) : '';
-      title.textContent = (t.zone || 'Task') + ids;
-
-      // Meta: due date / assigned
-      const meta = document.createElement('div');
-      meta.className = 'task-meta';
-      const due = (() => {
-        const d = t.dueDate;
-        const dt = d?.toDate ? d.toDate() : (d instanceof Date ? d : null);
-        return dt ? dt.toLocaleDateString() : null;
-      })();
-      meta.textContent = due ? `Due ${due}` : 'Assigned';
-
-      left.appendChild(title);
-      left.appendChild(meta);
-
-      // NEW: Notes (if any)
-      if (t.notes && String(t.notes).trim().length) {
-        const note = document.createElement('div');
-        note.className = 'task-note';
-        note.textContent = String(t.notes).trim();
-        left.appendChild(note);
+          el.textContent = display;
+        } catch (e) {
+          el.textContent =
+            u.displayName ||
+            (u.email ? u.email.split('@')[0] : '') ||
+            u.email ||
+            u.uid;
+        }
       }
 
-      const right = document.createElement('div');
-      const badge = document.createElement('span');
-      badge.className = 'badge badge-amber';
-      badge.textContent = (t.status || 'assigned').replace(/^\w/, s => s.toUpperCase());
-      right.appendChild(badge);
+      // When auth state is ready, update the pill (auth-guard handles redirects)
+      firebase.auth().onAuthStateChanged((u) => {
+        if (u) setDisplayName(u);
+      });
 
-      row.appendChild(left);
-      row.appendChild(right);
-      el.appendChild(row);
-    });
-  }
+      // Reusable logout
+      window.logout = async function () {
+        try {
+          await firebase.auth().signOut();
+        } catch (e) {
+          console.warn('signOut failed (will still redirect):', e);
+        }
+        try {
+          sessionStorage.removeItem('bayside_next');
+          localStorage.removeItem('bayside_next');
+        } catch (_) {}
+        location.replace('./login.html');
+      };
 
-    // Start a live listener for the current user’s assignments
-    window.startTasksListener = function (uid) {
-      // Keep query simple to avoid composite-index prompts; filter status client-side
-      return db.collection('assignments')
-        .where('userId', '==', uid)
-        .onSnapshot((snap) => {
-          const items = [];
-          snap.forEach(doc => {
-            const d = doc.data() || {};
-            // Hide completed items here; adjust if you want to show them
-            const status = (d.status || 'assigned').toLowerCase();
-            if (status === 'completed') return;
-            items.push({ id: doc.id, ...d });
-          });
+      // Wire the button
+      const logoutBtn = document.getElementById('logoutBtn');
+      if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => window.logout());
+      }
+    })();
+  </script>
 
-          // Sort: due date first (earliest), then newest created
-          items.sort((a, b) => {
-            const ad = a.dueDate?.toDate ? a.dueDate.toDate() : (a.dueDate instanceof Date ? a.dueDate : null);
-            const bd = b.dueDate?.toDate ? b.dueDate.toDate() : (b.dueDate instanceof Date ? b.dueDate : null);
-            if (ad && bd) return ad - bd;
-            if (ad && !bd) return -1;
-            if (!ad && bd) return 1;
-            const ac = a.createdAt?.toDate ? a.createdAt.toDate() : 0;
-            const bc = b.createdAt?.toDate ? b.createdAt.toDate() : 0;
-            return (bc || 0) - (ac || 0);
-          });
+  <!-- Tasks list: live listener + renderer (with Notes) -->
+  <script>
+    (function () {
+      const db = firebase.firestore();
 
-          renderTasks(items);
-        }, (err) => {
-          console.warn('tasks listener error:', err);
-          const el = document.getElementById('tasks-list');
-          if (el) el.innerHTML = '<p style="color:#b91c1c">Failed to load tasks.</p>';
+      function renderTasks(items) {
+        const el = document.getElementById('tasks-list');
+        if (!el) return;
+
+        el.innerHTML = '';
+        if (!items.length) {
+          const p = document.createElement('p');
+          p.style.color = '#64748b';
+          p.textContent = 'No tasks assigned yet.';
+          el.appendChild(p);
+          return;
+        }
+
+        items.forEach(t => {
+          const row = document.createElement('div');
+          row.className = 'task-row';
+
+          const left = document.createElement('div');
+          left.className = 'task-main';
+
+          // Title: Zone + site IDs
+          const title = document.createElement('div');
+          title.className = 'task-title';
+          const ids = Array.isArray(t.siteIds) && t.siteIds.length ? (' — ' + t.siteIds.join(', ')) : '';
+          title.textContent = (t.zone || 'Task') + ids;
+
+          // Meta: due date / assigned
+          const meta = document.createElement('div');
+          meta.className = 'task-meta';
+          const due = (() => {
+            const d = t.dueDate;
+            const dt = d?.toDate ? d.toDate() : (d instanceof Date ? d : null);
+            return dt ? dt.toLocaleDateString() : null;
+          })();
+          meta.textContent = due ? `Due ${due}` : 'Assigned';
+
+          left.appendChild(title);
+          left.appendChild(meta);
+
+          // Notes (if any)
+          if (t.notes && String(t.notes).trim().length) {
+            const note = document.createElement('div');
+            note.className = 'task-note';
+            note.textContent = String(t.notes).trim();
+            left.appendChild(note);
+          }
+
+          const right = document.createElement('div');
+          const badge = document.createElement('span');
+          badge.className = 'badge badge-amber';
+          badge.textContent = (t.status || 'assigned').replace(/^\w/, s => s.toUpperCase());
+          right.appendChild(badge);
+
+          row.appendChild(left);
+          row.appendChild(right);
+          el.appendChild(row);
         });
-    };
+      }
 
-    // Hook into auth state (auth-guard already enforces login)
-    firebase.auth().onAuthStateChanged((u) => {
-      if (!u) return;
-      // kick off the live feed for THIS operator
-      window.startTasksListener(u.uid);
-    });
-  })();
-</script>  
+      // Start a live listener for the current user’s assignments
+      window.startTasksListener = function (uid) {
+        return db.collection('assignments')
+          .where('userId', '==', uid)
+          .onSnapshot((snap) => {
+            const items = [];
+            snap.forEach(doc => {
+              const d = doc.data() || {};
+              const status = (d.status || 'assigned').toLowerCase();
+              if (status === 'completed') return; // hide completed; tweak if needed
+              items.push({ id: doc.id, ...d });
+            });
+
+            // Sort: due date first (earliest), then newest created
+            items.sort((a, b) => {
+              const ad = a.dueDate?.toDate ? a.dueDate.toDate() : (a.dueDate instanceof Date ? a.dueDate : null);
+              const bd = b.dueDate?.toDate ? b.dueDate.toDate() : (b.dueDate instanceof Date ? b.dueDate : null);
+              if (ad && bd) return ad - bd;
+              if (ad && !bd) return -1;
+              if (!ad && bd) return 1;
+              const ac = a.createdAt?.toDate ? a.createdAt.toDate() : 0;
+              const bc = b.createdAt?.toDate ? b.createdAt.toDate() : 0;
+              return (bc || 0) - (ac || 0);
+            });
+
+            renderTasks(items);
+          }, (err) => {
+            console.warn('tasks listener error:', err);
+            const el = document.getElementById('tasks-list');
+            if (el) el.innerHTML = '<p style="color:#b91c1c">Failed to load tasks.</p>';
+          });
+      };
+
+      // Hook into auth state (auth-guard already enforces login)
+      firebase.auth().onAuthStateChanged((u) => {
+        if (!u) return;
+        // kick off the live feed for THIS operator
+        window.startTasksListener(u.uid);
+      });
+    })();
+  </script>
 </body>
 </html>
