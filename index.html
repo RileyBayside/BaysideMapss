@@ -157,17 +157,40 @@
       const logoutBtn = document.getElementById('logoutBtn');
       const listEl = document.getElementById('tasks-list');
 
-      // Show current email (from auth or local storage)
-      auth.onAuthStateChanged((u) => {
-        if (!u) return;
-        try {
-          const stored = localStorage.getItem('bayside:userEmail');
-          emailEl.textContent = stored || u.email || 'Signed in';
-        } catch (e) {
-          emailEl.textContent = u.email || 'Signed in';
-        }
-        subscribeMyTasks(u.uid);
-      });
+     const nameEl = document.getElementById('userEmail'); // reuse the same pill
+     async function setDisplayName(u){
+  // default while we fetch
+  nameEl.textContent = 'Signed in';
+
+  try {
+    const doc = await firebase.firestore().collection('users').doc(u.uid).get();
+    const data = doc.data() || {};
+    // order of preference: users.name → users.username → Auth displayName → email prefix → email → uid
+    const display =
+      data.name ||
+      data.username ||
+      u.displayName ||
+      (u.email ? u.email.split('@')[0] : '') ||
+      u.email ||
+      u.uid;
+
+    nameEl.textContent = display;
+  } catch (e) {
+    // fallback if Firestore read fails
+    nameEl.textContent =
+      u.displayName ||
+      (u.email ? u.email.split('@')[0] : '') ||
+      u.email ||
+      'Signed in';
+  }
+}
+
+// inside your onAuthStateChanged:
+firebase.auth().onAuthStateChanged(async (u) => {
+  if (!u) { location.href = 'login.html'; return; }
+  await setDisplayName(u);
+  // ...rest of your index.js logic (loading tasks, etc.)
+});
 
       if (logoutBtn) {
         logoutBtn.addEventListener('click', async () => {
