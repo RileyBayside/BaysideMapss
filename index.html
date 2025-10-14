@@ -245,7 +245,14 @@
 
           row.appendChild(left);
           row.appendChild(right);
-          el.appendChild(row);
+          // Make the whole task clickable → go to ParksMowing with this operator's tasks
+          const link = document.createElement('a');
+          const focus = Array.isArray(t.siteIds) && t.siteIds.length ? `&focus=${encodeURIComponent(t.siteIds.join(','))}` : '';
+          link.href = `ParksMowing.html?show=mine${focus}`;
+          link.style.textDecoration = 'none';
+          link.style.color = 'inherit';
+          link.appendChild(row);
+          el.appendChild(link);
         });
       }
 
