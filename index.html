@@ -15,6 +15,9 @@
       --accent:#d11e2b; --accent-600:#b71a24;
     }
 
+.task-link { color: inherit; text-decoration: none; }
+.task-link:hover { text-decoration: underline; }
+    
     /* Card (delegate.html look) */
     .card{ background:var(--card); border:1px solid var(--muted);
       border-radius:16px; box-shadow:0 8px 26px rgba(16,24,40,.08); }
@@ -191,70 +194,76 @@
       const db = firebase.firestore();
 
       function renderTasks(items) {
-        const el = document.getElementById('tasks-list');
-        if (!el) return;
+  const el = document.getElementById('tasks-list');
+  if (!el) return;
 
-        el.innerHTML = '';
-        if (!items.length) {
-          const p = document.createElement('p');
-          p.style.color = '#64748b';
-          p.textContent = 'No tasks assigned yet.';
-          el.appendChild(p);
-          return;
-        }
+  el.innerHTML = '';
+  if (!items.length) {
+    const p = document.createElement('p');
+    p.style.color = '#64748b';
+    p.textContent = 'No tasks assigned yet.';
+    el.appendChild(p);
+    return;
+  }
 
-        items.forEach(t => {
-          const row = document.createElement('div');
-          row.className = 'task-row';
+  items.forEach(t => {
+    const row  = document.createElement('div');
+    row.className = 'task-row';
 
-          const left = document.createElement('div');
-          left.className = 'task-main';
+    const left = document.createElement('div');
+    left.className = 'task-main';
 
-          // Title: Zone + site IDs
-          const title = document.createElement('div');
-          title.className = 'task-title';
-          const ids = Array.isArray(t.siteIds) && t.siteIds.length ? (' — ' + t.siteIds.join(', ')) : '';
-          title.textContent = (t.zone || 'Task') + ids;
+    // ---- clickable title ----
+    const title = document.createElement('div');
+    title.className = 'task-title';
 
-          // Meta: due date / assigned
-          const meta = document.createElement('div');
-          meta.className = 'task-meta';
-          const due = (() => {
-            const d = t.dueDate;
-            const dt = d?.toDate ? d.toDate() : (d instanceof Date ? d : null);
-            return dt ? dt.toLocaleDateString() : null;
-          })();
-          meta.textContent = due ? `Due ${due}` : 'Assigned';
+    const ids = (Array.isArray(t.siteIds) ? t.siteIds : []).map(s => String(s).toUpperCase());
+    const focus = ids.join(',');
 
-          left.appendChild(title);
-          left.appendChild(meta);
+    const a = document.createElement('a');
+    a.className = 'task-link';
+    a.title = 'Open these in the map';
+    // Use AssignedParks.html (or ParksMowing.html if you prefer)
+    a.href = focus
+      ? `AssignedParks.html?focus=${encodeURIComponent(focus)}`
+      : `AssignedParks.html`;
 
-          // Notes (if any)
-          if (t.notes && String(t.notes).trim().length) {
-            const note = document.createElement('div');
-            note.className = 'task-note';
-            note.textContent = String(t.notes).trim();
-            left.appendChild(note);
-          }
+    // Text shown to the operator
+    a.textContent = (t.zone || 'Task') + (ids.length ? ` — ${ids.join(', ')}` : '');
 
-          const right = document.createElement('div');
-          const badge = document.createElement('span');
-          badge.className = 'badge badge-amber';
-          badge.textContent = (t.status || 'assigned').replace(/^\w/, s => s.toUpperCase());
-          right.appendChild(badge);
+    title.appendChild(a);
+    left.appendChild(title);
+    // ---- /clickable title ----
 
-          row.appendChild(left);
-          row.appendChild(right);
-          // Make the whole task clickable → go to ParksMowing with this operator's tasks
-          const link = document.createElement('a');
-          const focus = Array.isArray(t.siteIds) && t.siteIds.length ? `&focus=${encodeURIComponent(t.siteIds.join(','))}` : '';
-          link.href = `ParksMowing.html?show=mine${focus}`;
-          link.style.textDecoration = 'none';
-          link.style.color = 'inherit';
-          link.appendChild(row);
-          el.appendChild(link);
-        });
-      }
+    // Meta (due date / status) as you already had
+    const meta = document.createElement('div');
+    meta.className = 'task-meta';
+    const due = (() => {
+      const d = t.dueDate;
+      const dt = d?.toDate ? d.toDate() : (d instanceof Date ? d : null);
+      return dt ? dt.toLocaleDateString() : null;
+    })();
+    meta.textContent = due ? `Due ${due}` : 'Assigned';
+    left.appendChild(meta);
+
+    if (t.notes && String(t.notes).trim()) {
+      const note = document.createElement('div');
+      note.className = 'task-note';
+      note.textContent = String(t.notes).trim();
+      left.appendChild(note);
+    }
+
+    const right = document.createElement('div');
+    const badge = document.createElement('span');
+    badge.className = 'badge badge-amber';
+    badge.textContent = (t.status || 'assigned').replace(/^\w/, s => s.toUpperCase());
+    right.appendChild(badge);
+
+    row.appendChild(left);
+    row.appendChild(right);
+    el.appendChild(row);
+  });
+}
 
       // Start a live listener for the current user’s assignments
       window.startTasksListener = function (uid) {
