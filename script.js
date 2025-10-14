@@ -1,91 +1,196 @@
-// script.js — builds the Leaflet map once; filters by allowIds; highlights focusIds
+var map = L.map('map').setView([-27.55, 153.2], 12);
 
-window.BaysideMaps = window.BaysideMaps || {};
+// Base layers
+var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+});
 
-// Normalize a site ID from feature properties
-function getSiteIdFromProps(p) {
-  if (!p) return '';
-  return String(p.code || p.id || p.NAME || p.name || '').toUpperCase();
+// Google Hybrid (satellite + street names)
+var googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+    attribution: 'Imagery © Google',
+    maxZoom: 20
+}).addTo(map);
+
+var baseMaps = {
+    "OpenStreetMap": osm,
+    "Google Hybrid": googleHybrid
+};
+
+L.control.layers(baseMaps).addTo(map);
+
+var featureIndex = {};
+var labelLayers = []; // store label tooltips
+
+// Define color by CutsPerYear property
+function getColor(cuts) {
+    if (cuts == 18) return 'blue';
+    if (cuts == 15) return 'green';
+    return 'red';
 }
 
-// Create the map. Options:
-// { containerId, geojsonUrl, allowIds: string[]|null, focusIds: string[] }
-BaysideMaps.initParksMowingMap = async function initParksMowingMap(options = {}) {
-  if (BaysideMaps._bootstrapped) return; // safety (avoid "already initialised")
-  BaysideMaps._bootstrapped = true;
+// ----- make a namespace -----
+window.BaysideMaps = window.BaysideMaps || {};
 
-  const containerId = options.containerId || 'map';
-  const geojsonUrl  = options.geojsonUrl  || 'data.geojson';
+/**
+ * Initialize the Parks Mowing map in any container.
+ * @param {Object} opts
+ * @param {string} opts.containerId - element id to mount the map into
+ * @param {string} [opts.geojsonUrl='data.geojson'] - path to GeoJSON
+ * @param {(feature, layer, evt) => void} [opts.onFeatureClick] - handler for clicks
+ * @param {boolean} [opts.fitBounds=true] - whether to fit to data bounds
+ */
+BaysideMaps.initParksMowingMap = async function initParksMowingMap(opts = {}) {
+  const {
+    containerId,
+    geojsonUrl = 'data.geojson',
+    onFeatureClick,
+    fitBounds = true
+  } = opts;
 
-  const allowSet = Array.isArray(options.allowIds)
-    ? new Set(options.allowIds.map(s => String(s).toUpperCase()))
-    : null;
-  const focusSet = Array.isArray(options.focusIds)
-    ? new Set(options.focusIds.map(s => String(s).toUpperCase()))
-    : new Set();
+  const el = document.getElementById(containerId);
+  if (!el) {
+    console.warn(`[BaysideMaps] container #${containerId} not found`);
+    return;
+  }
 
-  // Leaflet map
-  const map = L.map(containerId, { zoomControl:true, attributionControl:false });
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19 }).addTo(map);
+  // ====== YOUR EXISTING MAP SETUP STARTS HERE ======
+  // Example: copy the Leaflet map creation from script.js here
+  // (use the same tile layer and styling you use on ParksMowing)
 
-  // Load data
+  const map = L.map(containerId, { zoomControl: true, attributionControl: false });
+
+  // same base layer you use in ParksMowing:
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 })
+    .addTo(map);
+
+  // If you already have a style object in script.js, reuse it here:
+  const defaultStyle = {
+    color: '#1d4ed8',
+    weight: 2,
+    opacity: 0.9,
+    fillColor: '#60a5fa',
+    fillOpacity: 0.25
+  };
+
+  // Load the same data you use on ParksMowing:
   const resp = await fetch(geojsonUrl);
-  const gj   = await resp.json();
-  const all  = Array.isArray(gj.features) ? gj.features : [];
+  const data = await resp.json();
 
-  // Filter by allow-list if present
-  const features = allowSet ? all.filter(f => allowSet.has(getSiteIdFromProps(f.properties))) : all;
+  const layer = L.geoJSON(data, {
+    style: defaultStyle,
+    onEachFeature: (feature, l) => {
+      // Wire click out to delegate if provided
+      l.on('click', (evt) => {
+        if (onFeatureClick) onFeatureClick(feature, l, evt);
+      });
 
-  // Style: focused IDs emphasized
-  const layer = L.geoJSON(features, {
-    style: (feat) => {
-      const id = getSiteIdFromProps(feat.properties);
-      const isFocus = focusSet.has(id);
-      return isFocus
-        ? { color:'#b91c1c', weight:3, fillColor:'#ef4444', fillOpacity:0.35 }
-        : { color:'#1d4ed8', weight:2, fillColor:'#60a5fa', fillOpacity:0.25 };
+      // Optional: your existing popup/hover logic
+      // const name = feature.properties?.name || feature.properties?.id || 'Site';
+      // l.bindPopup(`<strong>${name}</strong>`);
     }
   }).addTo(map);
 
-  // Fit bounds (prefer focus items)
-  const boundsFocus = L.latLngBounds([]);
-  if (focusSet.size) {
-    layer.eachLayer(l => {
-      try {
-        const id = getSiteIdFromProps(l.feature?.properties);
-        if (focusSet.has(id)) {
-          const b = l.getBounds ? l.getBounds() : null;
-          if (b) boundsFocus.extend(b);
-        }
-      } catch {}
-    });
-  }
-  if (boundsFocus.isValid()) map.fitBounds(boundsFocus.pad(0.08));
-  else {
+  if (fitBounds) {
     const b = layer.getBounds();
-    if (b && b.isValid()) map.fitBounds(b.pad(0.08));
-    else map.setView([-27.5, 153.2], 11);
+    if (b.isValid()) map.fitBounds(b.pad(0.05));
+    else map.setView([-27.5, 153.2], 11); // fallback center
   }
 
-  // Expose for sidebar.js
-  BaysideMaps.currentMap       = map;
-  BaysideMaps.currentLayer     = layer;
-  BaysideMaps.currentFeatures  = features;
-  BaysideMaps.currentAllowSet  = allowSet;
-  BaysideMaps.currentFocusSet  = focusSet;
-
-  // If a sidebar renderer exists, call it now
-  if (typeof BaysideMaps.renderSidebar === 'function') {
-    BaysideMaps.renderSidebar({
-      features, allowSet, focusSet, map, layer
-    });
-  }
+  // Return map/layer if a caller wants to do more stuff
+  return { map, layer };
+  // ====== YOUR EXISTING MAP SETUP ENDS HERE ======
 };
 
-// Auto-init once DOM is ready, using any pending options prepared by the HTML page.
+// Keep ParksMowing.html behavior unchanged:
+// If that page has <div id="map"> and loads script.js, we can
+// auto-init the map there as before:
 document.addEventListener('DOMContentLoaded', () => {
-  const opts = (window.BaysideMaps && BaysideMaps.pendingInitOptions) || {
-    containerId: 'map', geojsonUrl: 'data.geojson', allowIds: null, focusIds: []
-  };
-  BaysideMaps.initParksMowingMap(opts);
+  const parksContainer = document.getElementById('map');
+  if (parksContainer) {
+    BaysideMaps.initParksMowingMap({ containerId: 'map' })
+      .catch(err => console.warn('Auto-init parks map failed:', err));
+  }
+});
+
+// Load GeoJSON
+fetch('data.geojson')
+  .then(res => res.json())
+  .then(data => {
+    L.geoJSON(data, {
+        style: function(feature) {
+            var cuts = 0;
+            if (feature.properties && feature.properties.description) {
+                var desc = feature.properties.description.value;
+                var match = desc.match(/CutsPerYear<\/td><td>(\d+)<\/td>/);
+                if (match) cuts = parseInt(match[1]);
+            }
+            return {
+                color: getColor(cuts),
+                weight: 2,
+                fillOpacity: 0.2
+            };
+        },
+        onEachFeature: function (feature, layer) {
+            var name = feature.properties.name || '';
+            var mowID = '';
+            var cuts = '';
+            if (feature.properties && feature.properties.description) {
+                var desc = feature.properties.description.value;
+                var idMatch = desc.match(/MowingID<\/td><td>(.*?)<\/td>/);
+                if (idMatch) mowID = idMatch[1];
+                var cutMatch = desc.match(/CutsPerYear<\/td><td>(\d+)<\/td>/);
+                if (cutMatch) cuts = cutMatch[1];
+            }
+            var popupText = name;
+            if (mowID) popupText += " (" + mowID + ")";
+            if (cuts) popupText += " - " + cuts + " cuts/yr";
+            layer.bindPopup(popupText);
+            if (mowID) {
+                var tooltip = layer.bindTooltip(mowID, {
+                    permanent: true,
+                    direction: 'center',
+                    className: 'mowing-id-label'
+                });
+                labelLayers.push(tooltip);
+            }
+            if (mowID) featureIndex[mowID.toLowerCase()] = layer;
+        }
+    }).addTo(map);
+  });
+
+// Manage label visibility by zoom level
+map.on('zoomend', function() {
+    var currentZoom = map.getZoom();
+    labelLayers.forEach(function(layer) {
+        if (currentZoom >= 15) {
+            layer.openTooltip();
+        } else {
+            layer.closeTooltip();
+        }
+    });
+});
+
+// Search box
+var searchBox = L.control({position: 'topleft'});
+searchBox.onAdd = function(map) {
+    var div = L.DomUtil.create('div', 'search-box');
+    div.innerHTML = '<input type="text" id="customSearch" placeholder="Search ID..." style="padding:4px;width:120px;">';
+    return div;
+};
+searchBox.addTo(map);
+
+document.addEventListener('keyup', function(e) {
+    if (e.target && e.target.id === 'customSearch') {
+        var query = e.target.value.toLowerCase();
+        if (query.length > 1) {
+            for (var key in featureIndex) {
+                if (key.includes(query)) {
+                    map.fitBounds(featureIndex[key].getBounds());
+                    featureIndex[key].openPopup();
+                    break;
+                }
+            }
+        }
+    }
 });
