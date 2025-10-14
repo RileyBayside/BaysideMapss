@@ -38,6 +38,18 @@
 
   .badge{ border-radius:999px; padding:4px 8px; font-weight:800; font-size:12px; }
   .badge-amber{ background:#fee2e2; color:#7f1d1d; border:1px solid #fecaca; }
+
+  .task-note{
+  margin-top:6px;
+  padding:8px 10px;
+  background:#f8fafc;
+  border-left:3px solid var(--accent);
+  border-radius:8px;
+  color:#334155;
+  font-size:13px;
+  white-space:pre-wrap;
+}
+  
 </style>
   
 </head>
@@ -197,7 +209,9 @@
   (function () {
     const db = firebase.firestore();
 
-    function renderTasks(items) {
+    <script>
+  // Replace JUST this function
+  function renderTasks(items) {
     const el = document.getElementById('tasks-list');
     if (!el) return;
 
@@ -217,11 +231,13 @@
       const left = document.createElement('div');
       left.className = 'task-main';
 
+      // Title: Zone + site IDs
       const title = document.createElement('div');
       title.className = 'task-title';
       const ids = Array.isArray(t.siteIds) && t.siteIds.length ? (' — ' + t.siteIds.join(', ')) : '';
       title.textContent = (t.zone || 'Task') + ids;
 
+      // Meta: due date / assigned
       const meta = document.createElement('div');
       meta.className = 'task-meta';
       const due = (() => {
@@ -234,6 +250,14 @@
       left.appendChild(title);
       left.appendChild(meta);
 
+      // NEW: Notes (if any)
+      if (t.notes && String(t.notes).trim().length) {
+        const note = document.createElement('div');
+        note.className = 'task-note';
+        note.textContent = String(t.notes).trim();
+        left.appendChild(note);
+      }
+
       const right = document.createElement('div');
       const badge = document.createElement('span');
       badge.className = 'badge badge-amber';
@@ -243,8 +267,8 @@
       row.appendChild(left);
       row.appendChild(right);
       el.appendChild(row);
-      });
-    }
+    });
+  }
 
     // Start a live listener for the current user’s assignments
     window.startTasksListener = function (uid) {
