@@ -239,27 +239,40 @@
       }
     }
 
-    // Live subscription to assignments for this operator
-    let unsubTasks = null;
-    function startTasksListener(uid){
-      if (unsubTasks) { try{unsubTasks();}catch(_){ } }
+   <script>
+  // Replace the whole function with this simpler version
+  let unsubTasks = null;
+  function startTasksListener(uid){
+    if (unsubTasks) { try{unsubTasks();}catch(_){ } }
 
-      // Show only not-done items for this user
-      unsubTasks = db.collection('assignments')
-        .where('userId','==', uid)
-        .where('status','in', ['assigned','in_progress'])
-        .orderBy('createdAt','desc')
-        .onSnapshot(snap=>{
-          const rows = [];
-          snap.forEach(d => rows.push({ id:d.id, ...d.data() }));
-          renderTasks(rows);
-        }, err=>{
-          console.error('tasks subscribe error', err);
-          const wrap = document.getElementById('tasksWrap');
-          wrap.className = 'empty';
-          wrap.textContent = 'Failed to load tasks';
+    // Simple query: only filter by userId, then filter/sort in JS
+    unsubTasks = firebase.firestore().collection('assignments')
+      .where('userId','==', uid)
+      .onSnapshot(snap=>{
+        const rows = [];
+        snap.forEach(d => {
+          const x = d.data() || {};
+          if (x.status === 'assigned' || x.status === 'in_progress') {
+            rows.push({ id:d.id, ...x });
+          }
         });
-    }
+
+        // Sort newest first by createdAt (if missing, treat as 0)
+        rows.sort((a,b)=>{
+          const ta = a.createdAt?.toMillis?.() ?? 0;
+          const tb = b.createdAt?.toMillis?.() ?? 0;
+          return tb - ta;
+        });
+
+        renderTasks(rows);
+      }, err=>{
+        console.error('tasks subscribe error', err);
+        const wrap = document.getElementById('tasksWrap');
+        wrap.className = 'empty';
+        wrap.textContent = 'Failed to load tasks';
+      });
+  }
+</script>
 
     // Auth gate (unchanged behavior) — we just add setDisplayName(u)
     firebase.auth().onAuthStateChanged((u)=>{
