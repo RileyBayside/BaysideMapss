@@ -1,61 +1,37 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Parks Mowing</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" href="logo.png" type="image/png">
 
-  <!-- Firebase auth + guard (NEW: add these for protected page) -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-  <script src="firebase-init.js"></script>
-  <script src="auth-guard.js"></script>
-
-  <!-- Core Styles -->
+  <!-- Core Styles (your existing files) -->
   <link rel="stylesheet" href="style.css" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-
-  <!-- Sidebar Styles -->
-  <link rel="stylesheet" href="sidebar.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="sidebar.css" />
 
   <style>
+    /* Keep your full-viewport map */
     #map { height: 100vh; }
   </style>
 </head>
 <body>
 
+  <!-- Firebase (auth + firestore) and your guard -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="firebase-init.js"></script>
+  <script src="auth-guard.js"></script>
+
   <!-- Sidebar toggle button -->
   <button id="sidebar-toggle">☰</button>
 
-  <!-- Sidebar container -->
+  <!-- Sidebar container (your existing structure) -->
   <div id="sidebar">
     <button id="toggle-all">Expand All</button>
     <div id="sidebar-content"></div>
-
-    async function buildMapAndSidebar({ allowIds, focusIds }) {
-  // load GeoJSON (same as today)
-  const resp = await fetch('data.geojson');
-  const gj = await resp.json();
-
-  // Normalize an ID for each feature
-  function getSiteId(f){
-    const p = f.properties || {};
-    return String(p.code || p.id || p.name || f.id || '').toUpperCase();
-  }
-
-  // Filter features if allowIds was provided
-  const feats = (gj.features || []).filter(f => {
-    if (!allowIds) return true;          // show all (normal mode)
-    return allowIds.has(getSiteId(f));   // only my tasks
-  });
-
-  // Render feats to map (your existing Leaflet layer)
-  // Render the sidebar list using feats + their IDs (only allowed ones)
-
-  // If focusIds present, zoom to those; else fit to all feats
-}
-
 
     <button onclick="adminLogin()">Admin Login</button>
 
@@ -67,48 +43,98 @@
     </div>
   </div>
 
-// 1) Read URL
-const params = new URLSearchParams(location.search);
-const showMine = params.get('show') === 'mine';
-const focusCsv = params.get('focus') || ''; // optional
-
-// 2) Wait for auth
-firebase.auth().onAuthStateChanged(async (u) => {
-  if (!u) return; // auth-guard will redirect
-
-  // If not 'mine', just build the full map as today
-  if (!showMine) { return buildMapAndSidebar({ allowIds: null, focusIds: [] }); }
-
-  // 3) Pull this operator’s assignments
-  const db = firebase.firestore();
-  const snap = await db.collection('assignments')
-    .where('userId', '==', u.uid)
-    .get(); // (filter 'completed' client-side if needed)
-
-  const allow = new Set();
-  snap.forEach(doc => {
-    const d = doc.data() || {};
-    (Array.isArray(d.siteIds) ? d.siteIds : []).forEach(id => allow.add(String(id).toUpperCase()));
-  });
-
-  // 4) Optional focus
-  const focusIds = focusCsv
-    .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-
-  // 5) Build map + sidebar with allow-list
-  buildMapAndSidebar({ allowIds: allow, focusIds });
-});
-  
   <!-- Map container -->
   <div id="map"></div>
 
-  <!-- Core Scripts -->
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="script.js"></script>
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- Sidebar Script -->
-  <script src="sidebar.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script>
+    /**
+     * Parks Mowing bootstrap:
+     * - Reads URL params (?show=mine&focus=M0123,M0361)
+     * - If show=mine, fetches the signed-in user's assignments from Firestore
+     * - Dynamically loads your map code (script.js + sidebar.js) only once
+     * - Calls BaysideMaps.initParksMowingMap with allowIds/focusIds
+     *
+     * This avoids the "Map container is already initialized" double-init error.
+     */
+
+    // Small helper: load a script once, in order.
+    function loadScriptOnce(src) {
+      return new Promise((resolve, reject) => {
+        const el = document.createElement('script');
+        el.src = src;
+        el.onload = () => resolve();
+        el.onerror = (e) => reject(e);
+        document.body.appendChild(el);
+      });
+    }
+
+    // Parse URL params
+    const params = new URLSearchParams(location.search);
+    const showMine = params.get('show') === 'mine';
+    const focusCsv = params.get('focus') || '';
+    const focusIds = focusCsv.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+
+    // Normalize an ID from a feature's properties (your data usually has M-codes)
+    function normalizeIdFromProps(p) {
+      if (!p) return '';
+      // Try common fields in your GeoJSON
+      const raw = p.code || p.id || p.NAME || p.name || '';
+      return String(raw).toUpperCase();
+    }
+
+    // Build config then load your mapping scripts and init once
+    firebase.auth().onAuthStateChanged(async (u) => {
+      if (!u) return; // auth-guard will redirect if not signed in
+
+      let allowIds = null; // null = show all
+      if (showMine) {
+        try {
+          const db = firebase.firestore();
+          const snap = await db.collection('assignments')
+            .where('userId', '==', u.uid)
+            .get();
+
+          const allow = new Set();
+          snap.forEach(doc => {
+            const d = doc.data() || {};
+            const status = (d.status || 'assigned').toLowerCase();
+            if (status === 'completed') return;
+            (Array.isArray(d.siteIds) ? d.siteIds : []).forEach(id => {
+              if (id) allow.add(String(id).toUpperCase());
+            });
+          });
+
+          allowIds = Array.from(allow);
+        } catch (err) {
+          console.warn('Failed to load assignments for filtering:', err);
+          // Fallback: show all if we can’t fetch
+          allowIds = null;
+        }
+      }
+
+      try {
+        // Load your app scripts AFTER we have allowIds/focusIds
+        await loadScriptOnce('script.js');  // your map + logic
+        await loadScriptOnce('sidebar.js'); // your sidebar behavior
+
+        // Prefer explicit init to avoid auto-init races
+        if (window.BaysideMaps && typeof window.BaysideMaps.initParksMowingMap === 'function') {
+          window.BaysideMaps.initParksMowingMap({
+            containerId: 'map',
+            geojsonUrl: 'data.geojson',    // your existing data source
+            allowIds,                      // null = show all; array of M-codes = filter
+            focusIds                       // optional: zoom to these on load
+          });
+        } else {
+          console.error('BaysideMaps.initParksMowingMap not found. Check script.js export.');
+        }
+      } catch (e) {
+        console.error('Map bootstrap failed:', e);
+      }
+    });
+  </script>
 </body>
 </html>
-
