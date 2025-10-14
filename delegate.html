@@ -724,15 +724,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 </script>
 
-<script>
+  <script>
 (function(){
   // Suburbs list
   const SUBURBS = [
-    'Thorneside','Birkdale','Wellington Point','Alexandra Hills','Capalaba',
+    'Thorneside','Birkdale','Wellington Point','Alexandra Hills','Capalapa',
     'Ormiston','Cleveland','Thornlands','Victoria Point','Redland Bay','Mt Cotton'
   ];
 
-  // Thorneside items (numbered, SITEID – Name)
+  // Thorneside items (exact display text)
   const THORNESIDE_ITEMS = [
     '1. M0123 - Helens Street',
     '2. M0427 - Thorneside Road Foreshore Area',
@@ -759,49 +759,97 @@ document.addEventListener('DOMContentLoaded', async () => {
   const searchEl = document.getElementById('suburbSearch');
   const addSel   = document.getElementById('addSelectedSuburbs');
 
+  // helper: extract siteId from "N. Mxxxx - Name"
+  function parseSiteId(line){
+    // finds the first token like M1234
+    const m = line.match(/\bM\d+\b/i);
+    return m ? m[0].toUpperCase() : '';
+  }
+
   function render(filter=''){
     listEl.innerHTML = '';
-    const q = filter.trim().toLowerCase();
+    const q = (filter||'').trim().toLowerCase();
 
     SUBURBS
       .filter(s => !q || s.toLowerCase().includes(q))
       .forEach((name, i) => {
         const id = `suburb_${i}`;
 
-        // Special: Thorneside as a collapsible dropdown with numbered items
         if (name === 'Thorneside') {
+          // Collapsible with select-all and item checkboxes
           const details = document.createElement('details');
           details.className = 'suburb-details';
 
           const summary = document.createElement('summary');
+
+          // left: [ ] Thorneside (suburb-level checkbox)
           const left = document.createElement('div');
-          left.className = 'suburb-row-left';
-
-          const cb = document.createElement('input');
-          cb.type = 'checkbox'; cb.id = id; cb.value = name;
-
+          left.className = 'summary-left';
+          const cbSuburb = document.createElement('input');
+          cbSuburb.type = 'checkbox'; cbSuburb.id = id; cbSuburb.value = name;
           const label = document.createElement('label');
           label.setAttribute('for', id); label.textContent = name;
+          left.appendChild(cbSuburb); left.appendChild(label);
 
-          left.appendChild(cb); left.appendChild(label);
+          // right: [ ] Select all
+          const right = document.createElement('div');
+          right.className = 'summary-right';
+          const selAll = document.createElement('input');
+          selAll.type = 'checkbox'; selAll.id = 'thorn_select_all';
+          const salabel = document.createElement('label');
+          salabel.setAttribute('for', 'thorn_select_all');
+          salabel.textContent = 'Select all';
+          right.appendChild(salabel.previousSibling || document.createTextNode('')); // keeps spacing consistent
+          right.appendChild(selAll);
+          right.appendChild(salabel);
+
           summary.appendChild(left);
+          summary.appendChild(right);
           details.appendChild(summary);
 
-          // Numbered list inside Thorneside
+          // inner list
           const ol = document.createElement('ol');
           ol.className = 'suburb-sites';
-          THORNESIDE_ITEMS.forEach(txt => {
+          THORNESIDE_ITEMS.forEach((txt, idx) => {
             const li = document.createElement('li');
-            li.textContent = txt;           // exactly "N. Mxxxx - Name"
+
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'ts-item';
+            cb.dataset.text = txt;                // for later use
+            cb.dataset.siteid = parseSiteId(txt); // Mxxxx
+
+            const span = document.createElement('span');
+            span.textContent = txt;
+
+            li.appendChild(cb);
+            li.appendChild(span);
             ol.appendChild(li);
           });
           details.appendChild(ol);
+
+          // Select-all behavior
+          selAll.addEventListener('change', () => {
+            const items = details.querySelectorAll('.ts-item');
+            items.forEach(i => i.checked = selAll.checked);
+            selAll.indeterminate = false;
+          });
+
+          // Update select-all indeterminate state when any item changes
+          details.addEventListener('change', (e) => {
+            if (!e.target.classList.contains('ts-item')) return;
+            const items = [...details.querySelectorAll('.ts-item')];
+            const checked = items.filter(i => i.checked).length;
+            if (checked === 0) { selAll.checked = false; selAll.indeterminate = false; }
+            else if (checked === items.length) { selAll.checked = true; selAll.indeterminate = false; }
+            else { selAll.checked = false; selAll.indeterminate = true; }
+          });
 
           listEl.appendChild(details);
           return;
         }
 
-        // Default: simple one-per-line row for other suburbs
+        // default suburb row (one per line)
         const li = document.createElement('li');
         li.className = 'suburb-row';
 
@@ -819,7 +867,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         left.appendChild(label);
 
         const addBtn = document.createElement('button');
-        addBtn.className = 'mini'; addBtn.type = 'button'; addBtn.textContent = 'Add';
+        addBtn.className = 'mini';
+        addBtn.type = 'button';
+        addBtn.textContent = 'Add';
         addBtn.addEventListener('click', () => {
           window.addToBasket({ zone: name, range: '', siteIds: [] });
         });
@@ -843,14 +893,37 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Search filter
   searchEl?.addEventListener('input', e => render(e.target.value));
 
-  // Add all checked suburbs (unchanged behavior)
+  // Add all checked (suburbs + Thorneside items)
   addSel?.addEventListener('click', () => {
-    const checked = listEl.querySelectorAll('input[type="checkbox"]:checked');
-    if (!checked.length){ toast && toast('Select at least one suburb'); return; }
-    checked.forEach(cb => window.addToBasket({ zone: cb.value, range: '', siteIds: [] }));
+    let added = 0;
+
+    // 1) Checked plain suburbs
+    const checkedSubs = listEl.querySelectorAll('> .suburb-row input[type="checkbox"]:checked');
+    checkedSubs.forEach(cb => {
+      window.addToBasket({ zone: cb.value, range: '', siteIds: [] });
+      added++;
+    });
+
+    // 2) Checked Thorneside items
+    const thorn = listEl.querySelector('.suburb-details');
+    if (thorn) {
+      const items = thorn.querySelectorAll('.ts-item:checked');
+      items.forEach(it => {
+        const siteId = it.dataset.siteid || '';
+        if (siteId) {
+          window.addToBasket({ zone: 'Thorneside', range: '', siteIds: [siteId] });
+          added++;
+        }
+      });
+    }
+
+    if (typeof toast === 'function') {
+      toast(added ? `Added ${added} item(s) to basket` : 'Select at least one item');
+    }
   });
 })();
 </script>
+
   
 </body>
 </html>
