@@ -1,140 +1,158 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Parks Mowing</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="logo.png" type="image/png">
 
-  <!-- Core Styles (your existing files) -->
-  <link rel="stylesheet" href="style.css" />
+  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="sidebar.css" />
-
   <style>
-    /* Keep your full-viewport map */
-    #map { height: 100vh; }
+    :root{
+      --ink:#0f172a; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff;
+      --accent:#d11e2b; --accent-600:#b71a24;
+    }
+    html,body{ height:100%; margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink); }
+    #map { position: absolute; inset: 0 0 0 320px; } /* leave room for sidebar */
+
+    /* Sidebar */
+    #sidebar-toggle{
+      position:absolute; left:8px; top:8px; z-index:1000;
+      background:#fff; border:1px solid var(--muted); border-radius:10px; padding:8px 10px; cursor:pointer; font-weight:700;
+      box-shadow:0 6px 20px rgba(16,24,40,.12);
+    }
+    #sidebar{
+      position:absolute; left:0; top:0; bottom:0; width:320px; z-index:999;
+      background:#fff; border-right:1px solid var(--muted);
+      box-shadow:0 8px 26px rgba(16,24,40,.08);
+      display:flex; flex-direction:column;
+    }
+    #sidebar header{
+      padding:12px 14px; border-bottom:1px solid var(--muted); display:flex; align-items:center; gap:10px; font-weight:800;
+    }
+    #sidebar .controls{ padding:10px 12px; display:grid; gap:8px; border-bottom:1px solid var(--muted); }
+    #sidebar input{
+      width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--muted);
+    }
+    #sidebar-content{
+      padding:10px 12px; overflow:auto;
+    }
+    .site-item{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px; padding:8px 10px; border:1px solid #e2e8f0; border-radius:10px; margin-bottom:8px; background:#fff;
+      cursor:pointer;
+    }
+    .site-item .id{ font-weight:800; color:#111827 }
+    .site-item .name{ color:#64748b; font-size:12px; margin-left:6px }
+    .badge{
+      border-radius:999px; padding:3px 8px; font-weight:800; font-size:12px; background:#fee2e2; color:#7f1d1d; border:1px solid #fecaca;
+    }
+
+    /* Small screen: sidebar overlays */
+    @media (max-width: 900px){
+      #map { inset: 0 }
+      #sidebar { width: 88%; transform: translateX(-100%); transition: transform .2s ease }
+      #sidebar.open { transform: translateX(0) }
+    }
   </style>
 </head>
 <body>
 
-  <!-- Firebase (auth + firestore) and your guard -->
+  <!-- Firebase (compat) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
 
-  <!-- Sidebar toggle button -->
+  <!-- UI -->
   <button id="sidebar-toggle">☰</button>
-
-  <!-- Sidebar container (your existing structure) -->
-  <div id="sidebar">
-    <button id="toggle-all">Expand All</button>
-    <div id="sidebar-content"></div>
-
-    <button onclick="adminLogin()">Admin Login</button>
-
-    <div id="admin-tools" style="display:none">
-      <button onclick="exportPDFCouncil()">PDF report for Council</button>
-      <button onclick="exportPDFBayside()">PDF Report for Bayside</button>
-      <button onclick="clearUserData()">Clear All User Data</button>
-      <button onclick="showToday()">Show Completed Today</button>
+  <aside id="sidebar">
+    <header>
+      <span style="width:10px;height:10px;border-radius:50%;background:var(--accent);display:inline-block"></span>
+      Assigned sites
+    </header>
+    <div class="controls">
+      <input id="searchSite" placeholder="Search ID or name…" />
+      <div id="summaryLine" style="color:#64748b;font-size:12px"></div>
     </div>
-  </div>
+    <div id="sidebar-content"></div>
+  </aside>
 
-  <!-- Map container -->
   <div id="map"></div>
 
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+  <!-- Page bootstrap:
+       1) Read ?show=mine&focus=...
+       2) If show=mine, fetch the operator’s assignments to build allowIds
+       3) Set BaysideMaps.pendingInitOptions
+       4) Then load script.js (map) and sidebar.js (list) exactly once
+  -->
   <script>
-    /**
-     * Parks Mowing bootstrap:
-     * - Reads URL params (?show=mine&focus=M0123,M0361)
-     * - If show=mine, fetches the signed-in user's assignments from Firestore
-     * - Dynamically loads your map code (script.js + sidebar.js) only once
-     * - Calls BaysideMaps.initParksMowingMap with allowIds/focusIds
-     *
-     * This avoids the "Map container is already initialized" double-init error.
-     */
+    (async function () {
+      const params   = new URLSearchParams(location.search);
+      const showMine = params.get('show') === 'mine';
+      const focusCsv = params.get('focus') || '';
+      const focusIds = focusCsv.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
 
-    // Small helper: load a script once, in order.
-    function loadScriptOnce(src) {
-      return new Promise((resolve, reject) => {
-        const el = document.createElement('script');
-        el.src = src;
-        el.onload = () => resolve();
-        el.onerror = (e) => reject(e);
-        document.body.appendChild(el);
+      // Wait for auth ready
+      const authReady = () => new Promise(res => {
+        const unsub = firebase.auth().onAuthStateChanged(u => { unsub(); res(u || null); });
       });
-    }
+      const user = await authReady();
+      if (!user) return; // auth-guard will redirect
 
-    // Parse URL params
-    const params = new URLSearchParams(location.search);
-    const showMine = params.get('show') === 'mine';
-    const focusCsv = params.get('focus') || '';
-    const focusIds = focusCsv.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-
-    // Normalize an ID from a feature's properties (your data usually has M-codes)
-    function normalizeIdFromProps(p) {
-      if (!p) return '';
-      // Try common fields in your GeoJSON
-      const raw = p.code || p.id || p.NAME || p.name || '';
-      return String(raw).toUpperCase();
-    }
-
-    // Build config then load your mapping scripts and init once
-    firebase.auth().onAuthStateChanged(async (u) => {
-      if (!u) return; // auth-guard will redirect if not signed in
-
-      let allowIds = null; // null = show all
+      // Build allow-list if show=mine
+      let allowIds = null;
       if (showMine) {
         try {
-          const db = firebase.firestore();
+          const db   = firebase.firestore();
           const snap = await db.collection('assignments')
-            .where('userId', '==', u.uid)
+            .where('userId','==',user.uid)
             .get();
 
-          const allow = new Set();
+          const set = new Set();
           snap.forEach(doc => {
             const d = doc.data() || {};
+            // Ignore completed
             const status = (d.status || 'assigned').toLowerCase();
             if (status === 'completed') return;
-            (Array.isArray(d.siteIds) ? d.siteIds : []).forEach(id => {
-              if (id) allow.add(String(id).toUpperCase());
-            });
+            if (Array.isArray(d.siteIds)) {
+              d.siteIds.forEach(id => set.add(String(id).toUpperCase()));
+            }
           });
-
-          allowIds = Array.from(allow);
-        } catch (err) {
-          console.warn('Failed to load assignments for filtering:', err);
-          // Fallback: show all if we can’t fetch
-          allowIds = null;
+          allowIds = Array.from(set);
+        } catch (e) {
+          console.warn('Failed to read assignments:', e);
+          allowIds = null; // fall back to full map
         }
       }
 
-      try {
-        // Load your app scripts AFTER we have allowIds/focusIds
-        await loadScriptOnce('script.js');  // your map + logic
-        await loadScriptOnce('sidebar.js'); // your sidebar behavior
+      // Pass options for the map initializer (script.js) to consume
+      window.BaysideMaps = window.BaysideMaps || {};
+      window.BaysideMaps.pendingInitOptions = {
+        containerId: 'map',
+        geojsonUrl : 'data.geojson',      // same data used elsewhere
+        allowIds   : (allowIds && allowIds.length) ? allowIds : null,
+        focusIds   : focusIds
+      };
 
-        // Prefer explicit init to avoid auto-init races
-        if (window.BaysideMaps && typeof window.BaysideMaps.initParksMowingMap === 'function') {
-          window.BaysideMaps.initParksMowingMap({
-            containerId: 'map',
-            geojsonUrl: 'data.geojson',    // your existing data source
-            allowIds,                      // null = show all; array of M-codes = filter
-            focusIds                       // optional: zoom to these on load
-          });
-        } else {
-          console.error('BaysideMaps.initParksMowingMap not found. Check script.js export.');
-        }
-      } catch (e) {
-        console.error('Map bootstrap failed:', e);
-      }
-    });
+      // Load app scripts (after options are set) — prevents double init
+      const load = (src) => new Promise((res, rej) => {
+        const s = document.createElement('script'); s.src = src;
+        s.onload = res; s.onerror = rej; document.body.appendChild(s);
+      });
+      await load('script.js');   // defines BaysideMaps.initParksMowingMap + map build
+      await load('sidebar.js');  // defines BaysideMaps.renderSidebar + list build
+
+      // Tiny sidebar toggle on small screens
+      const toggle = document.getElementById('sidebar-toggle');
+      const side   = document.getElementById('sidebar');
+      toggle.addEventListener('click', () => side.classList.toggle('open'));
+    })();
   </script>
 </body>
 </html>
