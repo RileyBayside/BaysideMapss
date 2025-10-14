@@ -19,16 +19,24 @@
 
   <style>
 
-    /* Collapsible suburb with inner site list */
+/* Thorneside collapsible with inner site list */
 .suburb-details { border:1px solid var(--muted); border-radius:10px; background:#fff; }
-.suburb-details summary {
+.suburb-details summary{
   list-style:none; cursor:pointer; padding:10px 12px;
   display:flex; align-items:center; justify-content:space-between; gap:10px;
   font-weight:700; color:var(--ink-2);
 }
 .suburb-details[open] summary { border-bottom:1px solid var(--muted); }
-.suburb-sites { margin:0; padding:10px 14px 12px 28px; }
-.suburb-sites li { margin:4px 0; font-weight:700; color:#111827; }
+
+.summary-left{ display:flex; align-items:center; gap:10px; }
+.summary-right{ display:flex; align-items:center; gap:8px; color:#334155; font-weight:700; }
+
+.suburb-sites{ margin:0; padding:10px 14px 12px 14px; }
+.suburb-sites li{
+  display:flex; align-items:center; gap:8px;
+  margin:4px 0; font-weight:700; color:#111827;
+}
+.suburb-sites input[type="checkbox"]{ transform: translateY(1px); }
 
     .suburb-list{
   display:grid;
