@@ -1455,6 +1455,94 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 })();
 </script>
+
+  <script>
+/* ===== Assign Parks ⇄ Assignment bridge ===== */
+
+// Holds selected sites keyed by siteId
+const tasksById = new Map();
+
+// Rebuild _basket (used by your existing assign flow) from tasksById
+function uiToBasket() {
+  _basket.length = 0;
+  tasksById.forEach(item => {
+    // one entry per site so you can see each in Tasks
+    _basket.push({
+      zone: item.suburb,        // suburb goes in "zone" field
+      range: '',                // not used here
+      siteIds: [item.siteId]    // one site per task
+    });
+  });
+  renderBasket();
+  updateAssignButtonState();
+}
+
+// Enable/disable Assign button based on operator + tasks
+function updateAssignButtonState(){
+  const opReady = !!document.getElementById('operatorSel')?.value;
+  assignBtn.disabled = !opReady || _basket.length === 0;
+}
+
+// Toggle a single site checkbox
+function onSiteToggle(e){
+  const cb = e.target;
+  if (cb.type !== 'checkbox' || !cb.dataset.siteId) return;
+
+  const siteId = cb.dataset.siteId;
+  const suburb = cb.dataset.suburb || '';
+  const label  = cb.dataset.label  || '';
+
+  if (cb.checked) {
+    tasksById.set(siteId, { siteId, suburb, label });
+  } else {
+    tasksById.delete(siteId);
+    // keep the suburb "Select All" in sync
+    const wrap = cb.closest('[data-suburb-block]');
+    if (wrap) {
+      const allChecked = [...wrap.querySelectorAll('input[type=checkbox][data-site-id]')].every(x=>x.checked);
+      const allCb = wrap.querySelector('input[type=checkbox][data-suburb-select-all]');
+      if (allCb) allCb.checked = allChecked;
+    }
+  }
+  uiToBasket();
+}
+
+// Toggle an entire suburb via "Select All"
+function onSuburbSelectAll(e){
+  const cb = e.target;
+  if (cb.type !== 'checkbox' || !cb.hasAttribute('data-suburb-select-all')) return;
+
+  const block = cb.closest('[data-suburb-block]');
+  if (!block) return;
+  const kids = block.querySelectorAll('input[type=checkbox][data-site-id]');
+  kids.forEach(k => { k.checked = cb.checked; k.dispatchEvent(new Event('change')); });
+}
+
+// Hook up events for all current checkboxes
+function wireAssignParks() {
+  document.querySelectorAll('input[type=checkbox][data-site-id]')
+    .forEach(cb => cb.addEventListener('change', onSiteToggle));
+
+  document.querySelectorAll('input[type=checkbox][data-suburb-select-all]')
+    .forEach(cb => cb.addEventListener('change', onSuburbSelectAll));
+
+  // Optional: if you kept the red "Add selected" button (id=addSelectedBtn),
+  // it just forces a sync (useful if you didn’t want real-time auto add)
+  document.getElementById('addSelectedBtn')?.addEventListener('click', uiToBasket);
+}
+
+// Keep Assign button state in sync with operator choice
+document.getElementById('operatorSel')?.addEventListener('change', updateAssignButtonState);
+
+// Initial wire-up after the DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  wireAssignParks();
+  updateAssignButtonState();
+});
+
+/* ===== end bridge ===== */
+</script>
+
   
 </body>
 </html>
