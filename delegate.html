@@ -124,6 +124,53 @@
     .toast.show{ display:block }
 
     @media (max-width:1100px){ .grid{ grid-template-columns: 1fr } .map-wrap{ height: 360px } }
+
+    /* Inputs that look like your other fields */
+.inputish{
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--muted);
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+/* One-per-line suburb list */
+.suburb-list.vertical{
+  list-style: none;
+  padding: 0; margin: 0;
+  display: grid;
+  grid-template-columns: 1fr; /* exactly one per row */
+  gap: 8px;
+}
+.suburb-row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--muted);
+  border-radius: 10px;
+  background: #fff;
+}
+.suburb-row-left{
+  display: flex; align-items: center; gap: 10px;
+}
+.suburb-row label{
+  font-weight: 700; color: var(--ink-2);
+  cursor: pointer;
+}
+.suburb-row .mini{
+  border: 0; border-radius: 8px; padding: 6px 10px;
+  font-weight: 800; background: var(--accent); color: #fff; cursor: pointer;
+}
+.suburb-row .mini:hover{ background: var(--accent-600); }
+
+.muted-note{
+  color: #64748b; display: block; margin-top: 10px;
+}
+
+
+    
   </style>
 </head>
 <body>
@@ -153,17 +200,17 @@
      
 
       <section class="card">
-  <h3>Assign by suburb</h3>
+  <h3>Assign Parks</h3>
   <div class="body">
     <div class="row" style="margin-bottom:10px; gap:8px">
-      <input id="suburbSearch" placeholder="Search suburbs…" style="flex:1; padding:10px 12px; border:1px solid var(--muted); border-radius:10px;">
+      <input id="suburbSearch" placeholder="Search suburbs…" class="inputish">
       <button id="addSelectedSuburbs" class="btn btn-accent" type="button">Add selected</button>
     </div>
 
-    <div id="suburbList" class="suburb-list"></div>
+    <ul id="suburbList" class="suburb-list vertical"></ul>
 
-    <small style="color:#64748b; display:block; margin-top:10px">
-      Tip: Each suburb you add goes into the basket as the <b>zone</b>, with empty range and site IDs.
+    <small class="muted-note">
+      Each suburb you add goes into the basket as the <b>zone</b> (range/site IDs left empty).
     </small>
   </div>
 </section>
