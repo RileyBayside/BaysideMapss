@@ -97,7 +97,10 @@
       display:flex; align-items:center; justify-content:center; color:#64748b; 
     }
     .map-wrap .placeholder{
-       text-align:center; border:2px dashed #cbd5e1; padding:20px; border-radius:16px; width:90%;
+      <div class="map-wrap" id="map">
+      <div id="leafletMap" style="height:100%; width:100%; border-radius:16px;"></div>
+      </div>
+      text-align:center; border:2px dashed #cbd5e1; padding:20px; border-radius:16px; width:90%;
     }
 
     /* Right: operator + basket */
@@ -250,6 +253,7 @@
   <div class="body">
     <div class="row" style="margin-bottom:10px; gap:8px">
       <input id="suburbSearch" placeholder="Search suburbs…" class="inputish">
+      <button id="addSelectedSuburbs" class="btn btn-accent" type="button">Add selected</button>
     </div>
 
     <ul id="suburbList" class="suburb-list vertical"></ul>
@@ -477,8 +481,262 @@
     });
 
     // Optional: deep links
+    if(location.hash === '#zone'){ qaZone.focus(); }
   </script>
 
+  <script>
+(function () {
+  // ====== CONFIG ======
+  // Point this to the SAME file ParksMowing uses (update the path if different).
+  const GEOJSON_URL = './data/parks-mowing.geojson'; // <-- change if needed
+
+  // Which property acts as your site identifier?
+  const SITE_ID_PROP = 'id'; // e.g. 'id', 'siteId', 'NAME' — change if yours differs
+
+  // ====== MAP SETUP ======
+  if (!document.getElementById('leafletMap')) return; // safety
+
+  // Create Leaflet map
+  const map = L.map('leafletMap', {
+    zoomControl: true,
+    attributionControl: false
+  });
+
+  // A neutral basemap (free & no token)
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19
+  }).addTo(map);
+
+  // Styles
+  const defaultStyle = {
+    color: '#1d4ed8',      // stroke
+    weight: 2,
+    opacity: 0.9,
+    fillColor: '#60a5fa',  // fill
+    fillOpacity: 0.25
+  };
+  const selectedStyle = {
+    color: '#b91c1c',
+    weight: 3,
+    opacity: 1,
+    fillColor: '#ef4444',
+    fillOpacity: 0.35
+  };
+
+  // Track selected IDs so we can toggle highlight
+  const selected = new Set();
+
+  // Toggle selection and add to basket instantly
+  function onFeatureClick(e, feature, layer) {
+    const props = feature.properties || {};
+    const siteId = props[SITE_ID_PROP] || props.id || props.siteId || props.name;
+    if (!siteId) return;
+
+    if (selected.has(siteId)) {
+      selected.delete(siteId);
+      layer.setStyle(defaultStyle);
+    } else {
+      selected.add(siteId);
+      layer.setStyle(selectedStyle);
+
+      // Push straight into your existing basket
+      window.addToBasket({
+        zone: props.zone || '',        // tweak if your data carries a zone
+        range: '',                     // not used here
+        siteIds: [String(siteId)]
+      });
+    }
+  }
+
+  // Load & render GeoJSON
+  fetch(GEOJSON_URL)
+    .then(r => r.json())
+    .then(data => {
+      const geo = L.geoJSON(data, {
+        style: defaultStyle,
+        onEachFeature: (feature, layer) => {
+          // Hover effect
+          layer.on('mouseover', () => layer.setStyle({ weight: 3, fillOpacity: 0.35 }));
+          layer.on('mouseout', () => {
+            const props = feature.properties || {};
+            const siteId = props[SITE_ID_PROP] || props.id || props.siteId || props.name;
+            if (selected.has(siteId)) layer.setStyle(selectedStyle);
+            else layer.setStyle(defaultStyle);
+          });
+
+          // Click to select + add to basket
+          layer.on('click', (e) => onFeatureClick(e, feature, layer));
+
+          // Optional popup label
+          const props = feature.properties || {};
+          const name = props.name || props[SITE_ID_PROP] || 'Site';
+          const zone = props.zone ? `Zone: ${props.zone}<br>` : '';
+          layer.bindPopup(`<strong>${name}</strong><br>${zone}`);
+        }
+      }).addTo(map);
+
+      // Fit to bounds nicely
+      const b = geo.getBounds();
+      if (b.isValid()) map.fitBounds(b.pad(0.05));
+      else map.setView([-27.5, 153.2], 11); // fallback center if no bounds
+    })
+    .catch(err => {
+      console.warn('GeoJSON load error:', err);
+      const holder = document.getElementById('leafletMap');
+      if (holder) holder.innerHTML =
+        '<div style="padding:12px;color:#b91c1c;font-weight:700">Failed to load map data.</div>';
+    });
+
+})();
+</script>
+
+<!-- Leaflet (same as ParksMowing) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    BaysideMaps.initParksMowingMap({
+      containerId: 'leafletMap',     // mount into delegate map area
+      geojsonUrl: 'data.geojson',    // same data as ParksMowing
+      onFeatureClick: (feature, layer, evt) => {
+        // Pick your site ID field (adjust if yours is called something else)
+        const p = feature.properties || {};
+        const siteId = p.id || p.siteId || p.NAME || feature.id;
+        if (!siteId) return;
+
+        // Send to your existing basket flow
+        window.addToBasket({
+          zone: p.zone || '',         // keep if you have it in properties
+          range: '',
+          siteIds: [String(siteId)]
+        });
+
+        // Optional: quick visual feedback
+        layer.setStyle({ color: '#b91c1c', weight: 3, fillColor: '#ef4444', fillOpacity: 0.35 });
+      }
+    });
+  });
+</script>
+<!-- Leaflet (same as ParksMowing) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<!-- Your shared Parks Mowing logic -->
+<script src="script.js"></script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    BaysideMaps.initParksMowingMap({
+      containerId: 'leafletMap',     // mount into delegate map area
+      geojsonUrl: 'data.geojson',    // same data as ParksMowing
+      onFeatureClick: (feature, layer, evt) => {
+        // Pick your site ID field (adjust if yours is called something else)
+        const p = feature.properties || {};
+        const siteId = p.id || p.siteId || p.NAME || feature.id;
+        if (!siteId) return;
+
+        // Send to your existing basket flow
+        window.addToBasket({
+          zone: p.zone || '',         // keep if you have it in properties
+          range: '',
+          siteIds: [String(siteId)]
+        });
+
+        // Optional: quick visual feedback
+        layer.setStyle({ color: '#b91c1c', weight: 3, fillColor: '#ef4444', fillOpacity: 0.35 });
+      }
+    });
+  });
+</script>  
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Optional: clustering for lots of labels -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>  
+
+  <script>
+document.addEventListener('DOMContentLoaded', async () => {
+  // 1) Make the map
+  const map = L.map('leafletMap');
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19}).addTo(map);
+
+  // Small CSS for the label markers
+  const css = `.siteLabel{
+    background:#fff;border:1px solid #dcdcdc;border-radius:6px;
+    padding:2px 6px;font:12px/1.2 Inter,system-ui,sans-serif;
+    box-shadow:0 1px 2px rgba(0,0,0,.15); white-space:nowrap;
+  }`;
+  const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+
+  // 2) Load your data
+  const resp = await fetch('data.geojson');         // <— exact file name/case
+  const gj = await resp.json();
+  const features = gj?.features || [];
+
+  // 3) Cluster (remove if you don't want it)
+  const cluster = L.markerClusterGroup ? L.markerClusterGroup() : L.layerGroup();
+
+  // Helper: get a good point for ANY geometry
+  function getLatLng(feat){
+    const g = feat.geometry;
+    if (!g) return null;
+    if (g.type === 'Point') {
+      const [lng, lat] = g.coordinates;
+      return L.latLng(lat, lng);
+    }
+    const temp = L.geoJSON(feat);
+    const b = temp.getBounds();
+    return b.isValid() ? b.getCenter() : null;
+  }
+
+  // Helper: what to show as the label and use as site ID
+  function getLabel(feat){
+    const p = feat.properties || {};
+    return p.code || p.id || p.name || feat.id || 'Site';
+  }
+
+  let added = 0, skipped = 0;
+
+  // 4) Make a label marker for every feature
+  features.forEach(f => {
+    const ll = getLatLng(f);
+    if (!ll) { skipped++; return; }
+
+    const label = getLabel(f);
+    const icon = L.divIcon({ className: 'siteLabel', html: label, iconSize: null });
+    const m = L.marker(ll, { icon });
+
+    // Click = add to basket
+    m.on('click', () => {
+      const p = f.properties || {};
+      const siteId = p.code || p.id || p.name || f.id;
+      if (!siteId) return;
+      window.addToBasket({ zone: p.zone || '', range: '', siteIds: [String(siteId)] });
+      if (m._icon) { m._icon.style.background = '#ffe3e3'; m._icon.style.borderColor = '#ef4444'; }
+    });
+
+    cluster.addLayer(m);
+    added++;
+  });
+
+  cluster.addTo(map);
+
+  // 5) Fit map to all items
+  const bounds = cluster.getBounds ? cluster.getBounds() : null;
+  if (bounds && bounds.isValid()) map.fitBounds(bounds.pad(0.05));
+  else map.setView([-27.5, 153.2], 11); // fallback
+
+  console.log(`data.geojson features: ${features.length}; shown: ${added}; skipped: ${skipped}`);
+});
+</script>
+
+<script>
 (function(){
   // 1) All suburbs (labels shown in the UI)
   const SUBURBS = [
@@ -1072,8 +1330,6 @@
     const selAllId = `selall_${idx}`;
     const selAll = document.createElement('input');
     selAll.type = 'checkbox'; selAll.id = selAllId;
-    selAll.setAttribute('data-suburb-select-all', '');
-    selAll.setAttribute('data-suburb', name);
     const salabel = document.createElement('label');
     salabel.setAttribute('for', selAllId); salabel.textContent = 'Select All';
     right.appendChild(selAll); right.appendChild(salabel);
@@ -1090,9 +1346,8 @@
       const cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.className = 'suburb-item';
-      cb.setAttribute('data-site-id', parseSiteId(txt));
-      cb.setAttribute('data-suburb', name);
-      cb.setAttribute('data-label', txt);
+      cb.dataset.text = txt;
+      cb.dataset.siteid = parseSiteId(txt);
       const span = document.createElement('span');
       span.textContent = txt;
       li.appendChild(cb); li.appendChild(span);
@@ -1170,6 +1425,10 @@
   render();
   searchEl?.addEventListener('input', e => render(e.target.value));
 
+  // Add selected (suburbs + any checked items)
+  addSel?.addEventListener('click', () => {
+    let added = 0;
+
     // Checked simple suburbs
     const checkedSubs = listEl.querySelectorAll('> .suburb-row input[type="checkbox"]:checked');
     checkedSubs.forEach(cb => {
@@ -1194,129 +1453,6 @@
       toast(added ? `Added ${added} item(s) to basket` : 'Select at least one item');
     }
   });
-})();
-</script>
-
-<script>
-/* ===== 1) Live-sync selections → Assignment Tasks ===== */
-(function () {
-  // Where your suburbs/parks list is rendered:
-  const listRoot = document.getElementById('suburbList'); // <-- keep this id
-
-  // Fallbacks for the Tasks container (you renamed “Basket” → “Tasks” in UI)
-  function tasksContainer() {
-    return (
-      document.getElementById('basket') ||   // old id
-      document.getElementById('tasks')  ||   // if you created this
-      document.getElementById('tasks-list')  // any other you’re using
-    );
-  }
-
-  // We’ll mirror the selection here. Key = siteId (e.g., “M0123”)
-  const selected = new Map(); // siteId -> { siteId, label, suburb }
-
-  // Rebuild _basket from the current selection and re-render the Tasks panel.
-  // We group by suburb so each Task row shows the suburb (“zone”) + IDs list.
-  function rebuildBasketFromSelection() {
-    if (!window._basket) window._basket = [];
-    const bySuburb = new Map(); // suburb -> [ids]
-    selected.forEach(({ siteId, suburb }) => {
-      if (!bySuburb.has(suburb)) bySuburb.set(suburb, []);
-      bySuburb.get(suburb).push(siteId);
-    });
-
-    // Replace current basket with grouped selection
-    window._basket.length = 0;
-    bySuburb.forEach((ids, suburb) => {
-      window._basket.push({
-        zone: suburb,
-        range: '',
-        siteIds: ids
-      });
-    });
-
-    // Your existing renderer (already in this page)
-    if (typeof window.renderBasket === 'function') {
-      window.renderBasket();
-    } else {
-      // Minimal fallback if renderBasket() isn’t present
-      const el = tasksContainer();
-      if (!el) return;
-      el.innerHTML = '';
-      if (window._basket.length === 0) {
-        const p = document.createElement('p');
-        p.style.color = '#64748b';
-        p.textContent = 'No tasks selected.';
-        el.appendChild(p);
-        return;
-      }
-      window._basket.forEach(it => {
-        const row = document.createElement('div');
-        row.style.cssText = 'padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:8px;background:#fff;font-weight:700';
-        row.innerHTML = `<span class="pill" style="background:#fee2e2;color:#7f1d1d;border:1px solid #fecaca;padding:3px 8px;border-radius:999px">${it.zone}</span>
-          <small style="font-weight:600;color:#64748b"> — ${it.siteIds.join(', ')}</small>`;
-        el.appendChild(row);
-      });
-    }
-  }
-
-  // Handle individual park checkbox changes
-  function onSiteToggle(cb) {
-    const id = cb.dataset.siteId;
-    if (!id) return;
-    const suburb = cb.dataset.suburb || '';
-    const label = cb.dataset.label || id;
-    if (cb.checked) {
-      selected.set(id, { siteId: id, suburb, label });
-    } else {
-      selected.delete(id);
-    }
-    rebuildBasketFromSelection();
-  }
-
-  // Event delegation: listen once on the container
-  if (listRoot) {
-    listRoot.addEventListener('change', (e) => {
-      const t = e.target;
-      // A site row checkbox
-      if (t.matches('input[type="checkbox"][data-site-id]')) {
-        onSiteToggle(t);
-      }
-      // A suburb “Select All” checkbox (header)
-      if (t.matches('input[type="checkbox"][data-suburb-select-all]')) {
-        const suburb = t.dataset.suburb || '';
-        const rows = listRoot.querySelectorAll(
-          `input[type="checkbox"][data-site-id][data-suburb="${CSS.escape(suburb)}"]`
-        );
-        rows.forEach(cb => {
-          cb.checked = t.checked;
-          // Trigger change for each to keep selection in sync
-          cb.dispatchEvent(new Event('change', { bubbles: true }));
-        });
-      }
-    });
-  }
-
-  // Optional: make the Assignment “Clear” button uncheck everything on left too
-  const clearBtn = document.getElementById('clearBtn');
-  if (clearBtn) {
-    clearBtn.addEventListener('click', () => {
-      selected.clear();
-      const all = listRoot ? listRoot.querySelectorAll('input[type="checkbox"][data-site-id], input[type="checkbox"][data-suburb-select-all]') : [];
-      all.forEach(cb => { cb.checked = false; });
-      rebuildBasketFromSelection();
-    });
-  }
-
-  // Safety: if someone clicks Assign with nothing selected, nudge them
-  const assignBtn = document.getElementById('assignBtn');
-  if (assignBtn) {
-    assignBtn.addEventListener('click', () => {
-      if (!window._basket || window._basket.length === 0) {
-        alert('Select parks on the left first.');
-      }
-    });
-  }
 })();
 </script>
   
