@@ -19,6 +19,17 @@
 
   <style>
 
+    /* Collapsible suburb with inner site list */
+.suburb-details { border:1px solid var(--muted); border-radius:10px; background:#fff; }
+.suburb-details summary {
+  list-style:none; cursor:pointer; padding:10px 12px;
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  font-weight:700; color:var(--ink-2);
+}
+.suburb-details[open] summary { border-bottom:1px solid var(--muted); }
+.suburb-sites { margin:0; padding:10px 14px 12px 28px; }
+.suburb-sites li { margin:4px 0; font-weight:700; color:#111827; }
+
     .suburb-list{
   display:grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -707,104 +718,33 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 <script>
 (function(){
-  // Your fixed suburb list
+  // Suburbs list
   const SUBURBS = [
-    'Thorneside',
-    'Birkdale',
-    'Wellington Point',
-    'Alexandra Hills',
-    'Capalaba',
-    'Ormiston',
-    'Cleveland',
-    'Thornlands',
-    'Victoria Point',
-    'Redland Bay',
-    'Mt Cotton'
+    'Thorneside','Birkdale','Wellington Point','Alexandra Hills','Capalaba',
+    'Ormiston','Cleveland','Thornlands','Victoria Point','Redland Bay','Mt Cotton'
   ];
 
-  const listEl   = document.getElementById('suburbList');
-  const searchEl = document.getElementById('suburbSearch');
-  const addSel   = document.getElementById('addSelectedSuburbs');
-
-  function render(filter=''){
-    listEl.innerHTML = '';
-    const q = filter.trim().toLowerCase();
-
-    SUBURBS
-      .filter(s => !q || s.toLowerCase().includes(q))
-      .forEach((name, i) => {
-        const id = `suburb_${i}`;
-        const row = document.createElement('div');
-        row.className = 'suburb-item';
-
-        const left = document.createElement('div');
-        left.style.display = 'flex';
-        left.style.alignItems = 'center';
-        left.style.gap = '10px';
-
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.id = id;
-        cb.value = name;
-
-        const label = document.createElement('label');
-        label.setAttribute('for', id);
-        label.textContent = name;
-
-        left.appendChild(cb);
-        left.appendChild(label);
-
-        const addBtn = document.createElement('button');
-        addBtn.className = 'mini';
-        addBtn.type = 'button';
-        addBtn.textContent = 'Add';
-        addBtn.addEventListener('click', () => {
-          // We reuse your basket shape: zone=suburb, range='', siteIds=[]
-          window.addToBasket({ zone: name, range: '', siteIds: [] });
-        });
-
-        row.appendChild(left);
-        row.appendChild(addBtn);
-        listEl.appendChild(row);
-      });
-
-    if (!listEl.children.length){
-      const p = document.createElement('p');
-      p.style.color = '#64748b';
-      p.textContent = 'No suburbs match your search.';
-      listEl.appendChild(p);
-    }
-  }
-
-  // Initial render
-  render();
-
-  // Search filter
-  searchEl?.addEventListener('input', e => render(e.target.value));
-
-  // Add all checked
-  addSel?.addEventListener('click', () => {
-    const checked = listEl.querySelectorAll('input[type="checkbox"]:checked');
-    if (!checked.length){ toast && toast('Select at least one suburb'); return; }
-    checked.forEach(cb => window.addToBasket({ zone: cb.value, range: '', siteIds: [] }));
-  });
-})();
-</script>
-
-  <script>
-(function(){
-  const SUBURBS = [
-    'Thorneside',
-    'Birkdale',
-    'Wellington Point',
-    'Alexandra Hills',
-    'Capalaba',
-    'Ormiston',
-    'Cleveland',
-    'Thornlands',
-    'Victoria Point',
-    'Redland Bay',
-    'Mt Cotton'
+  // Thorneside items (numbered, SITEID – Name)
+  const THORNESIDE_ITEMS = [
+    '1. M0123 - Helens Street',
+    '2. M0427 - Thorneside Road Foreshore Area',
+    '3. M0402 - Queens Esplanade vacant block near No.48',
+    '4. M0136 - Leon St and Fisher Rd',
+    '5. M0364 - Fisher Road to Mooroondu sportsfields',
+    '6. M0408 - Saul Street',
+    '7. M0819 - Alma Street',
+    '8. M0105 - Alma Street',
+    '9. M0359 - Eva Street Pumphouse',
+    '10. M0361 - Ferry Road',
+    '11. M0362 - Ferry Road - frontages to drainage areas',
+    '12. M0363 - Ferry Road Council block near No. 86',
+    '13. M1677 - Ferry Road',
+    '14. M0392 - Mond Street',
+    '15. M0436 - Wunulla Street',
+    '16. M0110 - Boorana Street',
+    '17. M0147 - Railway Parade',
+    '18. M0367 - Frank and Beatty Streets',
+    '19. M0374 - Henry Street'
   ];
 
   const listEl   = document.getElementById('suburbList');
@@ -820,6 +760,40 @@ document.addEventListener('DOMContentLoaded', async () => {
       .forEach((name, i) => {
         const id = `suburb_${i}`;
 
+        // Special: Thorneside as a collapsible dropdown with numbered items
+        if (name === 'Thorneside') {
+          const details = document.createElement('details');
+          details.className = 'suburb-details';
+
+          const summary = document.createElement('summary');
+          const left = document.createElement('div');
+          left.className = 'suburb-row-left';
+
+          const cb = document.createElement('input');
+          cb.type = 'checkbox'; cb.id = id; cb.value = name;
+
+          const label = document.createElement('label');
+          label.setAttribute('for', id); label.textContent = name;
+
+          left.appendChild(cb); left.appendChild(label);
+          summary.appendChild(left);
+          details.appendChild(summary);
+
+          // Numbered list inside Thorneside
+          const ol = document.createElement('ol');
+          ol.className = 'suburb-sites';
+          THORNESIDE_ITEMS.forEach(txt => {
+            const li = document.createElement('li');
+            li.textContent = txt;           // exactly "N. Mxxxx - Name"
+            ol.appendChild(li);
+          });
+          details.appendChild(ol);
+
+          listEl.appendChild(details);
+          return;
+        }
+
+        // Default: simple one-per-line row for other suburbs
         const li = document.createElement('li');
         li.className = 'suburb-row';
 
@@ -827,9 +801,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         left.className = 'suburb-row-left';
 
         const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.id = id;
-        cb.value = name;
+        cb.type = 'checkbox'; cb.id = id; cb.value = name;
 
         const label = document.createElement('label');
         label.setAttribute('for', id);
@@ -839,9 +811,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         left.appendChild(label);
 
         const addBtn = document.createElement('button');
-        addBtn.className = 'mini';
-        addBtn.type = 'button';
-        addBtn.textContent = 'Add';
+        addBtn.className = 'mini'; addBtn.type = 'button'; addBtn.textContent = 'Add';
         addBtn.addEventListener('click', () => {
           window.addToBasket({ zone: name, range: '', siteIds: [] });
         });
@@ -865,7 +835,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Search filter
   searchEl?.addEventListener('input', e => render(e.target.value));
 
-  // Add all checked
+  // Add all checked suburbs (unchanged behavior)
   addSel?.addEventListener('click', () => {
     const checked = listEl.querySelectorAll('input[type="checkbox"]:checked');
     if (!checked.length){ toast && toast('Select at least one suburb'); return; }
@@ -873,7 +843,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 })();
 </script>
-
   
 </body>
 </html>
