@@ -197,6 +197,34 @@
 /* Keep the header labels bold: Thorneside + Select All */
 .suburb-details summary label,
 .summary-right label { font-weight: 700; }
+
+    /* Center the content inside the Assignment tab */
+.assign-stack {
+  max-width: 360px;
+  margin: 0 auto;          /* centers the column */
+}
+
+/* Make inputs/selects comfortable and full width inside the column */
+.assign-stack input,
+.assign-stack select,
+.assign-stack button {
+  width: 100%;
+}
+
+/* Keep the bottom buttons aligned but within the centered column */
+.assign-stack .foot {
+  display: flex;
+  gap: 10px;
+}
+
+.assign-stack .grow {
+  flex: 1;
+}
+
+/* Rename “Basket” to “Tasks” visually: tweak empty state wording */
+.basket p {
+  text-align: left;
+}
     
   </style>
 </head>
@@ -243,55 +271,47 @@
 </section>
 
       <!-- Right: Operator + Basket -->
-      <aside class="card">
-        <h3>Assignment</h3>
-        <div class="body">
-          <div class="stack">
-            <div class="half">
-              <label class="strong" for="operatorSelect">Operator</label>
-              <select id="operatorSelect" required>
-                <option disabled selected>Loading operators…</option>
-              </select>
-              <small style="color:#64748b">Pulls from <b>users</b> where <code>role == "operator"</code>.</small>
-            </div>
+    <aside class="card">
+  <h3>Assignment</h3>
+  <div class="body">
+    <!-- Center the content in the right panel -->
+    <div class="stack assign-stack">
+      <div class="half">
+        <label class="strong" for="operatorSel">Operator</label>
+        <select id="operatorSel" required>
+          <option disabled selected>Loading operators…</option>
+        </select>
+        <small style="color:#64748b">Pulls from <b>users</b> where <code>role == "operator"</code>.</small>
+      </div>
 
-            <div class="half" id="quickAdd">
-              <label class="strong">Quick add — Zone & Range</label>
-              <div class="row">
-                <input id="qa_zone" placeholder="Zone 1" />
-                <input id="qa_range" placeholder="1–50" />
-              </div>
-              <button class="btn btn-accent" id="qa_add" type="button">Add to basket</button>
-            </div>
+      <div class="half">
+        <label class="strong">Assign by site IDs</label>
+        <input id="ids_input" placeholder="e.g. M0123, M0361" />
+        <button class="btn btn-accent" id="ids_add" type="button">Assign</button>
+      </div>
 
-            <div class="half">
-              <label class="strong">Add by specific site IDs</label>
-              <input id="ids_input" placeholder="e.g. 12, 18, 21" />
-              <button class="btn btn-accent" id="ids_add" type="button">Add to basket</button>
-            </div>
+      <div class="half">
+        <label>Notes (optional)</label>
+        <input id="note_input" placeholder="e.g., High priority, access after 10am" />
+      </div>
 
-            <div class="half">
-              <label>Notes (optional)</label>
-              <input id="note_input" placeholder="e.g., High priority, access after 10am" />
-            </div>
+      <div class="half">
+        <label>Due date (optional)</label>
+        <input id="due_input" type="date" />
+      </div>
 
-            <div class="half">
-              <label>Due date (optional)</label>
-              <input id="due_input" type="date" />
-            </div>
+      <div class="half">
+        <label class="strong">Tasks</label>
+        <div id="basket" class="basket"></div> <!-- keep id=basket so existing JS works -->
+      </div>
 
-            <div class="half">
-              <label class="strong">Basket</label>
-              <div id="basket" class="basket"></div>
-            </div>
-
-            <div class="foot">
-              <button class="btn grow" id="assignBtn" type="button">Assign tasks</button>
-              <button class="btn" id="clearBtn" type="button" style="background:#64748b">Clear</button>
-            </div>
-          </div>
-        </div>
-      </aside>
+      <div class="foot">
+        <button class="btn grow" id="assignBtn" type="button">Assign tasks</button>
+        <button class="btn" id="clearBtn" type="button" style="background:#64748b">Clear</button>
+      </div>
+    </div>
+  </div>
+</aside>
     </section>
   </main>
 
@@ -329,9 +349,6 @@
     const logoutBtn = document.getElementById('logoutBtn');
 
     const operatorSelect = document.getElementById('operatorSelect');
-    const qaZone   = document.getElementById('qa_zone');
-    const qaRange  = document.getElementById('qa_range');
-    const qaAddBtn = document.getElementById('qa_add');
 
     const idsInput = document.getElementById('ids_input');
     const idsAdd   = document.getElementById('ids_add');
@@ -401,7 +418,7 @@
       if(_basket.length === 0){
         const p = document.createElement('p');
         p.style.color = '#64748b';
-        p.textContent = 'Basket is empty. Add items by Zone & Range or by Site IDs.';
+        p.textContent = 'No tasks yet. Add items by Site IDs or from the Assign Parks tab.';
         basketEl.appendChild(p);
         return;
       }
@@ -424,14 +441,7 @@
     }
 
     // Quick add handlers
-    qaAddBtn.addEventListener('click', ()=>{
-      const z = (qaZone.value||'').trim(); const r = (qaRange.value||'').trim();
-      if(!z && !r){ toast('Enter Zone and/or Range'); return; }
-      addToBasket({ zone:z, range:r, siteIds:[] });
-      qaRange.value=''; // keep zone, clear range
-    });
-
-    idsAdd.addEventListener('click', ()=>{
+      idsAdd.addEventListener('click', ()=>{
       const raw = (idsInput.value||'').trim();
       if(!raw){ toast('Enter at least one site ID'); return; }
       const ids = raw.split(',').map(s=>s.trim()).filter(Boolean);
