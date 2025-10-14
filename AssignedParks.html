@@ -10,17 +10,12 @@
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 
-  <!-- Sidebar styles (visual only for now) -->
+  <!-- Sidebar styles (same as ParksMowing) -->
   <link rel="stylesheet" href="sidebar.css" />
 
   <style>
-    /* Full-height map */
+    /* Full-height map like ParksMowing */
     #map { height: 100vh; }
-    /* Subtle highlight legend dot like your accent color */
-    .legend-dot {
-      display:inline-block; width:10px; height:10px; border-radius:50%;
-      background:#d11e2b; vertical-align:middle; margin-right:6px;
-    }
   </style>
 </head>
 <body>
@@ -31,154 +26,31 @@
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
 
-  <!-- Sidebar toggle button (visual parity only) -->
+  <!-- Sidebar toggle button -->
   <button id="sidebar-toggle">☰</button>
 
-  <!-- Sidebar container (not wired for filtering yet) -->
+  <!-- Sidebar container (same structure; behavior handled by your JS) -->
   <div id="sidebar">
     <button id="toggle-all">Expand All</button>
-    <div id="sidebar-content">
-      <!-- Optional small legend so operators know what’s focused -->
-      <div style="padding:10px 0; font-weight:600;">
-        <span class="legend-dot"></span>Highlighted = assigned
-      </div>
-    </div>
+    <div id="sidebar-content"></div>
 
-    <!-- Keep these buttons for layout parity (no actions wired here) -->
-    <button disabled>Admin Login</button>
+    <button onclick="adminLogin()">Admin Login</button>
+
     <div id="admin-tools" style="display:none">
-      <button disabled>PDF report for Council</button>
-      <button disabled>PDF Report for Bayside</button>
-      <button disabled>Clear All User Data</button>
-      <button disabled>Show Completed Today</button>
+      <button onclick="exportPDFCouncil()">PDF report for Council</button>
+      <button onclick="exportPDFBayside()">PDF Report for Bayside</button>
+      <button onclick="clearUserData()">Clear All User Data</button>
+      <button onclick="showToday()">Show Completed Today</button>
     </div>
   </div>
 
-  <!-- Map container -->
+  <!-- Map container (Leaflet map is created by script.js the same way as ParksMowing) -->
   <div id="map"></div>
 
-  <!-- Leaflet -->
+  <!-- Core scripts (exactly as ParksMowing so it uses the SAME satellite layer + data.geojson) -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-  <!-- Page-specific map logic -->
-  <script>
-    (async function () {
-      // 1) Auth gate (auth-guard also handles, but we can early-return too)
-      const auth = firebase.auth();
-      await new Promise(resolve => {
-        const off = auth.onAuthStateChanged(u => { off(); resolve(); });
-      });
-
-      // 2) Pull focus ids from URL (?focus=M0123,M0361)
-      const params = new URLSearchParams(location.search);
-      const focusParam = params.get('focus') || '';
-      const FOCUS_IDS = focusParam
-        .split(',')
-        .map(s => s.trim().toUpperCase())
-        .filter(Boolean);
-
-      // 3) Create the Leaflet map
-      const map = L.map('map', { zoomControl: true, attributionControl: false });
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-
-      // Styles
-      const defaultStyle = {
-        color: '#1d4ed8',   // stroke
-        weight: 2,
-        opacity: 0.9,
-        fillColor: '#60a5fa',
-        fillOpacity: 0.25
-      };
-      const focusStyle = {
-        color: '#b91c1c',
-        weight: 3,
-        opacity: 1,
-        fillColor: '#ef4444',
-        fillOpacity: 0.35
-      };
-
-      // 4) Load your data (same file ParksMowing uses)
-      const GEOJSON_URL = 'data.geojson'; // change if your file lives elsewhere
-      let data;
-      try {
-        const resp = await fetch(GEOJSON_URL);
-        data = await resp.json();
-      } catch (e) {
-        console.warn('Failed to load data.geojson', e);
-        alert('Failed to load map data.');
-        // center somewhere reasonable so page is not blank
-        map.setView([-27.5, 153.2], 11);
-        return;
-      }
-
-      // 5) Helper to extract a site id from a feature, as robustly as possible
-      function getSiteId(feature) {
-        const p = feature?.properties || {};
-        // Try common fields you’ve used before
-        return String(p.code || p.id || p.NAME || feature.id || '').toUpperCase();
-      }
-
-      // 6) Add the layer and highlight focused features
-      let anyGeometry = false;
-      let anyFocus = false;
-      const focusBounds = L.latLngBounds();
-
-      const layer = L.geoJSON(data, {
-        style: defaultStyle,
-        onEachFeature: (feature, lyr) => {
-          anyGeometry = true;
-          const sid = getSiteId(feature);
-
-          // Hover effect
-          lyr.on('mouseover', () => lyr.setStyle({ weight: 3, fillOpacity: 0.35 }));
-          lyr.on('mouseout', () => {
-            // keep focus style if selected
-            if (FOCUS_IDS.includes(sid)) lyr.setStyle(focusStyle);
-            else lyr.setStyle(defaultStyle);
-          });
-
-          // Focus/highlight if this feature is in the list
-          if (FOCUS_IDS.length && FOCUS_IDS.includes(sid)) {
-            lyr.setStyle(focusStyle);
-            anyFocus = true;
-            try {
-              const b = lyr.getBounds?.();
-              if (b && b.isValid()) focusBounds.extend(b);
-            } catch(_) {}
-          }
-
-          // Label popup for quick identification
-          const p = feature.properties || {};
-          const name = p.name || sid || 'Site';
-          const zone = p.zone ? `<br><small>Zone: ${p.zone}</small>` : '';
-          lyr.bindPopup(`<strong>${name}</strong>${zone}`);
-        }
-      }).addTo(map);
-
-      // 7) Fit bounds
-      if (anyFocus && focusBounds.isValid()) {
-        map.fitBounds(focusBounds.pad(0.08));
-      } else {
-        // fallback: fit to all geometry if available
-        const all = layer.getBounds?.();
-        if (all && all.isValid()) map.fitBounds(all.pad(0.05));
-        else map.setView([-27.5, 153.2], 11);
-      }
-
-      // 8) (Optional) if no focus provided, the page still works as a read-only map
-      // You can add more behavior here later when we wire the sidebar.
-
-      // 9) Keep the sidebar toggle button cosmetic for now
-      const toggleBtn = document.getElementById('sidebar-toggle');
-      const sidebar = document.getElementById('sidebar');
-      if (toggleBtn && sidebar) {
-        toggleBtn.addEventListener('click', () => {
-          sidebar.classList.toggle('open'); // relies on your sidebar.css
-        });
-      }
-    })();
-  </script>
-
-  <!-- (Deliberately not including script.js/sidebar.js yet so we don't clash with a second map init) -->
+  <script src="script.js"></script>
+  <script src="sidebar.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </body>
 </html>
