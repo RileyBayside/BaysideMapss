@@ -15,6 +15,7 @@
 
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
   
@@ -100,38 +101,62 @@
 
   <footer class="footer-space"></footer>
 
- <script>
-  (function() {
-    // Define a reusable logout helper (so other pages can also call window.logout)
-    window.logout = async function(){
+<script>
+  (function () {
+    // Show a nice display name in the pill (top-right)
+    async function setDisplayName(u) {
+      const el = document.getElementById('user-email');
+      if (!el) return;
+
+      // default while we look it up
+      el.textContent = 'Signed in';
+
+      try {
+        // try Firestore users/{uid} first
+        const snap = await firebase.firestore().collection('users').doc(u.uid).get();
+        const d = snap.data() || {};
+        const display =
+          d.name ||
+          d.username ||
+          u.displayName ||
+          (u.email ? u.email.split('@')[0] : '') ||
+          u.email ||
+          u.uid;
+
+        el.textContent = display;
+      } catch (e) {
+        // graceful fallback
+        el.textContent =
+          u.displayName ||
+          (u.email ? u.email.split('@')[0] : '') ||
+          u.email ||
+          u.uid;
+      }
+    }
+
+    // When auth state is ready, update the pill (auth-guard handles redirects)
+    firebase.auth().onAuthStateChanged((u) => {
+      if (u) setDisplayName(u);
+    });
+
+    // Reusable logout (keeps your earlier fix)
+    window.logout = async function () {
       try {
         await firebase.auth().signOut();
       } catch (e) {
         console.warn('signOut failed (will still redirect):', e);
       }
-      // Clear any stored "next" target so auth-guard doesn't bounce you back
       try {
         sessionStorage.removeItem('bayside_next');
         localStorage.removeItem('bayside_next');
       } catch (_) {}
-
-      // Use replace() so the back button doesn't return to a protected page
       location.replace('./login.html');
     };
 
-    // Fill the email pill if your login code stores it (unchanged)
-    try {
-      const emailEl = document.getElementById('user-email');
-      const stored = localStorage.getItem('bayside:userEmail');
-      if (stored && emailEl) emailEl.textContent = stored;
-    } catch (e) {}
-
-    // Wire up logout to the button
+    // Wire the button
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
-      logoutBtn.addEventListener('click', function(){
-        window.logout(); // sign out first, then redirect
-      });
+      logoutBtn.addEventListener('click', () => window.logout());
     }
   })();
 </script>
