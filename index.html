@@ -83,6 +83,47 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
+
+  <script>
+  async function setDisplayName(u) {
+    const el = document.getElementById('userEmail');
+    if (!el) return;
+
+    el.textContent = 'Signed in';
+
+    try {
+      const doc = await firebase.firestore().collection('users').doc(u.uid).get();
+      const d = doc.data() || {};
+      const display =
+        d.name ||
+        d.username ||
+        u.displayName ||
+        (u.email ? u.email.split('@')[0] : '') ||
+        u.email ||
+        u.uid;
+
+      el.textContent = display;
+    } catch (_) {
+      el.textContent =
+        u.displayName ||
+        (u.email ? u.email.split('@')[0] : '') ||
+        u.email ||
+        u.uid;
+    }
+  }
+
+  firebase.auth().onAuthStateChanged(async (u) => {
+    if (!u) { location.href = 'login.html'; return; }
+
+    // Set the pill text (safe if #userEmail isn’t there yet)
+    setDisplayName(u);
+
+    // Start your tasks listener here (rename to your function if different)
+    startTasksListener?.(u.uid);
+    // e.g. if your function is named subscribeToMyAssignments:
+    // subscribeToMyAssignments(u.uid);
+  });
+</script>
   
   <!-- Header / App Bar -->
   <header class="appbar">
@@ -94,6 +135,10 @@
     <div class="appbar__right">
       <span class="user-pill" id="user-email">user@bayside.local</span>
       <button class="btn btn-outline" id="logoutBtn" type="button">Logout</button>
+      <div class="userbox">
+  <div id="userEmail" class="email">—</div>
+  <button id="logoutBtn" class="btn" type="button">Logout</button>
+</div>
     </div>
   </header>
 
