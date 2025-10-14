@@ -2,21 +2,15 @@
 <html lang="en">
 <head>
 
-  <!-- Leaflet map CSS/JS -->
-<link
-  rel="stylesheet"
-  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  (function () {
+    const el = document.getElementById('map');
+    if (!el) return;   // no map on this page, so don't initialize
+
+    // … your Leaflet / BaysideMaps initialization here …
+  })();
+</script>
   
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Bayside — Delegate tasks</title>
-
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght:400;600;800&display=swap" rel="stylesheet">
-
   <style>
 
 /* Thorneside collapsible with inner site list */
@@ -348,7 +342,7 @@
     const emailEl   = document.getElementById('userEmail');
     const logoutBtn = document.getElementById('logoutBtn');
 
-    const operatorSelect = document.getElementById('operatorSelect');
+    const operatorSel = document.getElementById('operatorSel');
 
     const idsInput = document.getElementById('ids_input');
     const idsAdd   = document.getElementById('ids_add');
@@ -387,26 +381,26 @@
             const ops=[]; snap.forEach(doc=>ops.push({ uid: doc.id, ...doc.data() }));
             _operators = ops.slice(); // cache for later
             ops.sort((a,b)=> labelForUser(a).localeCompare(labelForUser(b)));
-            operatorSelect.innerHTML = '';
+            operatorSel.innerHTML = '';
             if(!ops.length){
-              operatorSelect.innerHTML = '<option disabled selected>No operators found</option>';
+              operatorSel.innerHTML = '<option disabled selected>No operators found</option>';
               return;
             }
             const ph = document.createElement('option');
             ph.disabled = true; ph.selected = true; ph.textContent = 'Select operator…';
-            operatorSelect.appendChild(ph);
+            operatorSel.appendChild(ph);
             for(const u of ops){
               const opt = document.createElement('option');
               opt.value = u.uid;
               opt.textContent = labelForUser(u);
               opt.dataset.email = u.email || '';
               opt.dataset.username = u.username || '';
-              operatorSelect.appendChild(opt);
+              operatorSel.appendChild(opt);
             }
           },
           (err)=>{
             console.error('load operators error', err);
-            operatorSelect.innerHTML = '<option disabled selected>Error loading operators</option>';
+            operatorSel.innerHTML = '<option disabled selected>Error loading operators</option>';
           }
         );
       };
@@ -453,7 +447,7 @@
 
     // --- Assign button (writes to Firestore 'assignments') ---
     assignBtn.addEventListener('click', async ()=>{
-      const uid = operatorSelect.value;
+      const uid = operatorSel.value;
       if(!uid){ toast('Choose an operator'); return; }
       if(_basket.length === 0){ toast('Basket is empty'); return; }
 
