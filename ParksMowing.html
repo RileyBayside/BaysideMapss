@@ -33,6 +33,30 @@
     <button id="toggle-all">Expand All</button>
     <div id="sidebar-content"></div>
 
+    async function buildMapAndSidebar({ allowIds, focusIds }) {
+  // load GeoJSON (same as today)
+  const resp = await fetch('data.geojson');
+  const gj = await resp.json();
+
+  // Normalize an ID for each feature
+  function getSiteId(f){
+    const p = f.properties || {};
+    return String(p.code || p.id || p.name || f.id || '').toUpperCase();
+  }
+
+  // Filter features if allowIds was provided
+  const feats = (gj.features || []).filter(f => {
+    if (!allowIds) return true;          // show all (normal mode)
+    return allowIds.has(getSiteId(f));   // only my tasks
+  });
+
+  // Render feats to map (your existing Leaflet layer)
+  // Render the sidebar list using feats + their IDs (only allowed ones)
+
+  // If focusIds present, zoom to those; else fit to all feats
+}
+
+
     <button onclick="adminLogin()">Admin Login</button>
 
     <div id="admin-tools" style="display:none">
@@ -43,6 +67,38 @@
     </div>
   </div>
 
+// 1) Read URL
+const params = new URLSearchParams(location.search);
+const showMine = params.get('show') === 'mine';
+const focusCsv = params.get('focus') || ''; // optional
+
+// 2) Wait for auth
+firebase.auth().onAuthStateChanged(async (u) => {
+  if (!u) return; // auth-guard will redirect
+
+  // If not 'mine', just build the full map as today
+  if (!showMine) { return buildMapAndSidebar({ allowIds: null, focusIds: [] }); }
+
+  // 3) Pull this operator’s assignments
+  const db = firebase.firestore();
+  const snap = await db.collection('assignments')
+    .where('userId', '==', u.uid)
+    .get(); // (filter 'completed' client-side if needed)
+
+  const allow = new Set();
+  snap.forEach(doc => {
+    const d = doc.data() || {};
+    (Array.isArray(d.siteIds) ? d.siteIds : []).forEach(id => allow.add(String(id).toUpperCase()));
+  });
+
+  // 4) Optional focus
+  const focusIds = focusCsv
+    .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+
+  // 5) Build map + sidebar with allow-list
+  buildMapAndSidebar({ allowIds: allow, focusIds });
+});
+  
   <!-- Map container -->
   <div id="map"></div>
 
