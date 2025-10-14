@@ -10,6 +10,36 @@
 
   <!-- If you have an existing global style file, include it after this line -->
   <!-- <link rel="stylesheet" href="styles.css"> -->
+  
+<style>
+  :root{
+    --ink:#0f172a; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff;
+    --accent:#d11e2b; --accent-600:#b71a24;
+  }
+
+  /* Card (matches delegate.html look) */
+  .card{ background:var(--card); border:1px solid var(--muted);
+    border-radius:16px; box-shadow:0 8px 26px rgba(16,24,40,.08); }
+  .card h3{ margin:14px 16px 10px; font-size:16px; font-weight:800; color:#0f172a;
+    display:flex; align-items:center; gap:10px; }
+  .card h3::before{ content:""; width:10px; height:10px; border-radius:50%;
+    background:var(--accent); display:inline-block; }
+  .card .body{ padding:0 16px 16px; }
+
+  /* Tasks list inside the card */
+  .tasks-list{ display:grid; gap:8px; }
+  .task-row{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:12px; border:1px solid #e2e8f0; border-radius:12px; background:#fff;
+  }
+  .task-main{ display:flex; flex-direction:column; }
+  .task-title{ font-weight:800; color:#111827; }
+  .task-meta{ color:#64748b; font-size:13px; margin-top:2px; }
+
+  .badge{ border-radius:999px; padding:4px 8px; font-weight:800; font-size:12px; }
+  .badge-amber{ background:#fee2e2; color:#7f1d1d; border:1px solid #fecaca; }
+</style>
+  
 </head>
 <body>
 
@@ -78,9 +108,10 @@
 
 
     <!-- Tasks to complete -->
-    <section class="section">
-      <h2 class="section-title">Tasks to complete</h2>
-
+       <section class="card" id="tasksCard">
+       <h3>Tasks to complete</h3>
+       <div class="body">
+         
       <!-- Your existing JS can inject items into this list -->
       <div id="tasks-list" class="tasks">
         <!-- Example task markup for reference (leave commented out)
@@ -166,57 +197,52 @@
   (function () {
     const db = firebase.firestore();
 
-    // Renders the list into #tasks-list
     function renderTasks(items) {
-      const el = document.getElementById('tasks-list');
-      if (!el) return;
+    const el = document.getElementById('tasks-list');
+    if (!el) return;
 
-      el.innerHTML = '';
-      if (!items.length) {
-        const p = document.createElement('p');
-        p.style.color = '#64748b';
-        p.textContent = 'No tasks assigned yet.';
-        el.appendChild(p);
-        return;
-      }
+    el.innerHTML = '';
+    if (!items.length) {
+      const p = document.createElement('p');
+      p.style.color = '#64748b';
+      p.textContent = 'No tasks assigned yet.';
+      el.appendChild(p);
+      return;
+    }
 
-      items.forEach(t => {
-        const row = document.createElement('div');
-        row.className = 'task';
+    items.forEach(t => {
+      const row = document.createElement('div');
+      row.className = 'task-row';
 
-        const left = document.createElement('div');
-        left.className = 'task__left';
+      const left = document.createElement('div');
+      left.className = 'task-main';
 
-        const title = document.createElement('div');
-        title.className = 'task__title';
-        // Example title: "Thorneside — M0123, M0361"
-        const ids = Array.isArray(t.siteIds) && t.siteIds.length ? (' — ' + t.siteIds.join(', ')) : '';
-        title.textContent = (t.zone || 'Task') + ids;
+      const title = document.createElement('div');
+      title.className = 'task-title';
+      const ids = Array.isArray(t.siteIds) && t.siteIds.length ? (' — ' + t.siteIds.join(', ')) : '';
+      title.textContent = (t.zone || 'Task') + ids;
 
-        const meta = document.createElement('div');
-        meta.className = 'task__meta';
-        // Show due date if present
-        const due = (() => {
-          const d = t.dueDate;
-          // Handle Firestore Timestamp or JS Date
-          const dt = d?.toDate ? d.toDate() : (d instanceof Date ? d : null);
-          return dt ? dt.toLocaleDateString() : null;
-        })();
-        meta.textContent = due ? `Due ${due}` : 'Assigned';
+      const meta = document.createElement('div');
+      meta.className = 'task-meta';
+      const due = (() => {
+        const d = t.dueDate;
+        const dt = d?.toDate ? d.toDate() : (d instanceof Date ? d : null);
+        return dt ? dt.toLocaleDateString() : null;
+      })();
+      meta.textContent = due ? `Due ${due}` : 'Assigned';
 
-        left.appendChild(title);
-        left.appendChild(meta);
+      left.appendChild(title);
+      left.appendChild(meta);
 
-        const right = document.createElement('div');
-        right.className = 'task__right';
-        const badge = document.createElement('span');
-        badge.className = 'badge badge-amber';
-        badge.textContent = (t.status || 'assigned').replace(/^\w/, s => s.toUpperCase());
-        right.appendChild(badge);
+      const right = document.createElement('div');
+      const badge = document.createElement('span');
+      badge.className = 'badge badge-amber';
+      badge.textContent = (t.status || 'assigned').replace(/^\w/, s => s.toUpperCase());
+      right.appendChild(badge);
 
-        row.appendChild(left);
-        row.appendChild(right);
-        el.appendChild(row);
+      row.appendChild(left);
+      row.appendChild(right);
+      el.appendChild(row);
       });
     }
 
