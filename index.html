@@ -8,39 +8,81 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="dashboard.css">
 
-  <!-- If you have an existing global style file, include it after this line -->
-  <!-- <link rel="stylesheet" href="styles.css"> -->
+  <style>
+    :root{
+      --ink:#0f172a; --ink-2:#111827; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff;
+      --accent:#d11e2b; --accent-600:#b71a24; --focus:#e6f0ff;
+      --slate:#334155;
+    }
+    body{ background:var(--bg); color:var(--ink) }
+    .appbar{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 18px; background:#fff; border-bottom:1px solid var(--muted);
+    }
+    .appbar__left{display:flex; gap:12px; align-items:center}
+    .logo{ height:42px }
+    .appbar__title{ font-size:20px; font-weight:800; color:var(--ink-2) }
+    .appbar__right{ display:flex; gap:10px; align-items:center }
+    .user-pill{ font-weight:600; color:#334155; background:#f1f5f9; border:1px solid #e2e8f0; padding:8px 10px; border-radius:10px; }
+    .btn{ border:0; border-radius:10px; padding:10px 14px; font-weight:800; cursor:pointer; color:#fff; background:var(--ink); }
+    .btn:hover{ background:#1f2937 }
+    .btn-outline{ background:#fff; color:#111827; border:1px solid #e2e8f0 }
+    .btn-outline:hover{ background:#f8fafc }
+
+    .container{ max-width:1100px; margin: 20px auto; padding: 0 16px }
+    .section{ margin:20px 0 }
+    .section-title{ font-size:18px; font-weight:800; margin: 4px 0 12px; color:var(--ink-2) }
+
+    /* Work area cards (existing) */
+    .cards-row{ display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:14px }
+    .work-card{ display:block; background:#fff; border:1px solid var(--muted); border-radius:16px; overflow:hidden; box-shadow:0 6px 22px rgba(16,24,40,.06); text-decoration:none }
+    .work-card__img img{ width:100%; display:block; height:160px; object-fit:cover; background:#f8fafc }
+    .work-card__footer{ display:flex; align-items:center; justify-content:space-between; padding:12px 12px }
+    .work-card__title{ color:#111827; font-weight:800 }
+    .btn-dark{ background:#0f172a; padding:8px 12px; border-radius:10px; font-size:14px }
+
+    /* Tasks list */
+    .tasks{ display:grid; gap:10px }
+    .task{
+      display:flex; justify-content:space-between; gap:12px;
+      background:#fff; border:1px solid var(--muted); border-radius:14px; padding:12px 14px;
+      box-shadow:0 8px 26px rgba(16,24,40,.08);
+    }
+    .task__left{ display:grid; gap:4px }
+    .task__title{ font-weight:800; color:#111827 }
+    .task__meta{ color:#64748b; font-size:13px }
+    .chips{ display:flex; flex-wrap:wrap; gap:6px; margin-top:2px }
+    .chip{
+      font-size:12px; font-weight:700; color:#334155;
+      background:#f8fafc; border:1px solid #e2e8f0; padding:4px 8px; border-radius:999px;
+    }
+    .badge{
+      display:inline-block; font-size:12px; font-weight:800; padding:3px 8px; border-radius:999px;
+      border:1px solid #e5e7eb; background:#f9fafb; color:#334155;
+    }
+    .badge-amber{ background:#fef3c7; border-color:#fde68a; color:#7c2d12 }
+    .badge-green{ background:#dcfce7; border-color:#bbf7d0; color:#065f46 }
+    .task__right{ display:flex; gap:8px; align-items:center }
+    .btn-sm{ padding:8px 10px; border-radius:8px; font-weight:800; border:0; cursor:pointer; }
+    .btn-start{ background:#0ea5e9; color:#fff }
+    .btn-start:hover{ background:#0284c7 }
+    .btn-done{ background:#10b981; color:#fff }
+    .btn-done:hover{ background:#059669 }
+
+    .empty{
+      background:#fff; border:1px dashed #cbd5e1; color:#64748b;
+      border-radius:14px; padding:16px; text-align:center; font-weight:700;
+    }
+  </style>
 </head>
 <body>
 
-  <!-- Firebase + guard (keep order) -->
+  <!-- Firebase + guard -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
-
-  <!-- NEW: redirect unsigned visitors to login.html?next=index.html -->
-  <script>
-    (function () {
-      function redirectIfSignedOut() {
-        try {
-          const auth = firebase.auth();
-          auth.onAuthStateChanged(function(user){
-            if (!user) {
-              const base = location.pathname.replace(/[^/]+$/, '');
-              const loginURL = new URL('login.html', location.origin + base);
-              loginURL.searchParams.set('next', 'index.html');
-              location.replace(loginURL.toString());
-            }
-          });
-        } catch (e) {
-          // If firebase isn't ready yet, try again shortly
-          setTimeout(redirectIfSignedOut, 50);
-        }
-      }
-      redirectIfSignedOut();
-    })();
-  </script>
   
   <!-- Header / App Bar -->
   <header class="appbar">
@@ -57,66 +99,48 @@
 
   <main class="container">
 
-<section class="section">
-  
-  <h2 class="section-title">Work areas</h2>
+    <!-- Work areas -->
+    <section class="section">
+      <h2 class="section-title">Work areas</h2>
 
-  <div class="cards-row">
+      <div class="cards-row">
+        <a href="./ParksMowing.html" class="work-card">
+          <div class="work-card__img">
+            <img src="MOWING PICTURE.png" alt="Parks Mowing map" />
+          </div>
+          <div class="work-card__footer">
+            <span class="work-card__title">Parks Mowing</span>
+            <span class="btn btn-dark">Open</span>
+          </div>
+        </a>
 
-    <!-- Parks Mowing -->
-    <a href="./ParksMowing.html" class="work-card">
-      <div class="work-card__img">
-        <img src="MOWING PICTURE.png" alt="Parks Mowing map" />
+        <a href="./ParksSnipping.html" class="work-card">
+          <div class="work-card__img">
+            <img src="SNIPPING PICTURE.png" alt="Parks Snipping map" />
+          </div>
+          <div class="work-card__footer">
+            <span class="work-card__title">Parks Snipping</span>
+            <span class="btn btn-dark">Open</span>
+          </div>
+        </a>
+
+        <a href="./Firebreaks.html" class="work-card">
+          <div class="work-card__img">
+            <img src="FIREBREAKS PICTURE.png" alt="Firebreaks map" />
+          </div>
+          <div class="work-card__footer">
+            <span class="work-card__title">Firebreaks</span>
+            <span class="btn btn-dark">Open</span>
+          </div>
+        </a>
       </div>
-      <div class="work-card__footer">
-        <span class="work-card__title">Parks Mowing</span>
-        <span class="btn btn-dark">Open</span>
-      </div>
-    </a>
+    </section>
 
-    <!-- Parks Snipping -->
-    <a href="./ParksSnipping.html" class="work-card">
-      <div class="work-card__img">
-        <img src="SNIPPING PICTURE.png" alt="Parks Snipping map" />
-      </div>
-      <div class="work-card__footer">
-        <span class="work-card__title">Parks Snipping</span>
-        <span class="btn btn-dark">Open</span>
-      </div>
-    </a>
-
-    <!-- Firebreaks -->
-    <a href="./Firebreaks.html" class="work-card">
-      <div class="work-card__img">
-        <img src="FIREBREAKS PICTURE.png" alt="Firebreaks map" />
-      </div>
-      <div class="work-card__footer">
-        <span class="work-card__title">Firebreaks</span>
-        <span class="btn btn-dark">Open</span>
-      </div>
-    </a>
-
-  </div>
-</section>
-
-
-    <!-- Tasks to complete -->
+    <!-- Tasks to complete (live) -->
     <section class="section">
       <h2 class="section-title">Tasks to complete</h2>
-
-      <!-- Your existing JS can inject items into this list -->
       <div id="tasks-list" class="tasks">
-        <!-- Example task markup for reference (leave commented out)
-        <div class="task">
-          <div class="task__left">
-            <div class="task__title">Zone 1 — Numbers 1–50</div>
-            <div class="task__meta">Assigned · Due 15 Oct</div>
-          </div>
-          <div class="task__right">
-            <span class="badge badge-amber">Assigned</span>
-          </div>
-        </div>
-        -->
+        <!-- filled by JS -->
       </div>
     </section>
 
@@ -124,26 +148,176 @@
 
   <footer class="footer-space"></footer>
 
-  <!-- Optional tiny script: hook up logout if you already expose a logout() -->
   <script>
     (function() {
-      // Fill the email pill if your login code stores it (adjust as needed)
-      try {
-        const emailEl = document.getElementById('user-email');
-        const stored = localStorage.getItem('bayside:userEmail');
-        if (stored && emailEl) emailEl.textContent = stored;
-      } catch (e) {}
+      const db = firebase.firestore();
+      const auth = firebase.auth();
 
+      const emailEl = document.getElementById('user-email');
       const logoutBtn = document.getElementById('logoutBtn');
+      const listEl = document.getElementById('tasks-list');
+
+      // Show current email (from auth or local storage)
+      auth.onAuthStateChanged((u) => {
+        if (!u) return;
+        try {
+          const stored = localStorage.getItem('bayside:userEmail');
+          emailEl.textContent = stored || u.email || 'Signed in';
+        } catch (e) {
+          emailEl.textContent = u.email || 'Signed in';
+        }
+        subscribeMyTasks(u.uid);
+      });
+
       if (logoutBtn) {
-        logoutBtn.addEventListener('click', function(){
-          // If you already have a global logout function, call it:
-          if (window.logout) { window.logout(); return; }
-          // Fallback: route back to login
-          window.location.href = './login.html';
+        logoutBtn.addEventListener('click', async () => {
+          try { await auth.signOut(); location.href = './login.html'; }
+          catch(e){ console.warn(e); }
         });
+      }
+
+      // Live subscription to my assignments
+      let unsub = null;
+      function subscribeMyTasks(uid){
+        if (unsub) try { unsub(); } catch(_) {}
+        // Keep it index-free: just filter by userId and sort client-side
+        unsub = db.collection('assignments')
+          .where('userId','==', uid)
+          .onSnapshot(snap => {
+            const items = [];
+            snap.forEach(doc => {
+              const d = doc.data() || {};
+              // Only show open tasks (assigned/in_progress/undefined)
+              const st = (d.status || 'assigned').toLowerCase();
+              if (st === 'completed' || st === 'cancelled') return;
+              items.push({ id: doc.id, ...d });
+            });
+            // Sort newest first by createdAt
+            items.sort((a,b) => {
+              const ta = a.createdAt?.toMillis?.() || 0;
+              const tb = b.createdAt?.toMillis?.() || 0;
+              return tb - ta;
+            });
+            renderTasks(items);
+          }, err => {
+            console.error('tasks subscribe error', err);
+            renderError('Failed to load tasks');
+          });
+      }
+
+      function renderError(msg){
+        listEl.innerHTML = `<div class="empty">${msg}</div>`;
+      }
+
+      function pill(text){ return `<span class="chip">${escapeHtml(text)}</span>`; }
+
+      function formatDate(ts){
+        try {
+          if (!ts) return '';
+          const d = ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+          if (!d) return '';
+          const opts = { month:'short', day:'numeric' };
+          return d.toLocaleDateString(undefined, opts);
+        } catch { return ''; }
+      }
+
+      function escapeHtml(s){
+        return String(s ?? '').replace(/[&<>"']/g, c => (
+          {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+        ));
+      }
+
+      function renderTasks(items){
+        listEl.innerHTML = '';
+        if (!items.length){
+          listEl.innerHTML = `<div class="empty">No tasks assigned yet. When an admin assigns work, it will appear here.</div>`;
+          return;
+        }
+
+        for (const it of items){
+          const zone = it.zone || 'Unzoned';
+          const ids  = Array.isArray(it.siteIds) ? it.siteIds : [];
+          const due  = formatDate(it.dueDate);
+          const notes = it.notes || '';
+          const status = (it.status || 'assigned').toLowerCase();
+
+          const row = document.createElement('div');
+          row.className = 'task';
+
+          // LEFT
+          const left = document.createElement('div');
+          left.className = 'task__left';
+
+          const title = document.createElement('div');
+          title.className = 'task__title';
+          title.textContent = zone;
+
+          const meta = document.createElement('div');
+          meta.className = 'task__meta';
+          meta.innerHTML = `
+            <span class="badge ${status === 'in_progress' ? 'badge-amber' : ''}">
+              ${status === 'in_progress' ? 'In progress' : 'Assigned'}
+            </span>
+            ${due ? ` · Due ${escapeHtml(due)}` : ''}
+            ${notes ? ` · Note: ${escapeHtml(notes)}` : ''}
+          `;
+
+          const chips = document.createElement('div');
+          chips.className = 'chips';
+          ids.forEach(code => {
+            const c = document.createElement('span');
+            c.className = 'chip';
+            c.textContent = code;
+            chips.appendChild(c);
+          });
+
+          left.appendChild(title);
+          left.appendChild(meta);
+          if (ids.length) left.appendChild(chips);
+
+          // RIGHT
+          const right = document.createElement('div');
+          right.className = 'task__right';
+
+          const startBtn = document.createElement('button');
+          startBtn.className = 'btn-sm btn-start';
+          startBtn.textContent = 'Start';
+          startBtn.addEventListener('click', () => setStatus(it.id, 'in_progress'));
+
+          const doneBtn = document.createElement('button');
+          doneBtn.className = 'btn-sm btn-done';
+          doneBtn.textContent = 'Mark done';
+          doneBtn.addEventListener('click', () => setStatus(it.id, 'completed'));
+
+          // If already in progress, show only "Mark done"
+          if (status === 'in_progress'){
+            right.appendChild(doneBtn);
+          } else {
+            right.appendChild(startBtn);
+            right.appendChild(doneBtn);
+          }
+
+          row.appendChild(left);
+          row.appendChild(right);
+          listEl.appendChild(row);
+        }
+      }
+
+      async function setStatus(id, status){
+        try{
+          const now = firebase.firestore.FieldValue.serverTimestamp();
+          const updates = { status };
+          if (status === 'completed') updates.completedAt = now;
+          if (status === 'in_progress') updates.startedAt = now;
+
+          await db.collection('assignments').doc(id).update(updates);
+        }catch(err){
+          console.warn(err);
+          alert('Could not update task status.');
+        }
       }
     })();
   </script>
 </body>
 </html>
+
