@@ -3,389 +3,355 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Bayside – Dashboard</title>
+  <title>Bayside — Dashboard</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="dashboard.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght:400;600;800&display=swap" rel="stylesheet">
 
   <style>
     :root{
       --ink:#0f172a; --ink-2:#111827; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff;
       --accent:#d11e2b; --accent-600:#b71a24; --focus:#e6f0ff;
-      --slate:#334155;
+      --chip:#f1f5f9; --chip-ink:#334155;
+      --ok:#16a34a; --ok-ink:#064e3b;
+      --warn:#f59e0b; --warn-ink:#78350f;
     }
-    body{ background:var(--bg); color:var(--ink) }
-    .appbar{
-      display:flex; align-items:center; justify-content:space-between;
-      padding:14px 18px; background:#fff; border-bottom:1px solid var(--muted);
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{ margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink); }
+
+    /* Header */
+    .header{
+      display:flex; align-items:center; justify-content:space-between; gap:16px;
+      padding:16px 22px; background:#fff; border-bottom:1px solid var(--muted); position:sticky; top:0; z-index:10;
     }
-    .appbar__left{display:flex; gap:12px; align-items:center}
-    .logo{ height:42px }
-    .appbar__title{ font-size:20px; font-weight:800; color:var(--ink-2) }
-    .appbar__right{ display:flex; gap:10px; align-items:center }
-    .user-pill{ font-weight:600; color:#334155; background:#f1f5f9; border:1px solid #e2e8f0; padding:8px 10px; border-radius:10px; }
+    .brand{ display:flex; align-items:center; gap:14px }
+    .brand img{ height:56px; display:block }
+    .title{ font-size:22px; font-weight:800; color:var(--ink-2) }
+    .userbox{ display:flex; align-items:center; gap:12px; flex-wrap:wrap }
+    .email{ font-weight:600; color:#334155; background:#f1f5f9; border:1px solid #e2e8f0; padding:8px 10px; border-radius:10px; }
     .btn{ border:0; border-radius:10px; padding:10px 14px; font-weight:800; cursor:pointer; color:#fff; background:var(--ink); }
     .btn:hover{ background:#1f2937 }
-    .btn-outline{ background:#fff; color:#111827; border:1px solid #e2e8f0 }
-    .btn-outline:hover{ background:#f8fafc }
 
-    .container{ max-width:1100px; margin: 20px auto; padding: 0 16px }
-    .section{ margin:20px 0 }
-    .section-title{ font-size:18px; font-weight:800; margin: 4px 0 12px; color:var(--ink-2) }
+    /* Layout */
+    .container{ max-width:1200px; margin: 20px auto; padding: 0 16px }
+    .grid{ display:grid; gap:16px }
 
-    /* Work area cards (existing) */
-    .cards-row{ display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:14px }
-    .work-card{ display:block; background:#fff; border:1px solid var(--muted); border-radius:16px; overflow:hidden; box-shadow:0 6px 22px rgba(16,24,40,.06); text-decoration:none }
-    .work-card__img img{ width:100%; display:block; height:160px; object-fit:cover; background:#f8fafc }
-    .work-card__footer{ display:flex; align-items:center; justify-content:space-between; padding:12px 12px }
-    .work-card__title{ color:#111827; font-weight:800 }
-    .btn-dark{ background:#0f172a; padding:8px 12px; border-radius:10px; font-size:14px }
-
-    /* Tasks list */
-    .tasks{ display:grid; gap:10px }
-    .task{
-      display:flex; justify-content:space-between; gap:12px;
-      background:#fff; border:1px solid var(--muted); border-radius:14px; padding:12px 14px;
-      box-shadow:0 8px 26px rgba(16,24,40,.08);
+    /* Work areas */
+    .areas{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px }
+    .area{ background:#fff; border:1px solid var(--muted); border-radius:16px; overflow:hidden; box-shadow:0 8px 26px rgba(16,24,40,.08); }
+    .area .thumb{ height:180px; background:#e5e7eb; position:relative; overflow:hidden }
+    .area .thumb img{ width:100%; height:100%; object-fit:cover; display:block; filter:saturate(0.85) }
+    .area .thumb .label{
+      position:absolute; inset:auto 16px 14px 16px; color:#fff; font-weight:800; font-size:34px; letter-spacing:.6px;
+      text-shadow:0 3px 16px rgba(0,0,0,.65);
     }
-    .task__left{ display:grid; gap:4px }
-    .task__title{ font-weight:800; color:#111827 }
-    .task__meta{ color:#64748b; font-size:13px }
-    .chips{ display:flex; flex-wrap:wrap; gap:6px; margin-top:2px }
+    .area .row{ display:flex; align-items:center; justify-content:space-between; padding:12px 14px }
+    .area .open{ background:var(--ink); color:#fff; border:0; border-radius:12px; padding:10px 16px; font-weight:800; cursor:pointer }
+    .area .open:hover{ background:#1f2937 }
+
+    /* Tasks section */
+    .card{ background:var(--card); border:1px solid var(--muted); border-radius:16px; box-shadow:0 8px 26px rgba(16,24,40,.08); }
+    .card h3{ margin:14px 16px 6px; font-size:18px; font-weight:800; color:var(--ink-2) }
+    .card .body{ padding: 0 16px 16px }
+
+    .tasks{ display:grid; gap:12px; margin-top:10px }
+    .task-card{
+      background:#fff; border:1px solid var(--muted); border-radius:14px; padding:12px; display:grid; gap:10px;
+    }
+    .task-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .task-title{ font-weight:800; color:var(--ink-2) }
+
+    .chips{ display:flex; flex-wrap:wrap; gap:8px; }
     .chip{
-      font-size:12px; font-weight:700; color:#334155;
-      background:#f8fafc; border:1px solid #e2e8f0; padding:4px 8px; border-radius:999px;
+      display:inline-flex; align-items:center; gap:6px;
+      background:var(--chip); color:var(--chip-ink); border:1px solid #e2e8f0;
+      padding:6px 10px; border-radius:999px; font-size:12px; font-weight:700;
     }
-    .badge{
-      display:inline-block; font-size:12px; font-weight:800; padding:3px 8px; border-radius:999px;
-      border:1px solid #e5e7eb; background:#f9fafb; color:#334155;
-    }
-    .badge-amber{ background:#fef3c7; border-color:#fde68a; color:#7c2d12 }
-    .badge-green{ background:#dcfce7; border-color:#bbf7d0; color:#065f46 }
-    .task__right{ display:flex; gap:8px; align-items:center }
-    .btn-sm{ padding:8px 10px; border-radius:8px; font-weight:800; border:0; cursor:pointer; }
-    .btn-start{ background:#0ea5e9; color:#fff }
-    .btn-start:hover{ background:#0284c7 }
-    .btn-done{ background:#10b981; color:#fff }
-    .btn-done:hover{ background:#059669 }
+    .chip.small{ padding:4px 8px; font-weight:600 }
+    .chip.warn{ background:#fef3c7; color:var(--warn-ink); border-color:#fde68a }
+    .chip.ok{ background:#dcfce7; color:var(--ok-ink); border-color:#bbf7d0 }
 
+    .actions{ display:flex; align-items:center; gap:10px; }
+    .btn-accent{ background:var(--accent) }
+    .btn-accent:hover{ background:var(--accent-600) }
+    .btn-ghost{
+      background:#475569; color:#fff; border:0; border-radius:10px; padding:10px 14px; font-weight:800; cursor:pointer;
+    }
     .empty{
-      background:#fff; border:1px dashed #cbd5e1; color:#64748b;
-      border-radius:14px; padding:16px; text-align:center; font-weight:700;
+      border:1px dashed #cbd5e1; border-radius:12px; background:#f8fafc; color:#64748b;
+      padding:16px; text-align:center; font-weight:600;
+    }
+
+    @media (max-width:1100px){
+      .areas{ grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
-
-  <!-- Firebase + guard -->
+  <!-- Firebase SDKs & guard -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
 
-  <script>
-  async function setDisplayName(u) {
-    const el = document.getElementById('userEmail');
-    if (!el) return;
-
-    el.textContent = 'Signed in';
-
-    try {
-      const doc = await firebase.firestore().collection('users').doc(u.uid).get();
-      const d = doc.data() || {};
-      const display =
-        d.name ||
-        d.username ||
-        u.displayName ||
-        (u.email ? u.email.split('@')[0] : '') ||
-        u.email ||
-        u.uid;
-
-      el.textContent = display;
-    } catch (_) {
-      el.textContent =
-        u.displayName ||
-        (u.email ? u.email.split('@')[0] : '') ||
-        u.email ||
-        u.uid;
-    }
-  }
-
-  firebase.auth().onAuthStateChanged(async (u) => {
-    if (!u) { location.href = 'login.html'; return; }
-
-    // Set the pill text (safe if #userEmail isn’t there yet)
-    setDisplayName(u);
-
-    // Start your tasks listener here (rename to your function if different)
-    startTasksListener?.(u.uid);
-    // e.g. if your function is named subscribeToMyAssignments:
-    // subscribeToMyAssignments(u.uid);
-  });
-</script>
-  
-  <!-- Header / App Bar -->
-  <header class="appbar">
-    <div class="appbar__left">
-      <img class="logo" src="logo.png" alt="Bayside Slashing" />
-      <h1 class="appbar__title">Dashboard</h1>
+  <!-- Header -->
+  <header class="header">
+    <div class="brand">
+      <img src="logo.png" alt="Bayside logo" onerror="this.style.display='none'">
+      <div class="title">Dashboard</div>
     </div>
-
-    <div class="appbar__right">
-      <span class="user-pill" id="user-email">user@bayside.local</span>
-      <button class="btn btn-outline" id="logoutBtn" type="button">Logout</button>
-      <div class="userbox">
-  <div id="userEmail" class="email">—</div>
-  <button id="logoutBtn" class="btn" type="button">Logout</button>
-</div>
+    <div class="userbox">
+      <div id="userEmail" class="email">—</div>
+      <button id="logoutBtn" class="btn" type="button">Logout</button>
     </div>
   </header>
 
-  <main class="container">
-
+  <main class="container grid">
     <!-- Work areas -->
-    <section class="section">
-      <h2 class="section-title">Work areas</h2>
+    <section class="areas">
+      <article class="area">
+        <div class="thumb">
+          <img src="thumbs/mowing.jpg" alt="Mowing" onerror="this.style.display='none'">
+          <div class="label">MOWING</div>
+        </div>
+        <div class="row">
+          <div>Parks Mowing</div>
+          <a class="open" href="ParksMowing.html">Open</a>
+        </div>
+      </article>
 
-      <div class="cards-row">
-        <a href="./ParksMowing.html" class="work-card">
-          <div class="work-card__img">
-            <img src="MOWING PICTURE.png" alt="Parks Mowing map" />
-          </div>
-          <div class="work-card__footer">
-            <span class="work-card__title">Parks Mowing</span>
-            <span class="btn btn-dark">Open</span>
-          </div>
-        </a>
+      <article class="area">
+        <div class="thumb">
+          <img src="thumbs/snipping.jpg" alt="Snipping" onerror="this.style.display='none'">
+          <div class="label">SNIPPING</div>
+        </div>
+        <div class="row">
+          <div>Parks Snipping</div>
+          <a class="open" href="ParksSnipping.html">Open</a>
+        </div>
+      </article>
 
-        <a href="./ParksSnipping.html" class="work-card">
-          <div class="work-card__img">
-            <img src="SNIPPING PICTURE.png" alt="Parks Snipping map" />
-          </div>
-          <div class="work-card__footer">
-            <span class="work-card__title">Parks Snipping</span>
-            <span class="btn btn-dark">Open</span>
-          </div>
-        </a>
-
-        <a href="./Firebreaks.html" class="work-card">
-          <div class="work-card__img">
-            <img src="FIREBREAKS PICTURE.png" alt="Firebreaks map" />
-          </div>
-          <div class="work-card__footer">
-            <span class="work-card__title">Firebreaks</span>
-            <span class="btn btn-dark">Open</span>
-          </div>
-        </a>
-      </div>
+      <article class="area">
+        <div class="thumb">
+          <img src="thumbs/firebreaks.jpg" alt="Firebreaks" onerror="this.style.display='none'">
+          <div class="label">FIREBREAKS</div>
+        </div>
+        <div class="row">
+          <div>Firebreaks</div>
+          <a class="open" href="Firebreaks.html">Open</a>
+        </div>
+      </article>
     </section>
 
-    <!-- Tasks to complete (live) -->
-    <section class="section">
-      <h2 class="section-title">Tasks to complete</h2>
-      <div id="tasks-list" class="tasks">
-        <!-- filled by JS -->
+    <!-- Tasks -->
+    <section class="card">
+      <h3>Tasks to complete</h3>
+      <div class="body">
+        <div id="tasksList" class="tasks"></div>
+        <div id="tasksError" class="empty" style="display:none">Failed to load tasks</div>
       </div>
     </section>
-
   </main>
 
-  <footer class="footer-space"></footer>
-
   <script>
-    (function() {
-      const db = firebase.firestore();
-      const auth = firebase.auth();
+    const db = firebase.firestore();
 
-      const emailEl = document.getElementById('user-email');
-      const logoutBtn = document.getElementById('logoutBtn');
-      const listEl = document.getElementById('tasks-list');
+    // -- Logout
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      try { await firebase.auth().signOut(); location.href = 'login.html'; }
+      catch (e) { console.warn(e); }
+    });
 
-     const nameEl = document.getElementById('userEmail'); // reuse the same pill
-     async function setDisplayName(u){
-  // default while we fetch
-  nameEl.textContent = 'Signed in';
+    // -- Display operator name in the pill (safe even if users doc missing)
+    async function setDisplayName(u) {
+      const el = document.getElementById('userEmail');
+      if (!el) return;
 
-  try {
-    const doc = await firebase.firestore().collection('users').doc(u.uid).get();
-    const data = doc.data() || {};
-    // order of preference: users.name → users.username → Auth displayName → email prefix → email → uid
-    const display =
-      data.name ||
-      data.username ||
-      u.displayName ||
-      (u.email ? u.email.split('@')[0] : '') ||
-      u.email ||
-      u.uid;
-
-    nameEl.textContent = display;
-  } catch (e) {
-    // fallback if Firestore read fails
-    nameEl.textContent =
-      u.displayName ||
-      (u.email ? u.email.split('@')[0] : '') ||
-      u.email ||
-      'Signed in';
-  }
-}
-
-// inside your onAuthStateChanged:
-firebase.auth().onAuthStateChanged(async (u) => {
-  if (!u) { location.href = 'login.html'; return; }
-  await setDisplayName(u);
-  // ...rest of your index.js logic (loading tasks, etc.)
-});
-
-      if (logoutBtn) {
-        logoutBtn.addEventListener('click', async () => {
-          try { await auth.signOut(); location.href = './login.html'; }
-          catch(e){ console.warn(e); }
-        });
+      el.textContent = 'Signed in';
+      try {
+        const doc = await db.collection('users').doc(u.uid).get();
+        const d = doc.data() || {};
+        const display =
+          d.name ||
+          d.username ||
+          u.displayName ||
+          (u.email ? u.email.split('@')[0] : '') ||
+          u.email ||
+          u.uid;
+        el.textContent = display;
+      } catch (_) {
+        el.textContent =
+          u.displayName ||
+          (u.email ? u.email.split('@')[0] : '') ||
+          u.email ||
+          u.uid;
       }
+    }
 
-      // Live subscription to my assignments
-      let unsub = null;
-      function subscribeMyTasks(uid){
-        if (unsub) try { unsub(); } catch(_) {}
-        // Keep it index-free: just filter by userId and sort client-side
-        unsub = db.collection('assignments')
-          .where('userId','==', uid)
-          .onSnapshot(snap => {
-            const items = [];
-            snap.forEach(doc => {
-              const d = doc.data() || {};
-              // Only show open tasks (assigned/in_progress/undefined)
-              const st = (d.status || 'assigned').toLowerCase();
-              if (st === 'completed' || st === 'cancelled') return;
-              items.push({ id: doc.id, ...d });
+    // --- Helpers for tasks UI ---
+    function fmtDate(ts){
+      if (!ts) return '';
+      // support Firestore Timestamp or Date
+      const d = ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+      if (!d) return '';
+      return d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+    }
+
+    function groupByZone(docs){
+      const map = new Map();
+      docs.forEach(d=>{
+        const z = d.zone || 'Unzoned';
+        if(!map.has(z)) map.set(z, []);
+        map.get(z).push(d);
+      });
+      return [...map.entries()].map(([zone, rows])=>({ zone, rows }));
+    }
+
+    function renderTasks(docs){
+      const root = document.getElementById('tasksList');
+      const err  = document.getElementById('tasksError');
+      root.innerHTML = '';
+
+      const active = docs.filter(d => (d.status || 'assigned') !== 'done');
+      if (!active.length){
+        err.style.display = 'block';
+        err.textContent = 'No tasks assigned yet.';
+        return;
+      }
+      err.style.display = 'none';
+
+      const groups = groupByZone(active);
+      groups.forEach(g=>{
+        // summary
+        const anyInProgress = g.rows.some(r => r.status === 'in_progress');
+        const earliestDue = g.rows
+          .map(r => r.dueDate)
+          .filter(Boolean)
+          .sort((a,b)=> (a.toMillis?a.toMillis():a) - (b.toMillis?b.toMillis():b))[0];
+
+        const card = document.createElement('div');
+        card.className = 'task-card';
+
+        const head = document.createElement('div');
+        head.className = 'task-head';
+
+        const title = document.createElement('div');
+        title.className = 'task-title';
+        title.textContent = g.zone;
+        head.appendChild(title);
+
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+        const primary = document.createElement('button');
+        primary.className = 'btn-accent';
+        primary.textContent = anyInProgress ? 'Mark done' : 'Start';
+        primary.style.minWidth = '108px';
+        primary.onclick = async () => {
+          try{
+            const batch = db.batch();
+            g.rows.forEach(r=>{
+              const ref = db.collection('assignments').doc(r.id);
+              const now = firebase.firestore.FieldValue.serverTimestamp();
+              batch.update(ref, {
+                status: anyInProgress ? 'done' : 'in_progress',
+                lastUpdatedAt: now,
+                lastUpdatedBy: firebase.auth().currentUser?.uid || null,
+                ...(anyInProgress ? { completedAt: now } : {})
+              });
             });
-            // Sort newest first by createdAt
-            items.sort((a,b) => {
-              const ta = a.createdAt?.toMillis?.() || 0;
-              const tb = b.createdAt?.toMillis?.() || 0;
-              return tb - ta;
-            });
-            renderTasks(items);
-          }, err => {
-            console.error('tasks subscribe error', err);
-            renderError('Failed to load tasks');
-          });
-      }
+            await batch.commit();
+          }catch(e){ console.warn('bulk status error', e); alert('Failed to update tasks'); }
+        };
+        actions.appendChild(primary);
+        head.appendChild(actions);
 
-      function renderError(msg){
-        listEl.innerHTML = `<div class="empty">${msg}</div>`;
-      }
+        card.appendChild(head);
 
-      function pill(text){ return `<span class="chip">${escapeHtml(text)}</span>`; }
+        // Status chips
+        const chips = document.createElement('div');
+        chips.className = 'chips';
 
-      function formatDate(ts){
-        try {
-          if (!ts) return '';
-          const d = ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
-          if (!d) return '';
-          const opts = { month:'short', day:'numeric' };
-          return d.toLocaleDateString(undefined, opts);
-        } catch { return ''; }
-      }
+        const statusChip = document.createElement('div');
+        statusChip.className = 'chip ' + (anyInProgress ? 'ok' : 'warn');
+        statusChip.textContent = anyInProgress ? 'In progress' : 'Assigned';
+        chips.appendChild(statusChip);
 
-      function escapeHtml(s){
-        return String(s ?? '').replace(/[&<>"']/g, c => (
-          {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
-        ));
-      }
-
-      function renderTasks(items){
-        listEl.innerHTML = '';
-        if (!items.length){
-          listEl.innerHTML = `<div class="empty">No tasks assigned yet. When an admin assigns work, it will appear here.</div>`;
-          return;
+        if (earliestDue){
+          const due = document.createElement('div');
+          due.className = 'chip small';
+          due.textContent = 'Due ' + fmtDate(earliestDue);
+          chips.appendChild(due);
         }
 
-        for (const it of items){
-          const zone = it.zone || 'Unzoned';
-          const ids  = Array.isArray(it.siteIds) ? it.siteIds : [];
-          const due  = formatDate(it.dueDate);
-          const notes = it.notes || '';
-          const status = (it.status || 'assigned').toLowerCase();
+        card.appendChild(chips);
 
-          const row = document.createElement('div');
-          row.className = 'task';
-
-          // LEFT
-          const left = document.createElement('div');
-          left.className = 'task__left';
-
-          const title = document.createElement('div');
-          title.className = 'task__title';
-          title.textContent = zone;
-
-          const meta = document.createElement('div');
-          meta.className = 'task__meta';
-          meta.innerHTML = `
-            <span class="badge ${status === 'in_progress' ? 'badge-amber' : ''}">
-              ${status === 'in_progress' ? 'In progress' : 'Assigned'}
-            </span>
-            ${due ? ` · Due ${escapeHtml(due)}` : ''}
-            ${notes ? ` · Note: ${escapeHtml(notes)}` : ''}
-          `;
-
-          const chips = document.createElement('div');
-          chips.className = 'chips';
-          ids.forEach(code => {
-            const c = document.createElement('span');
-            c.className = 'chip';
-            c.textContent = code;
-            chips.appendChild(c);
-          });
-
-          left.appendChild(title);
-          left.appendChild(meta);
-          if (ids.length) left.appendChild(chips);
-
-          // RIGHT
-          const right = document.createElement('div');
-          right.className = 'task__right';
-
-          const startBtn = document.createElement('button');
-          startBtn.className = 'btn-sm btn-start';
-          startBtn.textContent = 'Start';
-          startBtn.addEventListener('click', () => setStatus(it.id, 'in_progress'));
-
-          const doneBtn = document.createElement('button');
-          doneBtn.className = 'btn-sm btn-done';
-          doneBtn.textContent = 'Mark done';
-          doneBtn.addEventListener('click', () => setStatus(it.id, 'completed'));
-
-          // If already in progress, show only "Mark done"
-          if (status === 'in_progress'){
-            right.appendChild(doneBtn);
+        // IDs
+        const idChips = document.createElement('div');
+        idChips.className = 'chips';
+        g.rows.forEach(r=>{
+          const ids = Array.isArray(r.siteIds) ? r.siteIds : [];
+          if (ids.length === 0) {
+            const c = document.createElement('div');
+            c.className = 'chip small';
+            c.textContent = '—';
+            idChips.appendChild(c);
           } else {
-            right.appendChild(startBtn);
-            right.appendChild(doneBtn);
+            ids.forEach(id=>{
+              const c = document.createElement('div');
+              c.className = 'chip small';
+              c.textContent = id;
+              idChips.appendChild(c);
+            });
           }
+        });
+        card.appendChild(idChips);
 
-          row.appendChild(left);
-          row.appendChild(right);
-          listEl.appendChild(row);
-        }
-      }
+        root.appendChild(card);
+      });
+    }
 
-      async function setStatus(id, status){
-        try{
-          const now = firebase.firestore.FieldValue.serverTimestamp();
-          const updates = { status };
-          if (status === 'completed') updates.completedAt = now;
-          if (status === 'in_progress') updates.startedAt = now;
+    // Subscribe to my tasks (no composite index needed; filter status client-side)
+    let tasksUnsub = null;
+    function startTasksListener(uid){
+      tasksUnsub?.();
+      tasksUnsub = db.collection('assignments')
+        .where('userId','==', uid)
+        .orderBy('createdAt','desc')  // okay if createdAt is present; remove if not used
+        .onSnapshot(
+          (snap)=>{
+            const rows = [];
+            snap.forEach(doc=>{
+              const d = doc.data() || {};
+              rows.push({
+                id: doc.id,
+                userId: d.userId || '',
+                zone: d.zone || '',
+                siteIds: Array.isArray(d.siteIds) ? d.siteIds : [],
+                status: d.status || 'assigned',
+                dueDate: d.dueDate || null,
+                createdAt: d.createdAt || null
+              });
+            });
+            renderTasks(rows);
+          },
+          (err)=>{
+            console.warn('tasks subscribe error', err);
+            const errEl = document.getElementById('tasksError');
+            errEl.style.display = 'block';
+            errEl.textContent = 'Failed to load tasks';
+          }
+        );
+    }
 
-          await db.collection('assignments').doc(id).update(updates);
-        }catch(err){
-          console.warn(err);
-          alert('Could not update task status.');
-        }
-      }
-    })();
+    // Auth gate for this page
+    firebase.auth().onAuthStateChanged((u) => {
+      if (!u) { location.href = 'login.html'; return; }
+      setDisplayName(u);           // don’t block if profile lookup fails
+      startTasksListener(u.uid);   // always start tasks listener when signed in
+    });
   </script>
 </body>
 </html>
-
