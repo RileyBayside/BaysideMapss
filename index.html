@@ -160,5 +160,108 @@
     }
   })();
 </script>
+  
+<script>
+  // ---- Tasks for the signed-in operator ----
+  (function () {
+    const db = firebase.firestore();
+
+    // Renders the list into #tasks-list
+    function renderTasks(items) {
+      const el = document.getElementById('tasks-list');
+      if (!el) return;
+
+      el.innerHTML = '';
+      if (!items.length) {
+        const p = document.createElement('p');
+        p.style.color = '#64748b';
+        p.textContent = 'No tasks assigned yet.';
+        el.appendChild(p);
+        return;
+      }
+
+      items.forEach(t => {
+        const row = document.createElement('div');
+        row.className = 'task';
+
+        const left = document.createElement('div');
+        left.className = 'task__left';
+
+        const title = document.createElement('div');
+        title.className = 'task__title';
+        // Example title: "Thorneside — M0123, M0361"
+        const ids = Array.isArray(t.siteIds) && t.siteIds.length ? (' — ' + t.siteIds.join(', ')) : '';
+        title.textContent = (t.zone || 'Task') + ids;
+
+        const meta = document.createElement('div');
+        meta.className = 'task__meta';
+        // Show due date if present
+        const due = (() => {
+          const d = t.dueDate;
+          // Handle Firestore Timestamp or JS Date
+          const dt = d?.toDate ? d.toDate() : (d instanceof Date ? d : null);
+          return dt ? dt.toLocaleDateString() : null;
+        })();
+        meta.textContent = due ? `Due ${due}` : 'Assigned';
+
+        left.appendChild(title);
+        left.appendChild(meta);
+
+        const right = document.createElement('div');
+        right.className = 'task__right';
+        const badge = document.createElement('span');
+        badge.className = 'badge badge-amber';
+        badge.textContent = (t.status || 'assigned').replace(/^\w/, s => s.toUpperCase());
+        right.appendChild(badge);
+
+        row.appendChild(left);
+        row.appendChild(right);
+        el.appendChild(row);
+      });
+    }
+
+    // Start a live listener for the current user’s assignments
+    window.startTasksListener = function (uid) {
+      // Keep query simple to avoid composite-index prompts; filter status client-side
+      return db.collection('assignments')
+        .where('userId', '==', uid)
+        .onSnapshot((snap) => {
+          const items = [];
+          snap.forEach(doc => {
+            const d = doc.data() || {};
+            // Hide completed items here; adjust if you want to show them
+            const status = (d.status || 'assigned').toLowerCase();
+            if (status === 'completed') return;
+            items.push({ id: doc.id, ...d });
+          });
+
+          // Sort: due date first (earliest), then newest created
+          items.sort((a, b) => {
+            const ad = a.dueDate?.toDate ? a.dueDate.toDate() : (a.dueDate instanceof Date ? a.dueDate : null);
+            const bd = b.dueDate?.toDate ? b.dueDate.toDate() : (b.dueDate instanceof Date ? b.dueDate : null);
+            if (ad && bd) return ad - bd;
+            if (ad && !bd) return -1;
+            if (!ad && bd) return 1;
+            const ac = a.createdAt?.toDate ? a.createdAt.toDate() : 0;
+            const bc = b.createdAt?.toDate ? b.createdAt.toDate() : 0;
+            return (bc || 0) - (ac || 0);
+          });
+
+          renderTasks(items);
+        }, (err) => {
+          console.warn('tasks listener error:', err);
+          const el = document.getElementById('tasks-list');
+          if (el) el.innerHTML = '<p style="color:#b91c1c">Failed to load tasks.</p>';
+        });
+    };
+
+    // Hook into auth state (auth-guard already enforces login)
+    firebase.auth().onAuthStateChanged((u) => {
+      if (!u) return;
+      // kick off the live feed for THIS operator
+      window.startTasksListener(u.uid);
+    });
+  })();
+</script>  
 </body>
 </html>
