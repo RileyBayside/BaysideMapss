@@ -106,22 +106,39 @@
         padding:8px 10px;
       }
     }
-    /* Gap from left edge + rounded corners */
+    /* Sidebar: rounded, slight margins, flex column */
 #sidebar{
-  left: 8px !important;        /* tiny gap off the left */
-  border-radius: 14px;         /* rounded edges */
-  overflow: hidden;            /* clip inner content to the curve */
+  left: 8px !important;           /* small gap from the left edge */
+  top: 8px;                       /* small gap from top */
+  bottom: 8px;                    /* small gap from bottom */
+  height: auto;                   /* let top/bottom control height */
+  max-height: calc(100vh - 16px); /* visible area */
+  border-radius: 14px;            
+  overflow: hidden;               /* clip to rounded corners */
+  display: flex;                  /* so inner content can flex/scroll */
+  flex-direction: column;
+  z-index: 1000;
+  pointer-events: auto;
 }
 
-/* Optional: keep a slim margin on mobile too */
+/* Make the main content area scrollable */
+#sidebar-content{
+  flex: 1 1 auto;                 /* take remaining height */
+  min-height: 0;                  /* important for flex scrolling */
+  overflow-y: auto;               /* scroll here, not on the outer */
+  -webkit-overflow-scrolling: touch; /* momentum scroll on iOS */
+  padding-right: 8px;             /* avoid scrollbar overlaying text */
+}
+
+/* Mobile: keep slim margins and rounded corners */
 @media (max-width: 768px){
   #sidebar{
     left: 6px !important;
-    right: 6px;                /* slight right margin so it doesn’t touch edge */
-    width: auto;               /* let left/right define the width */
+    right: 6px;                   /* slim right margin too */
     border-radius: 12px;
   }
 }
+
   </style>
 </head>
 <body>
