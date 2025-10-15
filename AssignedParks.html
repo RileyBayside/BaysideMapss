@@ -282,50 +282,56 @@
   })();
   </script>
 
-  <script>
-  // Reposition the sidebar so it sits just beneath the Site ID search bar
-  (function () {
-    function findSearchBar() {
-      // Change/expand these selectors to match your search bar wrapper if needed
-      return document.querySelector(
-        '#site-search, .site-search, #searchBar, .search-bar, #siteIdSearch, .site-id-search'
-      );
+<script>
+// Position the left sidebar just below the "Search ID..." control
+(function () {
+  function findSearchBar() {
+    // Try several common selectors; add/adjust if yours is different
+    return (
+      document.querySelector('#site-search') ||
+      document.querySelector('.site-search') ||
+      document.querySelector('#searchBar') ||
+      document.querySelector('.search-bar') ||
+      document.querySelector('#searchSite') ||
+      document.querySelector('#search') ||
+      // Fallback: look for the Leaflet control input by placeholder
+      document.querySelector('input[placeholder="Search ID..."]')
+    );
+  }
+
+  function repositionSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+
+    // Default if the search bar isn't found yet
+    let topPx = 8;
+
+    const sb = findSearchBar();
+    if (sb) {
+      const r = sb.getBoundingClientRect();
+      // place the sidebar 6px below the bottom edge of the search control
+      topPx = Math.max(6, Math.round(r.bottom)) + 6;
     }
 
-    function positionSidebar() {
-      const sidebar = document.getElementById('sidebar');
-      if (!sidebar) return;
+    sidebar.style.position = 'fixed';
+    sidebar.style.left = '8px';              // small gap from the left edge
+    sidebar.style.top = topPx + 'px';        // sit below the search control
+    sidebar.style.bottom = '8px';            // small gap at the bottom
+    sidebar.style.height = 'auto';
+    sidebar.style.maxHeight = `calc(100vh - ${topPx + 8}px)`;
+    sidebar.style.overflow = 'auto';         // keep scrolling on mobile
+  }
 
-      // Default top gap if the search bar isn't found
-      let topPx = 8;
+  // Run on load & resize; re-run briefly while controls mount
+  const rerun = () => { repositionSidebar(); setTimeout(repositionSidebar, 0); };
+  window.addEventListener('load', rerun);
+  window.addEventListener('resize', repositionSidebar);
 
-      const search = findSearchBar();
-      if (search) {
-        const r = search.getBoundingClientRect();
-        // place 6px below the bottom of the search bar
-        topPx = Math.max(6, Math.round(r.bottom)) + 6;
-      }
-
-      // Apply top and keep a small bottom margin (8px)
-      sidebar.style.top = topPx + 'px';
-      sidebar.style.bottom = '8px';
-      sidebar.style.height = 'auto';
-      sidebar.style.maxHeight = `calc(100vh - ${topPx + 8}px)`;
-    }
-
-    // Run on load + resize (and again after a tick for layout settles)
-    window.addEventListener('load', () => {
-      positionSidebar();
-      setTimeout(positionSidebar, 0);
-    });
-    window.addEventListener('resize', positionSidebar);
-
-    // If your search bar mounts dynamically, observe DOM changes briefly
-    const mo = new MutationObserver(() => positionSidebar());
-    mo.observe(document.documentElement, {childList: true, subtree: true});
-    // Stop observing after a short while to avoid unneeded work
-    setTimeout(() => mo.disconnect(), 5000);
-  })();
+  // If controls are inserted asynchronously, observe for a few seconds
+  const mo = new MutationObserver(repositionSidebar);
+  mo.observe(document.body, { childList: true, subtree: true });
+  setTimeout(() => mo.disconnect(), 6000);
+})();
 </script>
   
 </body>
