@@ -50,6 +50,27 @@
         color:#334155;
         font-size:13px;
         white-space:pre-wrap;
+
+        /* Keep left text and right actions from colliding */
+.task-row{ align-items: flex-start; }
+.task-main{ flex: 1 1 auto; min-width: 0; }
+
+.task-actions{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;           /* even spacing between pill and button */
+  flex-shrink: 0;     /* don't let the right side shrink */
+  white-space: nowrap;
+}
+
+.btn-small{
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+
+.badge{ white-space: nowrap; }
+
       }
     </style>
   </head>
