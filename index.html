@@ -193,6 +193,33 @@
     (function () {
       const db = firebase.firestore();
 
+      <script>
+// …inside your existing (function () { … }) that renders tasks:
+
+async function markTaskStarted(taskId) {
+  const uid = firebase.auth().currentUser?.uid || null;
+  const ref = db.collection('assignments').doc(taskId);
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return;
+    const d = snap.data() || {};
+
+    if (d.status === 'completed') return;
+
+    if (d.status !== 'in_progress') {
+      tx.update(ref, {
+        status: 'in_progress',
+        startedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        startedBy: uid
+      });
+    } else {
+      tx.update(ref, { lastOpenedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    }
+  });
+}
+</script>
+
       function renderTasks(items) {
   const el = document.getElementById('tasks-list');
   if (!el) return;
@@ -204,6 +231,35 @@
     p.textContent = 'No tasks assigned yet.';
     el.appendChild(p);
     return;
+
+  
+const right = document.createElement('div');
+
+// status pill
+const badge = document.createElement('span');
+badge.className = 'badge badge-amber';
+const s = (t.status || 'assigned').replace('_',' ');
+badge.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+right.appendChild(badge);
+
+// Open button that starts tracking
+const idsCsv = Array.isArray(t.siteIds) ? t.siteIds.join(',') : '';
+const link = document.createElement('a');
+link.href = `AssignedParks.html?focus=${encodeURIComponent(idsCsv)}&task=${encodeURIComponent(t.id)}`;
+link.className = 'btn btn-dark btn-small';
+link.textContent = 'Open';
+link.style.marginLeft = '8px';
+link.addEventListener('click', async (ev) => {
+  ev.preventDefault();
+  try { await markTaskStarted(t.id); } catch(e) { console.warn(e); }
+  location.href = link.href;
+});
+right.appendChild(link);
+
+row.appendChild(left);
+row.appendChild(right);
+el.appendChild(row);
+  
   }
 
   items.forEach(t => {
