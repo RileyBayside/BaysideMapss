@@ -367,6 +367,42 @@
 
   <script>
 (function () {
+  const db = firebase.firestore();
+  const params = new URLSearchParams(location.search);
+  const taskId = params.get('task');
+
+  if (!taskId) return;
+
+  firebase.auth().onAuthStateChanged(async (u) => {
+    if (!u) return;
+    try {
+      await db.runTransaction(async (tx) => {
+        const ref = db.collection('assignments').doc(taskId);
+        const snap = await tx.get(ref);
+        if (!snap.exists) return;
+
+        const d = snap.data() || {};
+        if (d.userId !== u.uid) return; // safety: only mark own tasks
+
+        if (d.status !== 'in_progress' && d.status !== 'completed') {
+          tx.update(ref, {
+            status: 'in_progress',
+            startedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            startedBy: u.uid
+          });
+        } else {
+          tx.update(ref, { lastOpenedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        }
+      });
+    } catch (e) {
+      console.warn('Failed to mark task started:', e);
+    }
+  });
+})();
+</script>
+  
+  <script>
+(function () {
   const sidebar = document.getElementById('sidebar');
   if (!sidebar) return;
 
