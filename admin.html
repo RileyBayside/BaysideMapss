@@ -12,159 +12,85 @@
 
   <style>
     :root{
-      --ink:#0f172a;
-      --ink-2:#111827;
-      --muted:#e5e7eb;
-      --bg:#f6f7fb;
-      --card:#ffffff;
-      --accent:#d11e2b;
-      --accent-600:#b71a24;
-      --focus:#e6f0ff;
-      --danger:#ef4444;
-      --danger-600:#dc2626;
-      --ok:#16a34a;
+      --ink:#0f172a; --ink-2:#111827; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff;
+      --accent:#d11e2b; --accent-600:#b71a24; --focus:#e6f0ff;
+      --danger:#ef4444; --danger-600:#dc2626; --ok:#16a34a;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
-    body{
-      margin:0;
-      font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-      background:var(--bg);
-      color:var(--ink);
-    }
+    body{ margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink) }
 
-    /* Header (roomy for bigger logo) */
-    .header{
-      display:flex; align-items:center; justify-content:space-between;
-      gap:16px; padding:16px 22px; background:#fff; border-bottom:1px solid var(--muted);
-      position:sticky; top:0; z-index:10;
-    }
-    .brand{ display:flex; align-items:center; gap:14px; min-width:0; }
+    /* Header */
+    .header{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px 22px; background:#fff; border-bottom:1px solid var(--muted); position:sticky; top:0; z-index:10 }
+    .brand{ display:flex; align-items:center; gap:14px; min-width:0 }
     .brand img{ height:56px; display:block }
-    .brand .title{
-      font-size:22px; font-weight:800; color:var(--ink-2); letter-spacing:.2px;
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-    }
-    .userbox{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-    .email{
-      font-weight:600; color:#334155; background:#f1f5f9; border:1px solid #e2e8f0;
-      padding:8px 10px; border-radius:10px; max-width:52vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-    }
-    .btn{
-      border:0; border-radius:10px; padding:10px 14px; font-weight:800; cursor:pointer; color:#fff;
-      background:var(--ink);
-    }
+    .brand .title{ font-size:22px; font-weight:800; color:var(--ink-2); letter-spacing:.2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .userbox{ display:flex; align-items:center; gap:12px; flex-wrap:wrap }
+    .email{ font-weight:600; color:#334155; background:#f1f5f9; border:1px solid #e2e8f0; padding:8px 10px; border-radius:10px; max-width:52vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .btn{ border:0; border-radius:10px; padding:10px 14px; font-weight:800; cursor:pointer; color:#fff; background:var(--ink) }
     .btn:hover{ background:#1f2937 }
 
     /* Layout */
-    .container{ max-width:1120px; margin: 24px auto; padding: 0 16px }
-    .section-title{ font-size:18px; font-weight:800; margin: 10px 2px 12px; color:var(--ink-2) }
+    .container{ max-width:1120px; margin:24px auto; padding:0 16px }
+    .section-title{ font-size:18px; font-weight:800; margin:10px 2px 12px; color:var(--ink-2) }
+    .card{ background:var(--card); border:1px solid var(--muted); border-radius:16px; box-shadow:0 8px 26px rgba(16,24,40,.08) }
 
-    .card{
-      background:var(--card); border:1px solid var(--muted); border-radius:16px;
-      box-shadow:0 8px 26px rgba(16,24,40,.08);
-    }
-
-    /* Admin tools (cards with multiple actions) */
+    /* Admin tools */
     .tools{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px }
     .tool{ padding:16px; display:flex; flex-direction:column; gap:8px }
     .tool h3{ margin:0; font-size:15px; font-weight:800 }
-    .tool p { margin:0 0 8px; color:#475569 }
+    .tool p{ margin:0 0 8px; color:#475569 }
     .actions{ display:flex; flex-wrap:wrap; gap:10px }
-    .action{
-      display:inline-flex; align-items:center; justify-content:center;
-      padding:9px 12px; border-radius:10px; font-weight:800; text-decoration:none; color:#fff;
-      background:var(--accent);
-    }
+    .action{ display:inline-flex; align-items:center; justify-content:center; padding:9px 12px; border-radius:10px; font-weight:800; text-decoration:none; color:#fff; background:var(--accent) }
     .action:hover{ background:var(--accent-600) }
 
-    /* Quick links */
-    .links{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px }
-    .link-card{ overflow:hidden; display:flex; flex-direction:column }
-    .link-card img{
-      width:100%;
-      height:280px; object-fit:cover; object-position:center; display:block; background:#e2e8f0;
-    }
-    .link-body{ padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px }
-    .link-title{ font-weight:800; font-size:16px; color:var(--ink-2) }
-    .link-go{
-      text-decoration:none; color:#fff; background:var(--ink); padding:9px 12px; border-radius:10px; font-weight:800;
-    }
-    .link-go:hover{ background:#1f2937 }
+    /* Work cards (you already use these styles elsewhere) */
+    .cards-row{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px }
+    .work-card{ text-decoration:none; color:inherit; background:#fff; border:1px solid var(--muted); border-radius:16px; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 8px 26px rgba(16,24,40,.08) }
+    .work-card__img img{ width:100%; height:220px; object-fit:cover; background:#e2e8f0; display:block }
+    .work-card__footer{ padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px }
+    .work-card__title{ font-weight:800; font-size:16px; color:var(--ink-2) }
+    .btn-dark{ background:var(--ink); color:#fff; padding:9px 12px; border-radius:10px; font-weight:800 }
 
     /* Modal */
-    .hidden{ display:none !important; }
-    .modal-backdrop{
-      position:fixed; inset:0; background:rgba(15,23,42,.48);
-      display:flex; align-items:center; justify-content:center; padding:20px; z-index:50;
-    }
-    .modal{
-      width:min(840px, 92vw); max-height:86vh; overflow:auto;
-      background:#fff; border:1px solid var(--muted); border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.25);
-    }
-    .modal header{
-      display:flex; align-items:center; justify-content:space-between; gap:10px;
-      padding:14px 16px; border-bottom:1px solid var(--muted);
-    }
+    .hidden{ display:none !important }
+    .modal-backdrop{ position:fixed; inset:0; background:rgba(15,23,42,.48); display:flex; align-items:center; justify-content:center; padding:20px; z-index:50 }
+    .modal{ width:min(840px,92vw); max-height:86vh; overflow:auto; background:#fff; border:1px solid var(--muted); border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.25) }
+    .modal header{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:14px 16px; border-bottom:1px solid var(--muted) }
     .modal h3{ margin:0; font-size:16px; font-weight:800; color:var(--ink-2) }
-    .modal .close{
-      border:0; background:#f1f5f9; border:1px solid #e2e8f0; color:#111827; border-radius:10px;
-      padding:8px 10px; font-weight:800; cursor:pointer;
-    }
+    .modal .close{ border:0; background:#f1f5f9; border:1px solid #e2e8f0; color:#111827; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer }
     .modal .close:hover{ background:#e5e7eb }
     .modal .body{ padding:12px 16px 16px; display:grid; gap:12px }
-
-    .modal .toolbar{
-      display:flex; gap:10px; align-items:center;
-    }
-    .modal .toolbar input{
-      flex:1; padding:10px 12px; border-radius:10px; border:1px solid var(--muted); font-size:14px;
-    }
+    .modal .toolbar{ display:flex; gap:10px; align-items:center }
+    .modal .toolbar input{ flex:1; padding:10px 12px; border-radius:10px; border:1px solid var(--muted); font-size:14px }
     .modal .toolbar input:focus{ outline:3px solid var(--focus); border-color:#94a3b8 }
-
-    .op-list{ display:grid; gap:8px; }
-    .op-row{
-      display:flex; align-items:center; justify-content:space-between; gap:12px;
-      padding:10px 12px; border:1px solid #e2e8f0; border-radius:12px; background:#fff;
-    }
+    .op-list{ display:grid; gap:8px }
+    .op-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid #e2e8f0; border-radius:12px; background:#fff }
     .op-main{ min-width:0 }
-    .op-name{ font-weight:800; color:#111827; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .op-meta{ color:#64748b; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .op-actions{ display:flex; gap:8px; }
-    .btn-small{
-      border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer; color:#fff;
-      background:var(--ink);
-    }
+    .op-name{ font-weight:800; color:#111827; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .op-meta{ color:#64748b; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .op-actions{ display:flex; gap:8px }
+    .btn-small{ border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer; color:#fff; background:var(--ink) }
     .btn-small:hover{ background:#1f2937 }
     .btn-warn{ background:var(--danger) }
     .btn-warn:hover{ background:var(--danger-600) }
     .btn-ok{ background:var(--ok) }
-
-    .pill{
-      display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:800;
-      background:#fee2e2; color:#7f1d1d; border:1px solid #fecaca; margin-left:8px;
-    }
+    .pill{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:800; background:#fee2e2; color:#7f1d1d; border:1px solid #fecaca; margin-left:8px }
 
     /* Responsive */
-    @media (max-width:980px){
-      .tools{ grid-template-columns: 1fr }
-      .links{ grid-template-columns: 1fr 1fr }
-    }
-    @media (max-width:640px){
-      .links{ grid-template-columns: 1fr }
-      .brand .title{ display:none }
-    }
+    @media (max-width:980px){ .tools{ grid-template-columns:1fr } .cards-row{ grid-template-columns:1fr 1fr } }
+    @media (max-width:640px){ .cards-row{ grid-template-columns:1fr } .brand .title{ display:none } }
   </style>
-</head>
-<body>
 
-  <!-- Firebase (Auth + Firestore) -->
+  <!-- Firebase scripts (LOAD ONCE) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
-  
+</head>
+<body>
+
   <!-- Header -->
   <header class="header">
     <div class="brand">
@@ -178,7 +104,7 @@
   </header>
 
   <main class="container">
-    <!-- Admin tools (3 tools, each with multiple actions) -->
+    <!-- Admin tools -->
     <h2 class="section-title">Admin tools</h2>
     <section class="tools">
       <div class="card tool">
@@ -186,7 +112,6 @@
         <p>Create operator accounts and set display names.</p>
         <div class="actions">
           <a class="action" href="create-user.html">Create operator</a>
-          <!-- Removed: Reset password -->
           <a class="action" href="admin.html#disable" id="manageUsersLink">Disable / delete</a>
         </div>
       </div>
@@ -216,40 +141,20 @@
       <h2 class="section-title">Work areas</h2>
 
       <div class="cards-row">
-
-        <!-- Parks Mowing -->
         <a href="./ParksMowing.html" class="work-card">
-          <div class="work-card__img">
-            <img src="MOWING PICTURE.png" alt="Parks Mowing map" />
-          </div>
-          <div class="work-card__footer">
-            <span class="work-card__title">Parks Mowing</span>
-            <span class="btn btn-dark">Open</span>
-          </div>
+          <div class="work-card__img"><img src="MOWING PICTURE.png" alt="Parks Mowing map" /></div>
+          <div class="work-card__footer"><span class="work-card__title">Parks Mowing</span><span class="btn-dark">Open</span></div>
         </a>
 
-        <!-- Parks Snipping -->
         <a href="./ParksSnipping.html" class="work-card">
-          <div class="work-card__img">
-            <img src="SNIPPING PICTURE.png" alt="Parks Snipping map" />
-          </div>
-          <div class="work-card__footer">
-            <span class="work-card__title">Parks Snipping</span>
-            <span class="btn btn-dark">Open</span>
-          </div>
+          <div class="work-card__img"><img src="SNIPPING PICTURE.png" alt="Parks Snipping map" /></div>
+          <div class="work-card__footer"><span class="work-card__title">Parks Snipping</span><span class="btn-dark">Open</span></div>
         </a>
 
-        <!-- Firebreaks -->
         <a href="./Firebreaks.html" class="work-card">
-          <div class="work-card__img">
-            <img src="FIREBREAKS PICTURE.png" alt="Firebreaks map" />
-          </div>
-          <div class="work-card__footer">
-            <span class="work-card__title">Firebreaks</span>
-            <span class="btn btn-dark">Open</span>
-          </div>
+          <div class="work-card__img"><img src="FIREBREAKS PICTURE.png" alt="Firebreaks map" /></div>
+          <div class="work-card__footer"><span class="work-card__title">Firebreaks</span><span class="btn-dark">Open</span></div>
         </a>
-
       </div>
     </section>
   </main>
@@ -263,86 +168,83 @@
       </header>
       <div class="body">
         <div class="toolbar">
-          <input id="opSearch" placeholder="Search by name or email…" />
+          <input id="opSearch" placeholder="Search by name or email…"/>
           <span id="opCount" style="color:#64748b;font-weight:700"></span>
         </div>
         <div id="opList" class="op-list"></div>
         <small style="color:#64748b">
-          <b>Note:</b> “Disable” sets a flag in Firestore so the operator can’t use the app if your
-          client checks that flag (recommended). “Delete” marks the user as deleted in Firestore.
-          Removing the Auth account entirely requires an admin backend (Cloud Function / Admin SDK).
+          <b>Note:</b> “Disable” sets a flag in Firestore; “Delete” marks the doc as deleted.
+          Removing the Auth account requires the Admin SDK (Cloud Function).
         </small>
       </div>
     </div>
   </div>
 
-  <!-- Firebase (dup kept as in your original file) -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-  <script src="firebase-init.js"></script>
-
   <script>
+    // Basic header auth UI
     (function(){
       const emailEl = document.getElementById('userEmail');
       const logoutBtn = document.getElementById('logoutBtn');
 
       firebase.auth().onAuthStateChanged(user=>{
-        if(!user){
-          window.location.href = 'login.html';
-          return;
-        }
+        if(!user){ window.location.href = 'login.html'; return; }
         emailEl.textContent = user.email || 'Signed in';
       });
 
       logoutBtn.addEventListener('click', async ()=>{
-        try{
-          await firebase.auth().signOut();
-          window.location.href = 'login.html';
-        }catch(e){
-          console.warn(e);
-          alert('Logout failed. Please try again.');
-        }
+        try{ await firebase.auth().signOut(); window.location.href = 'login.html'; }
+        catch(e){ console.warn(e); alert('Logout failed. Please try again.'); }
       });
     })();
   </script>
 
-  <!-- Disable/Delete modal logic -->
   <script>
+    // Disable / Delete modal logic
     (function(){
+      if (!firebase.firestore) {
+        console.warn('Firestore not loaded');
+        return;
+      }
       const db = firebase.firestore();
 
-      const userModal = document.getElementById('userModal');
-      const manageLink = document.getElementById('manageUsersLink');
-      const modalCloseBtn = document.getElementById('modalCloseBtn');
-      const opList = document.getElementById('opList');
-      const opSearch = document.getElementById('opSearch');
-      const opCount = document.getElementById('opCount');
+      const userModal   = document.getElementById('userModal');
+      const manageLink  = document.getElementById('manageUsersLink');
+      const modalClose  = document.getElementById('modalCloseBtn');
+      const opList      = document.getElementById('opList');
+      const opSearch    = document.getElementById('opSearch');
+      const opCount     = document.getElementById('opCount');
 
-      let allOps = []; // cached list from Firestore
+      let allOps = [];
 
-      function openModal(){
-        userModal.classList.remove('hidden');
-        // load latest every time we open
-        loadOperators();
-      }
-      function closeModal(){
-        userModal.classList.add('hidden');
-      }
+      function openModal(){ userModal.classList.remove('hidden'); loadOperators(); }
+      function closeModal(){ userModal.classList.add('hidden'); }
 
-      if (manageLink){
-        manageLink.addEventListener('click', (e)=>{
-          // Intercept the #disable anchor
-          e.preventDefault();
-          openModal();
-        });
-      }
-      if (modalCloseBtn) modalCloseBtn.addEventListener('click', closeModal);
-      // Click outside to close
-      userModal.addEventListener('click', (e)=>{
-        if (e.target === userModal) closeModal();
-      });
-      // Deep link: open if hash is #disable
+      manageLink?.addEventListener('click', (e)=>{ e.preventDefault(); openModal(); });
+      modalClose?.addEventListener('click', closeModal);
+      userModal?.addEventListener('click', (e)=>{ if (e.target === userModal) closeModal(); });
+
       if (location.hash === '#disable') openModal();
+
+      opSearch?.addEventListener('input', ()=> renderList(opSearch.value));
+
+      async function loadOperators(){
+        try{
+          const snap = await db.collection('users').where('role','==','operator').get();
+          const rows = [];
+          snap.forEach(doc=>{
+            const d = doc.data() || {};
+            rows.push({
+              uid: doc.id, name: d.name || '', username: d.username || '',
+              email: d.email || '', disabled: !!d.disabled, deleted: !!d.deleted
+            });
+          });
+          allOps = rows;
+          renderList(opSearch.value);
+        }catch(err){
+          opList.innerHTML = '<p style="color:#b91c1c;font-weight:700">Failed to load operators.</p>';
+          console.warn('loadOperators error:', err);
+        }
+      }
 
       function renderList(filter=''){
         const q = (filter||'').trim().toLowerCase();
@@ -371,42 +273,26 @@
           const title = document.createElement('div');
           title.className = 'op-name';
           title.textContent = u.name || u.username || u.email || u.uid || 'Unknown';
-          if (u.disabled) {
-            const pill = document.createElement('span');
-            pill.className = 'pill';
-            pill.textContent = 'Disabled';
-            title.appendChild(pill);
-          }
+          if (u.disabled) { const pill = document.createElement('span'); pill.className = 'pill'; pill.textContent = 'Disabled'; title.appendChild(pill); }
           const meta = document.createElement('div');
           meta.className = 'op-meta';
           meta.textContent = u.email || '';
-
-          main.appendChild(title);
-          main.appendChild(meta);
+          main.appendChild(title); main.appendChild(meta);
 
           const actions = document.createElement('div');
           actions.className = 'op-actions';
 
-          // Disable / Enable
           const disBtn = document.createElement('button');
           disBtn.className = 'btn-small ' + (u.disabled ? 'btn-ok' : '');
           disBtn.textContent = u.disabled ? 'Enable' : 'Disable';
           disBtn.addEventListener('click', async ()=>{
             try{
-              await db.collection('users').doc(u.uid).set({
-                disabled: !u.disabled,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-              }, { merge:true });
-              // reflect locally and re-render
-              u.disabled = !u.disabled;
-              renderList(opSearch.value);
-            }catch(err){
-              alert('Failed to update: ' + (err.message || err.code || err));
-            }
+              await db.collection('users').doc(u.uid).set({ disabled: !u.disabled, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge:true });
+              u.disabled = !u.disabled; renderList(opSearch.value);
+            }catch(err){ alert('Failed to update: ' + (err.message || err.code || err)); }
           });
           actions.appendChild(disBtn);
 
-          // Delete (soft delete in Firestore)
           const delBtn = document.createElement('button');
           delBtn.className = 'btn-small btn-warn';
           delBtn.textContent = 'Delete';
@@ -417,56 +303,21 @@
             if (!second) return;
             try{
               await db.collection('users').doc(u.uid).set({
-                deleted: true,
-                disabled: true,
-                deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+                deleted: true, disabled: true, deletedAt: firebase.firestore.FieldValue.serverTimestamp()
               }, { merge:true });
-              // remove from view
-              u.deleted = true;
-              renderList(opSearch.value);
-            }catch(err){
-              alert('Failed to delete: ' + (err.message || err.code || err));
-            }
+              u.deleted = true; renderList(opSearch.value);
+            }catch(err){ alert('Failed to delete: ' + (err.message || err.code || err)); }
           });
           actions.appendChild(delBtn);
 
-          row.appendChild(main);
-          row.appendChild(actions);
+          row.appendChild(main); row.appendChild(actions);
           opList.appendChild(row);
         });
 
         if (!list.length){
-          const p = document.createElement('p');
-          p.style.color = '#64748b';
-          p.textContent = 'No operators match your search.';
-          opList.appendChild(p);
+          const p = document.createElement('p'); p.style.color = '#64748b'; p.textContent = 'No operators match your search.'; opList.appendChild(p);
         }
       }
-
-      async function loadOperators(){
-        try{
-          const snap = await db.collection('users').where('role','==','operator').get();
-          const rows = [];
-          snap.forEach(doc => {
-            const d = doc.data() || {};
-            rows.push({
-              uid: doc.id,
-              name: d.name || '',
-              username: d.username || '',
-              email: d.email || '',
-              disabled: !!d.disabled,
-              deleted: !!d.deleted
-            });
-          });
-          allOps = rows;
-          renderList(opSearch.value);
-        }catch(err){
-          opList.innerHTML = '<p style="color:#b91c1c;font-weight:700">Failed to load operators.</p>';
-          console.warn('loadOperators error:', err);
-        }
-      }
-
-      opSearch.addEventListener('input', ()=> renderList(opSearch.value));
     })();
   </script>
 </body>
