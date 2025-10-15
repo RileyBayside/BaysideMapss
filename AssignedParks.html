@@ -14,6 +14,37 @@
   <link rel="stylesheet" href="sidebar.css" />
 
   <style>
+
+    /* Collapsible behavior */
+#sidebar {
+  transition: transform .25s ease;
+  will-change: transform;
+  z-index: 1001; /* above Leaflet controls */
+}
+
+#sidebar.is-collapsed {
+  transform: translateX(calc(-100% - 12px));
+}
+
+/* Floating toggle button */
+#sbMiniToggle {
+  position: fixed;
+  width: 36px; height: 36px;
+  border: 0; border-radius: 9999px;
+  background: #d11e2b; /* Bayside red */
+  color: #fff; font-weight: 900; font-size: 18px; line-height: 36px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.22);
+  cursor: pointer;
+  z-index: 1002; /* above the sidebar */
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* subtle focus for keyboard users */
+#sbMiniToggle:focus-visible {
+  outline: 3px solid rgba(209,30,43,.35);
+  outline-offset: 2px;
+}
+    
     /* Brand palette & basics */
     :root{
       --ink:#0f172a; --muted:#e5e7eb; --card:#ffffff;
@@ -331,6 +362,76 @@
   const mo = new MutationObserver(repositionSidebar);
   mo.observe(document.body, { childList: true, subtree: true });
   setTimeout(() => mo.disconnect(), 6000);
+})();
+</script>
+
+  <script>
+(function () {
+  const sidebar = document.getElementById('sidebar');
+  if (!sidebar) return;
+
+  // Create the floating toggle once
+  let toggle = document.getElementById('sbMiniToggle');
+  if (!toggle) {
+    toggle = document.createElement('button');
+    toggle.id = 'sbMiniToggle';
+    toggle.type = 'button';
+    toggle.setAttribute('aria-label', 'Collapse sidebar');
+    toggle.setAttribute('aria-expanded', 'true');
+    toggle.textContent = '‹'; // shows "collapse" chevron
+    document.body.appendChild(toggle);
+  }
+
+  function sidebarTopPx() {
+    // Read the top we already set in your positioning code
+    const t = parseInt(sidebar.style.top || '8', 10);
+    return Number.isFinite(t) ? t : 8;
+  }
+
+  function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+
+  function positionToggle() {
+    const top = sidebarTopPx();
+    // Where to place the button horizontally?
+    // If expanded, sit just to the right of the sidebar.
+    // If collapsed, sit near the left edge.
+    if (sidebar.classList.contains('is-collapsed')) {
+      toggle.style.left = '8px';
+    } else {
+      const rect = sidebar.getBoundingClientRect();
+      const left = rect.right + 8; // 8px gap from right edge of the sidebar
+      const maxLeft = (window.innerWidth || 360) - 44; // keep on-screen
+      toggle.style.left = clamp(left, 8, maxLeft) + 'px';
+    }
+    toggle.style.top = (top + 4) + 'px';
+  }
+
+  function setExpanded(expanded) {
+    sidebar.classList.toggle('is-collapsed', !expanded);
+    toggle.setAttribute('aria-expanded', String(expanded));
+    toggle.setAttribute('aria-label', expanded ? 'Collapse sidebar' : 'Expand sidebar');
+    toggle.textContent = expanded ? '‹' : '›';
+    positionToggle();
+  }
+
+  // Click to toggle
+  toggle.addEventListener('click', () => {
+    const expanded = !sidebar.classList.contains('is-collapsed');
+    setExpanded(!expanded);
+  });
+
+  // Keep aligned on load, resize and whenever your code repositions the sidebar
+  window.addEventListener('load', positionToggle);
+  window.addEventListener('resize', positionToggle);
+
+  // If your page uses a function to reposition the sidebar, hook it:
+  // (Call positionToggle afterwards.)
+  const mo = new MutationObserver(positionToggle);
+  mo.observe(document.body, { attributes: true, childList: true, subtree: true });
+  setTimeout(() => mo.disconnect(), 6000); // observe briefly during startup
+
+  // Initial align
+  positionToggle();
 })();
 </script>
   
