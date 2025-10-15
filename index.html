@@ -185,10 +185,7 @@
         if (logoutBtn) {
           logoutBtn.addEventListener('click', () => window.logout());
         }
-      })();
-    </script>
-    
-  <script>
+  
 /* ---- Tasks for the signed-in operator ---- */
 (function () {
   const db = firebase.firestore();
@@ -377,6 +374,8 @@
     });
   }
   </script>
+
+     <script>
   
         function renderTasks(items) {
     const el = document.getElementById('tasks-list');
