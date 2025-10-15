@@ -6,67 +6,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="logo.png" type="image/png" />
 
-  <!-- Core styles (same as ParksMowing) -->
+  <!-- Core styles (same stack as ParksMowing) -->
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 
-  <!-- Sidebar styles (same as ParksMowing) -->
+  <!-- Sidebar styles -->
   <link rel="stylesheet" href="sidebar.css" />
 
   <style>
-
-    /* Collapsible behavior */
-#sidebar {
-  transition: transform .25s ease;
-  will-change: transform;
-  z-index: 1001; /* above Leaflet controls */
-}
-
-#sidebar.is-collapsed {
-  transform: translateX(calc(-100% - 12px));
-}
-
-/* Floating toggle button */
-#sbMiniToggle {
-  position: fixed;
-  width: 36px; height: 36px;
-  border: 0; border-radius: 9999px;
-  background: #d11e2b; /* Bayside red */
-  color: #fff; font-weight: 900; font-size: 18px; line-height: 36px;
-  box-shadow: 0 6px 18px rgba(0,0,0,.22);
-  cursor: pointer;
-  z-index: 1002; /* above the sidebar */
-  display: inline-flex; align-items: center; justify-content: center;
-}
-
-/* subtle focus for keyboard users */
-#sbMiniToggle:focus-visible {
-  outline: 3px solid rgba(209,30,43,.35);
-  outline-offset: 2px;
-}
-    
-    /* Brand palette & basics */
     :root{
       --ink:#0f172a; --muted:#e5e7eb; --card:#ffffff;
       --accent:#d11e2b; --accent-600:#b71a24;
       --soft:#f8fafc; --soft-2:#f1f5f9;
     }
+
+    /* Full-height map */
     #map { height: 100vh; }
 
-    /* Sidebar compact + brand */
+    /* Left sidebar: compact, rounded, brand coloured header */
     #sidebar{
-      width: 340px;           /* narrower = more map space */
-      max-width: 86vw;
-      background:#fff;
-      border-right:1px solid var(--muted);
+      position: fixed;               /* we re-position in JS */
+      left: 8px; top: 8px; bottom: 8px;
+      width: 340px; max-width: 86vw;
+      background:#fff; border-right:1px solid var(--muted);
       box-shadow:0 8px 26px rgba(16,24,40,.08);
-      overflow:auto;
+      border-radius: 14px;
+      overflow: hidden;              /* clip corners */
+      display: flex; flex-direction: column;
+      z-index: 1000;
+      pointer-events: auto;
+      transition: transform .25s ease;
+      will-change: transform;
     }
+    #sidebar.is-collapsed {
+      transform: translateX(calc(-100% - 12px));
+    }
+
     #sidebar .sidebar-head{
       position: sticky; top:0; z-index: 5;
       display:flex; align-items:center; gap:10px;
-      padding:10px 12px;
-      color:#fff; font-weight:800;
+      padding:10px 12px; color:#fff; font-weight:800;
       background: linear-gradient(90deg, var(--accent), #eb4550);
       border-bottom:1px solid rgba(255,255,255,.15);
     }
@@ -84,8 +63,12 @@
     }
     #sidebar #toggle-all:hover{ background:var(--accent-600); }
 
-    /* Sidebar content container spacing */
-    #sidebar #sidebar-content{ padding:8px 12px 16px; }
+    /* Scrollable content inside rounded container */
+    #sidebar-content{
+      flex: 1 1 auto; min-height: 0;
+      overflow-y: auto; -webkit-overflow-scrolling: touch;
+      padding:8px 12px 16px; padding-right: 8px;
+    }
 
     /* Groups / details look compact */
     #sidebar-content details{
@@ -96,7 +79,7 @@
       list-style:none; cursor:pointer; user-select:none;
       padding:8px 10px; background:var(--soft-2);
       display:flex; align-items:center; justify-content:space-between; gap:10px;
-      font-weight:700; color:var(--ink);
+      font-weight:700; color:#111827;
     }
     #sidebar-content details[open] > summary{ background:#eef2f7; }
 
@@ -111,65 +94,48 @@
     }
     #sidebar-content li:first-child{ border-top:0; }
 
-    /* Mini badges (optional) */
-    .mini-pill{
-      display:inline-block; padding:2px 6px; border-radius:999px;
-      font-size:11px; font-weight:800; color:#7f1d1d;
-      background:#fee2e2; border:1px solid #fecaca;
-    }
-
-    /* Sidebar toggle button style (mobile friendly) */
+    /* Top-left “open sidebar” button from your base map */
     #sidebar-toggle{
-      position: fixed; top:12px; left:12px; z-index: 1000;
+      position: fixed; top:12px; left:12px; z-index: 999;
       border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer;
       background: var(--accent); color:#fff;
       box-shadow:0 6px 18px rgba(16,24,40,.18);
     }
     #sidebar-toggle:active{ transform: translateY(1px); }
 
-    /* Mobile tweaks: sidebar is full width overlayish */
+    /* Floating mini collapse/expand toggle */
+    #sbMiniToggle {
+      position: fixed;
+      width: 36px; height: 36px;
+      border: 0; border-radius: 9999px;
+      background: #d11e2b; color: #fff;
+      font-weight: 900; font-size: 18px; line-height: 36px;
+      box-shadow: 0 6px 18px rgba(0,0,0,.22);
+      cursor: pointer;
+      z-index: 1002;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    #sbMiniToggle:focus-visible {
+      outline: 3px solid rgba(209,30,43,.35); outline-offset: 2px;
+    }
+
+    /* “Mark task done” button */
+    #taskDoneBtn{
+      position: fixed; right: 14px; bottom: 14px; z-index: 1100;
+      border: 0; border-radius: 12px; padding: 10px 14px; font-weight: 800;
+      background: #16a34a; color:#fff; box-shadow: 0 8px 22px rgba(0,0,0,.18);
+      cursor: pointer;
+    }
+    #taskDoneBtn:hover{ background:#15803d; }
+
+    /* Mobile tweaks */
     @media (max-width: 768px){
-      #sidebar{ width: 100vw; max-width: none; }
+      #sidebar{ width: 100vw; max-width: none; left:6px; right:6px; border-radius:12px; }
       #sidebar .sidebar-head .title{ font-size:13px }
       #sidebar-content details > summary{ padding:8px 10px; }
       #sidebar-content li, #sidebar-content .list-item,
-      #sidebar-content .sidebar-row, #sidebar-content .item{
-        padding:8px 10px;
-      }
+      #sidebar-content .sidebar-row, #sidebar-content .item{ padding:8px 10px; }
     }
-    /* Sidebar: rounded, slight margins, flex column */
-#sidebar{
-  left: 8px !important;           /* small gap from the left edge */
-  top: 8px;                       /* small gap from top */
-  bottom: 8px;                    /* small gap from bottom */
-  height: auto;                   /* let top/bottom control height */
-  max-height: calc(100vh - 16px); /* visible area */
-  border-radius: 14px;            
-  overflow: hidden;               /* clip to rounded corners */
-  display: flex;                  /* so inner content can flex/scroll */
-  flex-direction: column;
-  z-index: 1000;
-  pointer-events: auto;
-}
-
-/* Make the main content area scrollable */
-#sidebar-content{
-  flex: 1 1 auto;                 /* take remaining height */
-  min-height: 0;                  /* important for flex scrolling */
-  overflow-y: auto;               /* scroll here, not on the outer */
-  -webkit-overflow-scrolling: touch; /* momentum scroll on iOS */
-  padding-right: 8px;             /* avoid scrollbar overlaying text */
-}
-
-/* Mobile: keep slim margins and rounded corners */
-@media (max-width: 768px){
-  #sidebar{
-    left: 6px !important;
-    right: 6px;                   /* slim right margin too */
-    border-radius: 12px;
-  }
-}
-
   </style>
 </head>
 <body>
@@ -181,10 +147,10 @@
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
 
-  <!-- Sidebar toggle button -->
+  <!-- Sidebar toggle button (same id your base code expects) -->
   <button id="sidebar-toggle">☰</button>
 
-  <!-- Sidebar container (IDs kept for your existing JS) -->
+  <!-- Sidebar container -->
   <div id="sidebar">
     <div class="sidebar-head">
       <img src="logo.png" alt="Bayside" onerror="this.style.display='none'">
@@ -192,7 +158,6 @@
     </div>
 
     <button id="toggle-all">Expand All</button>
-
     <div id="sidebar-content"></div>
 
     <div style="padding:10px 12px 16px">
@@ -206,16 +171,19 @@
     </div>
   </div>
 
-  <!-- Map container (Leaflet map is created by script.js the same way as ParksMowing) -->
+  <!-- Map container (Leaflet map is created by script.js) -->
   <div id="map"></div>
 
-  <!-- Core scripts (use SAME stack as ParksMowing so tiles/data match) -->
+  <!-- Big green action button (appears only if ?task=...) -->
+  <button id="taskDoneBtn" hidden title="Mark this task completed">Mark task done</button>
+
+  <!-- Core scripts (same stack as ParksMowing so look & data match) -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="script.js"></script>
   <script src="sidebar.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
-  <!-- Filter the sidebar to only show assigned IDs (same logic you had) -->
+  <!-- Filter the sidebar to only show assigned IDs (via ?focus= or Firestore) -->
   <script>
   (function () {
     // Parse ?focus=M0123,M0361,... from URL
@@ -230,8 +198,7 @@
         const u = firebase.auth().currentUser;
         if (!u) return [];
         const snap = await firebase.firestore().collection('assignments')
-          .where('userId', '==', u.uid)
-          .get();
+          .where('userId', '==', u.uid).get();
         const set = new Set();
         snap.forEach(doc => {
           const d = doc.data() || {};
@@ -313,163 +280,173 @@
   })();
   </script>
 
-<script>
-// Position the left sidebar just below the "Search ID..." control
-(function () {
-  function findSearchBar() {
-    // Try several common selectors; add/adjust if yours is different
-    return (
-      document.querySelector('#site-search') ||
-      document.querySelector('.site-search') ||
-      document.querySelector('#searchBar') ||
-      document.querySelector('.search-bar') ||
-      document.querySelector('#searchSite') ||
-      document.querySelector('#search') ||
-      // Fallback: look for the Leaflet control input by placeholder
-      document.querySelector('input[placeholder="Search ID..."]')
-    );
-  }
+  <!-- Position the sidebar just below the "Search ID..." control (6px gap) -->
+  <script>
+  (function () {
+    function findSearchBar() {
+      return (
+        document.querySelector('#site-search') ||
+        document.querySelector('.site-search') ||
+        document.querySelector('#searchBar') ||
+        document.querySelector('.search-bar') ||
+        document.querySelector('#searchSite') ||
+        document.querySelector('#search') ||
+        document.querySelector('input[placeholder="Search ID..."]')
+      );
+    }
 
-  function repositionSidebar() {
+    function repositionSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      if (!sidebar) return;
+      let topPx = 8;
+      const sb = findSearchBar();
+      if (sb) {
+        const r = sb.getBoundingClientRect();
+        topPx = Math.max(6, Math.round(r.bottom)) + 6; // 6px gap
+      }
+      sidebar.style.top = topPx + 'px';
+      sidebar.style.left = '8px';
+      sidebar.style.bottom = '8px';
+      sidebar.style.maxHeight = `calc(100vh - ${topPx + 8}px)`;
+    }
+
+    const rerun = () => { repositionSidebar(); setTimeout(repositionSidebar, 0); };
+    window.addEventListener('load', rerun);
+    window.addEventListener('resize', repositionSidebar);
+
+    const mo = new MutationObserver(repositionSidebar);
+    mo.observe(document.body, { childList: true, subtree: true });
+    setTimeout(() => mo.disconnect(), 6000);
+  })();
+  </script>
+
+  <!-- When opened with ?task=..., mark as in_progress (first time) -->
+  <script>
+  (function () {
+    const db = firebase.firestore();
+    const params = new URLSearchParams(location.search);
+    const taskId = params.get('task');
+
+    if (!taskId) return;
+
+    firebase.auth().onAuthStateChanged(async (u) => {
+      if (!u) return;
+      try {
+        await db.runTransaction(async (tx) => {
+          const ref = db.collection('assignments').doc(taskId);
+          const snap = await tx.get(ref);
+          if (!snap.exists) return;
+
+          const d = snap.data() || {};
+          if (d.userId !== u.uid) return; // safety
+
+          if (d.status !== 'in_progress' && d.status !== 'completed') {
+            tx.update(ref, {
+              status: 'in_progress',
+              startedAt: firebase.firestore.FieldValue.serverTimestamp(),
+              startedBy: u.uid
+            });
+          } else {
+            tx.update(ref, { lastOpenedAt: firebase.firestore.FieldValue.serverTimestamp() });
+          }
+        });
+      } catch (e) {
+        console.warn('Failed to mark task started:', e);
+      }
+    });
+  })();
+  </script>
+
+  <!-- Mini collapse/expand toggle for the sidebar -->
+  <script>
+  (function () {
     const sidebar = document.getElementById('sidebar');
     if (!sidebar) return;
 
-    // Default if the search bar isn't found yet
-    let topPx = 8;
-
-    const sb = findSearchBar();
-    if (sb) {
-      const r = sb.getBoundingClientRect();
-      // place the sidebar 6px below the bottom edge of the search control
-      topPx = Math.max(6, Math.round(r.bottom)) + 6;
+    let toggle = document.getElementById('sbMiniToggle');
+    if (!toggle) {
+      toggle = document.createElement('button');
+      toggle.id = 'sbMiniToggle';
+      toggle.type = 'button';
+      toggle.setAttribute('aria-label', 'Collapse sidebar');
+      toggle.setAttribute('aria-expanded', 'true');
+      toggle.textContent = '‹';
+      document.body.appendChild(toggle);
     }
 
-    sidebar.style.position = 'fixed';
-    sidebar.style.left = '8px';              // small gap from the left edge
-    sidebar.style.top = topPx + 'px';        // sit below the search control
-    sidebar.style.bottom = '8px';            // small gap at the bottom
-    sidebar.style.height = 'auto';
-    sidebar.style.maxHeight = `calc(100vh - ${topPx + 8}px)`;
-    sidebar.style.overflow = 'auto';         // keep scrolling on mobile
-  }
-
-  // Run on load & resize; re-run briefly while controls mount
-  const rerun = () => { repositionSidebar(); setTimeout(repositionSidebar, 0); };
-  window.addEventListener('load', rerun);
-  window.addEventListener('resize', repositionSidebar);
-
-  // If controls are inserted asynchronously, observe for a few seconds
-  const mo = new MutationObserver(repositionSidebar);
-  mo.observe(document.body, { childList: true, subtree: true });
-  setTimeout(() => mo.disconnect(), 6000);
-})();
-</script>
-
-  <script>
-(function () {
-  const db = firebase.firestore();
-  const params = new URLSearchParams(location.search);
-  const taskId = params.get('task');
-
-  if (!taskId) return;
-
-  firebase.auth().onAuthStateChanged(async (u) => {
-    if (!u) return;
-    try {
-      await db.runTransaction(async (tx) => {
-        const ref = db.collection('assignments').doc(taskId);
-        const snap = await tx.get(ref);
-        if (!snap.exists) return;
-
-        const d = snap.data() || {};
-        if (d.userId !== u.uid) return; // safety: only mark own tasks
-
-        if (d.status !== 'in_progress' && d.status !== 'completed') {
-          tx.update(ref, {
-            status: 'in_progress',
-            startedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            startedBy: u.uid
-          });
-        } else {
-          tx.update(ref, { lastOpenedAt: firebase.firestore.FieldValue.serverTimestamp() });
-        }
-      });
-    } catch (e) {
-      console.warn('Failed to mark task started:', e);
+    function sidebarTopPx() {
+      const t = parseInt(sidebar.style.top || '8', 10);
+      return Number.isFinite(t) ? t : 8;
     }
-  });
-})();
-</script>
-  
-  <script>
-(function () {
-  const sidebar = document.getElementById('sidebar');
-  if (!sidebar) return;
+    function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
 
-  // Create the floating toggle once
-  let toggle = document.getElementById('sbMiniToggle');
-  if (!toggle) {
-    toggle = document.createElement('button');
-    toggle.id = 'sbMiniToggle';
-    toggle.type = 'button';
-    toggle.setAttribute('aria-label', 'Collapse sidebar');
-    toggle.setAttribute('aria-expanded', 'true');
-    toggle.textContent = '‹'; // shows "collapse" chevron
-    document.body.appendChild(toggle);
-  }
-
-  function sidebarTopPx() {
-    // Read the top we already set in your positioning code
-    const t = parseInt(sidebar.style.top || '8', 10);
-    return Number.isFinite(t) ? t : 8;
-  }
-
-  function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
-
-  function positionToggle() {
-    const top = sidebarTopPx();
-    // Where to place the button horizontally?
-    // If expanded, sit just to the right of the sidebar.
-    // If collapsed, sit near the left edge.
-    if (sidebar.classList.contains('is-collapsed')) {
-      toggle.style.left = '8px';
-    } else {
-      const rect = sidebar.getBoundingClientRect();
-      const left = rect.right + 8; // 8px gap from right edge of the sidebar
-      const maxLeft = (window.innerWidth || 360) - 44; // keep on-screen
-      toggle.style.left = clamp(left, 8, maxLeft) + 'px';
+    function positionToggle() {
+      const top = sidebarTopPx();
+      if (sidebar.classList.contains('is-collapsed')) {
+        toggle.style.left = '8px';
+      } else {
+        const rect = sidebar.getBoundingClientRect();
+        const left = rect.right + 8;
+        const maxLeft = (window.innerWidth || 360) - 44;
+        toggle.style.left = clamp(left, 8, maxLeft) + 'px';
+      }
+      toggle.style.top = (top + 4) + 'px';
     }
-    toggle.style.top = (top + 4) + 'px';
-  }
 
-  function setExpanded(expanded) {
-    sidebar.classList.toggle('is-collapsed', !expanded);
-    toggle.setAttribute('aria-expanded', String(expanded));
-    toggle.setAttribute('aria-label', expanded ? 'Collapse sidebar' : 'Expand sidebar');
-    toggle.textContent = expanded ? '‹' : '›';
+    function setExpanded(expanded) {
+      sidebar.classList.toggle('is-collapsed', !expanded);
+      toggle.setAttribute('aria-expanded', String(expanded));
+      toggle.setAttribute('aria-label', expanded ? 'Collapse sidebar' : 'Expand sidebar');
+      toggle.textContent = expanded ? '‹' : '›';
+      positionToggle();
+    }
+
+    toggle.addEventListener('click', () => {
+      const expanded = !sidebar.classList.contains('is-collapsed');
+      setExpanded(!expanded);
+    });
+
+    window.addEventListener('load', positionToggle);
+    window.addEventListener('resize', positionToggle);
+
+    const mo = new MutationObserver(positionToggle);
+    mo.observe(document.body, { attributes: true, childList: true, subtree: true });
+    setTimeout(() => mo.disconnect(), 6000);
+
     positionToggle();
-  }
+  })();
+  </script>
 
-  // Click to toggle
-  toggle.addEventListener('click', () => {
-    const expanded = !sidebar.classList.contains('is-collapsed');
-    setExpanded(!expanded);
-  });
+  <!-- Mark task completed (updates live for admin/operator) -->
+  <script>
+  (function () {
+    const db = firebase.firestore();
+    const params = new URLSearchParams(location.search);
+    const taskId = params.get('task');
+    const btn = document.getElementById('taskDoneBtn');
 
-  // Keep aligned on load, resize and whenever your code repositions the sidebar
-  window.addEventListener('load', positionToggle);
-  window.addEventListener('resize', positionToggle);
+    if (taskId && btn) btn.hidden = false;
 
-  // If your page uses a function to reposition the sidebar, hook it:
-  // (Call positionToggle afterwards.)
-  const mo = new MutationObserver(positionToggle);
-  mo.observe(document.body, { attributes: true, childList: true, subtree: true });
-  setTimeout(() => mo.disconnect(), 6000); // observe briefly during startup
+    btn?.addEventListener('click', async () => {
+      const u = firebase.auth().currentUser;
+      if (!u || !taskId) return;
+      if (!confirm('Mark this task as completed?')) return;
 
-  // Initial align
-  positionToggle();
-})();
-</script>
-  
+      try {
+        await db.collection('assignments').doc(taskId).update({
+          status: 'completed',
+          completedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          completedBy: u.uid
+        });
+        btn.textContent = 'Completed';
+        btn.disabled = true;
+      } catch (e) {
+        console.warn('Failed to complete task:', e);
+        alert('Sorry, failed to update. Please try again.');
+      }
+    });
+  })();
+  </script>
+
 </body>
 </html>
