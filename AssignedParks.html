@@ -281,5 +281,52 @@
     });
   })();
   </script>
+
+  <script>
+  // Reposition the sidebar so it sits just beneath the Site ID search bar
+  (function () {
+    function findSearchBar() {
+      // Change/expand these selectors to match your search bar wrapper if needed
+      return document.querySelector(
+        '#site-search, .site-search, #searchBar, .search-bar, #siteIdSearch, .site-id-search'
+      );
+    }
+
+    function positionSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      if (!sidebar) return;
+
+      // Default top gap if the search bar isn't found
+      let topPx = 8;
+
+      const search = findSearchBar();
+      if (search) {
+        const r = search.getBoundingClientRect();
+        // place 6px below the bottom of the search bar
+        topPx = Math.max(6, Math.round(r.bottom)) + 6;
+      }
+
+      // Apply top and keep a small bottom margin (8px)
+      sidebar.style.top = topPx + 'px';
+      sidebar.style.bottom = '8px';
+      sidebar.style.height = 'auto';
+      sidebar.style.maxHeight = `calc(100vh - ${topPx + 8}px)`;
+    }
+
+    // Run on load + resize (and again after a tick for layout settles)
+    window.addEventListener('load', () => {
+      positionSidebar();
+      setTimeout(positionSidebar, 0);
+    });
+    window.addEventListener('resize', positionSidebar);
+
+    // If your search bar mounts dynamically, observe DOM changes briefly
+    const mo = new MutationObserver(() => positionSidebar());
+    mo.observe(document.documentElement, {childList: true, subtree: true});
+    // Stop observing after a short while to avoid unneeded work
+    setTimeout(() => mo.disconnect(), 5000);
+  })();
+</script>
+  
 </body>
 </html>
