@@ -106,6 +106,22 @@
         padding:8px 10px;
       }
     }
+    /* Gap from left edge + rounded corners */
+#sidebar{
+  left: 8px !important;        /* tiny gap off the left */
+  border-radius: 14px;         /* rounded edges */
+  overflow: hidden;            /* clip inner content to the curve */
+}
+
+/* Optional: keep a slim margin on mobile too */
+@media (max-width: 768px){
+  #sidebar{
+    left: 6px !important;
+    right: 6px;                /* slight right margin so it doesn’t touch edge */
+    width: auto;               /* let left/right define the width */
+    border-radius: 12px;
+  }
+}
   </style>
 </head>
 <body>
