@@ -15,9 +15,8 @@
 
   <style>
     :root{
-      --ink:#0f172a; --muted:#e5e7eb; --card:#ffffff;
+      --ink:#0f172a; --muted:#e2e8f0; --card:#ffffff;
       --accent:#d11e2b; --accent-600:#b71a24;
-      --soft:#f8fafc; --soft-2:#f1f5f9;
       --chip:#f8fafc; --chip-border:#e2e8f0;
       --chip-text:#111827; --chip-done:#16a34a;
     }
@@ -94,7 +93,7 @@
       color:var(--chip-done);
     }
 
-    /* Collapse/expand button */
+    /* Collapse/expand mini toggle */
     #sbMiniToggle{
       position: fixed; width:36px; height:36px;
       border:0; border-radius:9999px;
@@ -293,7 +292,7 @@
   }
   </script>
 
-  <!-- Assigned-only builder -->
+  <!-- Assigned-only builder with robust fallback -->
   <script>
   (function () {
     const db = firebase.firestore();
@@ -322,11 +321,12 @@
       return m ? parseInt(m[0], 10) : Number.MAX_SAFE_INTEGER;
     };
 
-    // Parse zones from existing sidebar (Zone 1.., Zone 2..)
+    // Try to parse zones from existing sidebar markup; returns Map("Zone X" -> Set(siteIds)).
     function parseZonesFromExisting(root) {
-      const zoneMap = new Map(); // "Zone 1" -> Set([M....])
-      const details = root.querySelectorAll('details');
-      details.forEach(d => {
+      const zoneMap = new Map();
+
+      // 1) If your sidebar uses <details><summary>Zone N</summary>...</details>
+      root.querySelectorAll('details').forEach(d => {
         const title = (d.querySelector('summary')?.textContent || '').trim();
         if (!/^zone\s+\d+/i.test(title)) return;
         const key = title.replace(/\s+/g,' ').trim();
@@ -338,7 +338,42 @@
         });
         if (ids.size) zoneMap.set(key, ids);
       });
+
+      // 2) If not using <details>, try headers that look like "Zone N"
+      if (!zoneMap.size) {
+        const headers = [...root.querySelectorAll('h1,h2,h3,h4,div,strong,b,span')]
+          .filter(el => /^\s*zone\s+\d+\s*$/i.test(el.textContent || ''));
+        headers.forEach((hdr, i) => {
+          const key = hdr.textContent.trim();
+          const ids = new Set();
+          // collect siblings until next header
+          let node = hdr.nextElementSibling;
+          while (node && !headers.includes(node)) {
+            const txt = (node.textContent || '').toUpperCase();
+            const match = txt.match(/\bM\d{3,5}\b/g);
+            if (match) match.forEach(id => ids.add(id));
+            node = node.nextElementSibling;
+          }
+          if (ids.size) zoneMap.set(key, ids);
+        });
+      }
+
       return zoneMap;
+    }
+
+    function renderChips(listEl, ids, perSiteStatuses) {
+      ids.forEach(id => {
+        const chip = document.createElement('div');
+        chip.className = 'chip';
+        chip.textContent = id;
+        const status = (perSiteStatuses[id]?.status || 'assigned');
+        if (status === 'completed') chip.classList.add('done');
+        chip.addEventListener('click', async () => {
+          if (chip.classList.contains('done')) return;
+          try { await setSiteStatus(id, 'completed'); } catch(e) { console.warn(e); }
+        });
+        listEl.appendChild(chip);
+      });
     }
 
     // Build assigned-only UI and REPLACE the original sidebar
@@ -349,48 +384,57 @@
       wrapper.id = 'assigned-wrapper';
 
       const wanted = new Set(focusedIds.map(s => s.toUpperCase()));
+      let added = false;
 
-      zoneMap.forEach((idsSet, zoneName) => {
-        // keep only IDs for this task
-        const ids = [...idsSet].filter(id => wanted.has(id));
-        if (!ids.length) return;
+      // Preferred: show only the zones that contain the focused IDs
+      if (zoneMap.size) {
+        zoneMap.forEach((idsSet, zoneName) => {
+          const ids = [...idsSet].filter(id => wanted.has(id));
+          if (!ids.length) return;
 
-        ids.sort((a,b) => idNum(a) - idNum(b));
+          ids.sort((a,b) => idNum(a) - idNum(b));
 
-        const block = document.createElement('div');
-        block.className = 'zone-block';
+          const block = document.createElement('div');
+          block.className = 'zone-block';
 
-        const title = document.createElement('div');
-        title.className = 'zone-title';
-        title.textContent = zoneName; // separate line
-        block.appendChild(title);
+          const title = document.createElement('div');
+          title.className = 'zone-title';
+          title.textContent = zoneName;
+          block.appendChild(title);
 
-        const list = document.createElement('div');
-        list.className = 'chip-list';
+          const list = document.createElement('div');
+          list.className = 'chip-list';
+          renderChips(list, ids, perSiteStatuses);
 
-        ids.forEach(id => {
-          const chip = document.createElement('div');
-          chip.className = 'chip';
-          chip.textContent = id;
-
-          // initial status -> styling
-          const status = (perSiteStatuses[id]?.status || 'assigned');
-          if (status === 'completed') chip.classList.add('done');
-
-          // click to mark completed
-          chip.addEventListener('click', async () => {
-            if (chip.classList.contains('done')) return;
-            try { await setSiteStatus(id, 'completed'); } catch(e) { console.warn(e); }
-          });
-
-          list.appendChild(chip);
+          block.appendChild(list);
+          wrapper.appendChild(block);
+          added = true;
         });
+      }
 
-        block.appendChild(list);
-        wrapper.appendChild(block);
-      });
+      // Fallback: if no zones parsed OR no zone contained the IDs, show a single list
+      if (!added) {
+        const ids = [...wanted].sort((a,b) => idNum(a) - idNum(b));
+        if (ids.length) {
+          const block = document.createElement('div');
+          block.className = 'zone-block';
 
-      if (!wrapper.children.length) {
+          const title = document.createElement('div');
+          title.className = 'zone-title';
+          title.textContent = params.get('zone') || 'Assigned Sites';
+          block.appendChild(title);
+
+          const list = document.createElement('div');
+          list.className = 'chip-list';
+          renderChips(list, ids, perSiteStatuses);
+
+          block.appendChild(list);
+          wrapper.appendChild(block);
+          added = true;
+        }
+      }
+
+      if (!added) {
         const empty = document.createElement('div');
         empty.className = 'chip';
         empty.style.borderRadius = '10px';
@@ -398,7 +442,6 @@
         wrapper.appendChild(empty);
       }
 
-      // IMPORTANT: replace original sidebar so ONLY relevant zone(s) show
       root.innerHTML = '';
       root.appendChild(wrapper);
     }
@@ -414,7 +457,6 @@
     }
 
     function init() {
-      // Wait until the original sidebar (from sidebar.js) renders at least once
       whenSidebarReady(async () => {
         await computeAndBuild({});
 
