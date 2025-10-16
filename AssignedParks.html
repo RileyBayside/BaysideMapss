@@ -19,81 +19,95 @@
       --accent:#d11e2b; --accent-600:#b71a24;
       --soft:#f8fafc; --soft-2:#f1f5f9;
     }
-
-    /* Map full height */
     #map { height: 100vh; }
 
-    /* Left sidebar: rounded, gap from edges, scrollable content */
+    /* Sidebar container – compact, rounded, with small margins */
     #sidebar{
-      position: fixed; left: 8px; top: 8px; bottom: 8px;
-      width: 340px; max-width: 86vw; height: auto;
-      background:#fff; border:1px solid var(--muted);
-      border-radius: 14px; box-shadow:0 8px 26px rgba(16,24,40,.08);
-      display:flex; flex-direction:column; overflow:hidden;
-      z-index: 1001;  /* above Leaflet controls */
+      position: fixed;              /* the scripts will set top/bottom/left */
+      width: 340px;
+      max-width: 86vw;
+      background:#fff;
+      border-right:1px solid var(--muted);
+      box-shadow:0 8px 26px rgba(16,24,40,.08);
+      border-radius:14px;
+      overflow: hidden;             /* clip rounded corners */
+      display: flex; flex-direction: column;
+      z-index: 1000;
+      pointer-events: auto;
       transition: transform .25s ease;
       will-change: transform;
     }
-    #sidebar.is-collapsed{ transform: translateX(calc(-100% - 12px)); }
+    #sidebar.is-collapsed { transform: translateX(calc(-100% - 12px)); }
 
-    .sidebar-head{
-      position: sticky; top:0; z-index: 2;
+    #sidebar .sidebar-head{
+      position: sticky; top:0; z-index: 5;
       display:flex; align-items:center; gap:10px;
-      padding:10px 12px; color:#fff; font-weight:800;
+      padding:10px 12px;
+      color:#fff; font-weight:800;
       background: linear-gradient(90deg, var(--accent), #eb4550);
       border-bottom:1px solid rgba(255,255,255,.15);
     }
-    .sidebar-head img{ height:24px; width:auto; display:block }
-    .sidebar-head .title{ font-size:14px; letter-spacing:.3px }
+    #sidebar .sidebar-head img{ height:24px; width:auto; display:block }
+    #sidebar .sidebar-head .title{ font-size:14px; letter-spacing:.3px }
 
-    #toggle-all{
-      border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer;
-      background: var(--accent); color:#fff;
-      margin:10px 12px 8px; display:block; width:calc(100% - 24px);
+    #sidebar #toggle-all{
+      display:block; width:calc(100% - 24px);
+      margin:10px 12px 8px; background:var(--accent);
+      border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer; color:#fff;
     }
-    #toggle-all:hover{ background:var(--accent-600); }
+    #sidebar #toggle-all:hover{ background:var(--accent-600); }
 
+    /* Scrolling content area */
     #sidebar-content{
-      flex:1 1 auto; min-height:0; overflow-y:auto;
-      -webkit-overflow-scrolling:touch; padding:8px 12px 16px;
+      flex: 1 1 auto; min-height: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding:8px 12px 16px;
     }
 
-    /* Light banner that says how many assigned are visible */
-    #assigned-filter-banner{
-      padding:8px 10px; margin:6px 0 10px;
-      border:1px solid #e2e8f0; background:#fff8f8; color:#7f1d1d;
-      border-radius:8px; font-weight:700;
+    /* Groups/items – compact visuals to fit mobile nicely */
+    #sidebar-content details{
+      border:1px solid var(--muted); border-radius:12px; overflow:hidden;
+      background:#fff; margin-bottom:8px;
     }
-
-    /* Small status chip we inject near items */
-    .ap-status{
-      display:inline-block; padding:2px 6px; border-radius:999px;
-      font-size:11px; font-weight:800; margin-left:6px;
+    #sidebar-content details > summary{
+      list-style:none; cursor:pointer; user-select:none;
+      padding:8px 10px; background:var(--soft-2);
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      font-weight:700; color:var(--ink);
     }
-    .ap-done{ background:#dcfce7; color:#065f46; border:1px solid #bbf7d0; }
-    .ap-progress{ background:#fef3c7; color:#92400e; border:1px solid #fde68a; }
+    #sidebar-content details[open] > summary{ background:#eef2f7; }
 
-    /* Floating collapse/expand button */
+    /* site row – we’ll decorate dynamically */
+    .site-row{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      padding:8px 10px; border-top:1px solid #eef2f7; background:#fff;
+      font-weight:600; color:#111827;
+    }
+    .site-row .label{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .site-actions{ display:inline-flex; align-items:center; gap:8px; white-space:nowrap; }
+    .status-pill{
+      display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:800;
+      background:#fee2e2; border:1px solid #fecaca; color:#7f1d1d;
+    }
+    .btn-mini{
+      border:0; border-radius:10px; padding:6px 10px; font-weight:800; cursor:pointer; color:#fff; background:#111827;
+    }
+    .btn-mini.primary{ background:var(--accent); }
+    .btn-mini:active{ transform: translateY(1px); }
+
+    /* Floating chevron button */
     #sbMiniToggle{
-      position: fixed; width: 36px; height: 36px; left: 8px; top: 12px;
-      border: 0; border-radius: 9999px; cursor:pointer;
-      background: var(--accent); color:#fff; font-weight:900; font-size:18px;
-      display:inline-flex; align-items:center; justify-content:center;
-      box-shadow:0 6px 18px rgba(0,0,0,.22); z-index:1002;
+      position: fixed; width: 36px; height: 36px;
+      border: 0; border-radius: 9999px;
+      background: var(--accent); color: #fff; font-weight: 900; font-size: 18px; line-height: 36px;
+      box-shadow: 0 6px 18px rgba(0,0,0,.22);
+      cursor: pointer; z-index: 1002;
+      display: inline-flex; align-items: center; justify-content: center;
     }
-    #sbMiniToggle:focus-visible{ outline:3px solid rgba(209,30,43,.35); outline-offset:2px; }
 
-    /* “hamburger” used by your map UI; keep it visible */
-    #sidebar-toggle{
-      position: fixed; top:12px; left:12px; z-index: 1000;
-      border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer;
-      background: var(--accent); color:#fff; box-shadow:0 6px 18px rgba(16,24,40,.18);
-    }
-    #sidebar-toggle:active{ transform: translateY(1px); }
-
-    /* Mobile: sidebar full-width overlay, still rounded */
     @media (max-width: 768px){
-      #sidebar{ width: calc(100vw - 12px); left: 6px; right: 6px; border-radius:12px; }
+      #sidebar{ width: 100vw; max-width:none; }
     }
   </style>
 </head>
@@ -106,10 +120,10 @@
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
 
-  <!-- Your existing “hamburger” (kept for parity) -->
-  <button id="sidebar-toggle">☰</button>
+  <!-- Sidebar toggle button (kept for keyboard users / fallback) -->
+  <button id="sidebar-toggle" style="position:fixed;top:12px;left:12px;z-index:1000;background:#d11e2b;color:#fff;border:0;border-radius:10px;padding:8px 10px;font-weight:800;box-shadow:0 6px 18px rgba(16,24,40,.18)">☰</button>
 
-  <!-- Sidebar -->
+  <!-- Sidebar container -->
   <div id="sidebar">
     <div class="sidebar-head">
       <img src="logo.png" alt="Bayside" onerror="this.style.display='none'">
@@ -120,43 +134,40 @@
     <div id="sidebar-content"></div>
 
     <div style="padding:10px 12px 16px">
-      <button onclick="adminLogin()">Admin Login</button>
+      <button onclick="adminLogin()" class="btn-mini primary">Admin Login</button>
       <div id="admin-tools" style="display:none; margin-top:8px; display:grid; gap:6px">
-        <button onclick="exportPDFCouncil()" style="background:#111827">PDF report for Council</button>
-        <button onclick="exportPDFBayside()" style="background:#111827">PDF Report for Bayside</button>
-        <button onclick="clearUserData()" style="background:#64748b">Clear All User Data</button>
-        <button onclick="showToday()" style="background:#64748b">Show Completed Today</button>
+        <button onclick="exportPDFCouncil()" class="btn-mini" style="background:#111827">PDF report for Council</button>
+        <button onclick="exportPDFBayside()" class="btn-mini" style="background:#111827">PDF Report for Bayside</button>
+        <button onclick="clearUserData()" class="btn-mini" style="background:#64748b">Clear All User Data</button>
+        <button onclick="showToday()" class="btn-mini" style="background:#64748b">Show Completed Today</button>
       </div>
     </div>
   </div>
 
-  <!-- Map container (Leaflet map is created by script.js the same way as ParksMowing) -->
+  <!-- Map -->
   <div id="map"></div>
 
-  <!-- Core scripts (use SAME stack as ParksMowing so tiles/data match) -->
+  <!-- Core scripts shared with ParksMowing -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="script.js"></script>
   <script src="sidebar.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
-  <!-- Assigned/Focus filtering + positioning + collapse + live status sync -->
+  <!-- 1) Filter sidebar to focus IDs (from ?focus=… or from Firestore assignments) -->
   <script>
   (function () {
-    const db = firebase.firestore();
-    const params = new URLSearchParams(location.search);
-    const taskId = params.get('task') || null;
-
-    /* ----------------------- helpers ----------------------- */
+    // Parse ?focus=M0123,M0361,... from URL
     function getFocusFromQuery() {
-      const q = params.get('focus') || '';
+      const q = new URLSearchParams(location.search).get('focus') || '';
       return q.split(',').map(s => s.trim()).filter(Boolean).map(s => s.toUpperCase());
     }
 
+    // Fallback: if no focus param, fetch assignments for the signed-in user and use their IDs
     async function getFocusFromFirestore() {
       try {
         const u = firebase.auth().currentUser;
         if (!u) return [];
-        const snap = await db.collection('assignments')
+        const snap = await firebase.firestore().collection('assignments')
           .where('userId', '==', u.uid)
           .get();
         const set = new Set();
@@ -171,116 +182,33 @@
       }
     }
 
+    // Wait until your sidebar gets populated by script.js/sidebar.js
     function whenSidebarReady(cb) {
       const root = document.getElementById('sidebar-content');
       if (!root) return;
       if (root.children.length > 0) { cb(root); return; }
       const obs = new MutationObserver((muts, observer) => {
         if (root.children.length > 0) {
-          observer.disconnect(); cb(root);
+          observer.disconnect();
+          cb(root);
         }
       });
       obs.observe(root, { childList: true, subtree: true });
       setTimeout(() => obs.disconnect(), 10000);
     }
 
-    // Try to find a site's row (li/div) for an ID; we also tag it once found
-    function findSiteRowById(root, siteId) {
-      const wanted = String(siteId).toUpperCase();
-      let el = root.querySelector(`[data-siteid="${wanted}"]`);
-      if (el) return el;
-      const cands = root.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row, div');
-      for (const node of cands) {
-        const t = (node.textContent || '').toUpperCase();
-        if (t.includes(wanted)) {
-          node.dataset.siteid = wanted; // tag for next time
-          return node;
-        }
-      }
-      return null;
-    }
-
-    // Add/refresh a tiny status chip on a row
-    function setRowChip(row, status) {
-      if (!row) return;
-      let chip = row.querySelector('.ap-status');
-      if (!chip) {
-        chip = document.createElement('span');
-        chip.className = 'ap-status';
-        (row.querySelector('summary') || row).appendChild(chip);
-      }
-      chip.classList.remove('ap-done','ap-progress');
-      if (status === 'completed') {
-        chip.classList.add('ap-done'); chip.textContent = 'Done';
-      } else if (status === 'in_progress') {
-        chip.classList.add('ap-progress'); chip.textContent = 'In progress';
-      } else {
-        chip.textContent = '';
-      }
-    }
-
-    // Position the sidebar below the Leaflet “Search ID…” control with a small gap
-    function findSearchBar() {
-      return (
-        document.querySelector('#site-search') ||
-        document.querySelector('.site-search') ||
-        document.querySelector('#searchBar') ||
-        document.querySelector('.search-bar') ||
-        document.querySelector('#searchSite') ||
-        document.querySelector('#search') ||
-        document.querySelector('input[placeholder="Search ID..."]')
-      );
-    }
-    function repositionSidebar() {
-      const sidebar = document.getElementById('sidebar');
-      if (!sidebar) return;
-      let topPx = 8;
-      const sb = findSearchBar();
-      if (sb) {
-        const r = sb.getBoundingClientRect();
-        topPx = Math.max(6, Math.round(r.bottom)) + 6; // 6px gap
-      }
-      sidebar.style.top = topPx + 'px';
-      sidebar.style.maxHeight = `calc(100vh - ${topPx + 8}px)`;
-    }
-
-    // Floating collapse/expand button
-    function mountMiniToggle() {
-      let toggle = document.getElementById('sbMiniToggle');
-      const sidebar = document.getElementById('sidebar');
-      if (!toggle) {
-        toggle = document.createElement('button');
-        toggle.id = 'sbMiniToggle';
-        toggle.type = 'button';
-        toggle.textContent = '‹';
-        document.body.appendChild(toggle);
-      }
-      const positionToggle = () => {
-        const rect = sidebar.getBoundingClientRect();
-        const left = (sidebar.classList.contains('is-collapsed') ? 8 : (rect.right + 8));
-        toggle.style.left = Math.min(left, (window.innerWidth - 44)) + 'px';
-        toggle.style.top = (parseInt(sidebar.style.top || '8', 10) + 4) + 'px';
-      };
-      const setExpanded = (expanded) => {
-        sidebar.classList.toggle('is-collapsed', !expanded);
-        toggle.textContent = expanded ? '‹' : '›';
-        positionToggle();
-      };
-      toggle.addEventListener('click', () => {
-        setExpanded(sidebar.classList.contains('is-collapsed'));
-      });
-      window.addEventListener('resize', positionToggle);
-      positionToggle();
-    }
-
-    /* ----------------------- filter to focus IDs ----------------------- */
+    // Heuristic: hide any row that doesn’t contain one of the wanted IDs
     function filterSidebarToIds(root, ids) {
       const wanted = new Set(ids.map(s => s.toUpperCase()));
-      let banner = document.getElementById('assigned-filter-banner');
+
+      // Banner to show how many
+      const bannerId = 'assigned-filter-banner';
+      let banner = document.getElementById(bannerId);
       if (!banner) {
         banner = document.createElement('div');
-        banner.id = 'assigned-filter-banner';
-        root.prepend(banner);
+        banner.id = bannerId;
+        banner.style.cssText = 'padding:8px 10px;margin:6px 0;border:1px solid #e2e8f0;background:#fff8f8;color:#7f1d1d;border-radius:8px;font-weight:700';
+        document.getElementById('sidebar-content')?.prepend(banner);
       }
       banner.textContent = ids.length ? `Showing ${ids.length} assigned site(s)` : 'No assigned sites to show.';
 
@@ -292,30 +220,150 @@
 
       const candidates = root.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row, div');
       candidates.forEach(el => {
-        if (el.id === 'assigned-filter-banner') return;
+        if (el.id === bannerId) return;
         const keep = hasAnyId(el) || [...el.querySelectorAll('*')].some(hasAnyId);
         el.style.display = keep ? '' : 'none';
       });
 
+      // Open <details> that contain matches; hide empty ones
       root.querySelectorAll('details').forEach(d => {
         const visibleChild = [...d.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row')]
           .some(el => el.style.display !== 'none');
-        d.style.display = visibleChild ? '' : 'none';
-        d.open = visibleChild;
+        if (visibleChild) {
+          d.style.display = '';
+          d.open = true;
+        } else {
+          d.style.display = 'none';
+        }
       });
     }
 
-    /* ----------------------- mark task started ----------------------- */
-    async function markTaskStartedOnce(tid) {
-      if (!tid) return;
-      const u = firebase.auth().currentUser; if (!u) return;
-      const ref = db.collection('assignments').doc(tid);
+    firebase.auth().onAuthStateChanged(async (u) => {
+      let ids = getFocusFromQuery();
+      if (!ids.length) ids = await getFocusFromFirestore();
+      if (!ids.length) return;
+      whenSidebarReady((root) => filterSidebarToIds(root, ids));
+    });
+  })();
+  </script>
+
+  <!-- 2) Reposition sidebar just below the Site ID search control -->
+  <script>
+  (function () {
+    function findSearchBar() {
+      return (
+        document.querySelector('#site-search') ||
+        document.querySelector('.site-search') ||
+        document.querySelector('#searchBar') ||
+        document.querySelector('.search-bar') ||
+        document.querySelector('#searchSite') ||
+        document.querySelector('#search') ||
+        document.querySelector('input[placeholder="Search ID..."]')
+      );
+    }
+
+    function repositionSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      if (!sidebar) return;
+      let topPx = 8;
+      const sb = findSearchBar();
+      if (sb) {
+        const r = sb.getBoundingClientRect();
+        topPx = Math.max(6, Math.round(r.bottom)) + 6;
+      }
+      sidebar.style.left = '8px';
+      sidebar.style.top = topPx + 'px';
+      sidebar.style.bottom = '8px';
+      sidebar.style.height = 'auto';
+      sidebar.style.maxHeight = `calc(100vh - ${topPx + 8}px)`;
+      sidebar.style.overflow = 'hidden';
+    }
+
+    const rerun = () => { repositionSidebar(); setTimeout(repositionSidebar, 0); };
+    window.addEventListener('load', rerun);
+    window.addEventListener('resize', repositionSidebar);
+    const mo = new MutationObserver(repositionSidebar);
+    mo.observe(document.body, { childList: true, subtree: true });
+    setTimeout(() => mo.disconnect(), 6000);
+  })();
+  </script>
+
+  <!-- 3) Floating chevron (collapse/expand) -->
+  <script>
+  (function () {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+
+    let toggle = document.getElementById('sbMiniToggle');
+    if (!toggle) {
+      toggle = document.createElement('button');
+      toggle.id = 'sbMiniToggle';
+      toggle.type = 'button';
+      toggle.setAttribute('aria-label', 'Collapse sidebar');
+      toggle.setAttribute('aria-expanded', 'true');
+      toggle.textContent = '‹';
+      document.body.appendChild(toggle);
+    }
+
+    function sidebarTopPx() {
+      const t = parseInt(sidebar.style.top || '8', 10);
+      return Number.isFinite(t) ? t : 8;
+    }
+    function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+
+    function positionToggle() {
+      const top = sidebarTopPx();
+      if (sidebar.classList.contains('is-collapsed')) {
+        toggle.style.left = '8px';
+      } else {
+        const rect = sidebar.getBoundingClientRect();
+        const left = rect.right + 8;
+        const maxLeft = (window.innerWidth || 360) - 44;
+        toggle.style.left = clamp(left, 8, maxLeft) + 'px';
+      }
+      toggle.style.top = (top + 4) + 'px';
+    }
+
+    function setExpanded(expanded) {
+      sidebar.classList.toggle('is-collapsed', !expanded);
+      toggle.setAttribute('aria-expanded', String(expanded));
+      toggle.setAttribute('aria-label', expanded ? 'Collapse sidebar' : 'Expand sidebar');
+      toggle.textContent = expanded ? '‹' : '›';
+      positionToggle();
+    }
+
+    toggle.addEventListener('click', () => {
+      const expanded = !sidebar.classList.contains('is-collapsed');
+      setExpanded(!expanded);
+    });
+
+    window.addEventListener('load', positionToggle);
+    window.addEventListener('resize', positionToggle);
+    const mo = new MutationObserver(positionToggle);
+    mo.observe(document.body, { attributes: true, childList: true, subtree: true });
+    setTimeout(() => mo.disconnect(), 6000);
+    positionToggle();
+  })();
+  </script>
+
+  <!-- 4) Mark assignment started on open (if ?task=...) -->
+  <script>
+  (function () {
+    const db = firebase.firestore();
+    const params = new URLSearchParams(location.search);
+    const taskId = params.get('task');
+    if (!taskId) return;
+
+    firebase.auth().onAuthStateChanged(async (u) => {
+      if (!u) return;
       try {
         await db.runTransaction(async (tx) => {
+          const ref = db.collection('assignments').doc(taskId);
           const snap = await tx.get(ref);
           if (!snap.exists) return;
           const d = snap.data() || {};
           if (d.userId !== u.uid) return;
+
           if (d.status !== 'in_progress' && d.status !== 'completed') {
             tx.update(ref, {
               status: 'in_progress',
@@ -326,156 +374,162 @@
             tx.update(ref, { lastOpenedAt: firebase.firestore.FieldValue.serverTimestamp() });
           }
         });
-      } catch (e) { console.warn('markTaskStartedOnce:', e); }
-    }
-
-    /* ----------------------- per-park status write ----------------------- */
-    // Infer a park ID from a clicked row/child using a regex like “M0123”, “M1677”, etc.
-    function inferSiteIdFromNode(node) {
-      const m = (node.textContent || '').toUpperCase().match(/M0?\d{3,4}/);
-      return m ? m[0] : null;
-    }
-
-    // Update siteStatus[siteId] and recompute assignment.status
-    async function updateSiteStatus(tid, siteId, status, note) {
-      if (!tid || !siteId) return;
-      const ref = db.collection('assignments').doc(tid);
-
-      try {
-        await db.runTransaction(async (tx) => {
-          const snap = await tx.get(ref);
-          if (!snap.exists) return;
-          const d = snap.data() || {};
-          const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(String) : [];
-          const map = Object.assign({}, d.siteStatus || {});
-
-          const now = firebase.firestore.FieldValue.serverTimestamp();
-          const next = Object.assign({}, map[siteId] || {});
-          next.status = status || 'in_progress';
-          next.updatedAt = now;
-          if (note != null) next.note = String(note);
-          if (status === 'completed') next.completedAt = now;
-          map[siteId] = next;
-
-          // Aggregate assignment.status
-          let agg = 'in_progress';
-          if (siteIds.length) {
-            const allDone = siteIds.every(id => (map[id]?.status === 'completed'));
-            agg = allDone ? 'completed' : 'in_progress';
-          }
-
-          tx.update(ref, { siteStatus: map, status: agg });
-        });
       } catch (e) {
-        console.warn('updateSiteStatus failed:', e);
-      }
-    }
-
-    /* ----------------------- reflect status from Firestore live ----------------------- */
-    function attachAssignmentListener(tid, idsForSidebar) {
-      if (!tid) return;
-      const ref = db.collection('assignments').doc(tid);
-      return ref.onSnapshot((snap) => {
-        const d = snap.data() || {};
-        const map = d.siteStatus || {};
-        const root = document.getElementById('sidebar-content');
-        if (!root) return;
-
-        // For each focused site ID (or all found rows), paint a small chip + sync any checkbox
-        const ids = Array.isArray(idsForSidebar) && idsForSidebar.length
-          ? idsForSidebar
-          : (Array.isArray(d.siteIds) ? d.siteIds.map(String) : []);
-
-        ids.forEach(id => {
-          const row = findSiteRowById(root, id);
-          const status = (map[id]?.status) || null;
-          setRowChip(row, status);
-
-          // If a checkbox exists, reflect it
-          if (row) {
-            const cb = row.querySelector('input[type="checkbox"]');
-            if (cb) {
-              if (status === 'completed') cb.checked = true;
-              else if (status === 'assigned') cb.checked = false;
-              // for in_progress we don't forcibly flip; leave user action
-            }
-          }
-        });
-      }, (err) => console.warn('assignment onSnapshot error:', err));
-    }
-
-    /* ----------------------- wire UI events for complete/in-progress ----------------------- */
-    function wireCompletionHandlers(tid) {
-      const root = document.getElementById('sidebar-content');
-      if (!root) return;
-
-      // Checkboxes: mark completed/in_progress
-      root.addEventListener('change', (ev) => {
-        const el = ev.target;
-        if (!(el instanceof HTMLInputElement) || el.type !== 'checkbox') return;
-        const row = el.closest('[data-siteid]') || el.closest('li, .list-item, .sidebar-row, .item, .site-row, div');
-        const siteId = (row && row.dataset.siteid) || inferSiteIdFromNode(row || el);
-        if (!siteId) return;
-        const status = el.checked ? 'completed' : 'in_progress';
-        updateSiteStatus(tid, siteId, status, null);
-      });
-
-      // Buttons with obvious text (e.g. “Mark done”)
-      root.addEventListener('click', (ev) => {
-        const btn = ev.target;
-        if (!(btn instanceof HTMLElement)) return;
-        const text = (btn.textContent || '').toLowerCase().trim();
-        if (!/mark\s*done|complete/.test(text)) return;
-
-        const row = btn.closest('[data-siteid]') || btn.closest('li, .list-item, .sidebar-row, .item, .site-row, div');
-        const siteId = (row && row.dataset.siteid) || inferSiteIdFromNode(row || btn);
-        if (!siteId) return;
-
-        updateSiteStatus(tid, siteId, 'completed', null);
-      });
-
-      // Optional: notes fields (if present) with class "site-note"
-      root.addEventListener('blur', (ev) => {
-        const el = ev.target;
-        if (!(el instanceof HTMLTextAreaElement) && !(el instanceof HTMLInputElement)) return;
-        if (!el.classList.contains('site-note')) return;
-        const row = el.closest('[data-siteid]') || el.closest('li, .list-item, .sidebar-row, .item, .site-row, div');
-        const siteId = (row && row.dataset.siteid) || inferSiteIdFromNode(row || el);
-        if (!siteId) return;
-        updateSiteStatus(tid, siteId, null, el.value);
-      }, true);
-    }
-
-    /* ----------------------- boot ----------------------- */
-    firebase.auth().onAuthStateChanged(async (u) => {
-      if (!u) return;
-
-      // 1) Position + collapse control
-      const mo = new MutationObserver(repositionSidebar);
-      mo.observe(document.body, { childList:true, subtree:true });
-      window.addEventListener('load', repositionSidebar);
-      window.addEventListener('resize', repositionSidebar);
-      mountMiniToggle();
-
-      // 2) Determine focus IDs
-      let ids = getFocusFromQuery();
-      if (!ids.length) ids = await getFocusFromFirestore();
-
-      // 3) When the sidebar content is ready (rendered by your existing code), filter it
-      whenSidebarReady((root) => {
-        if (ids.length) filterSidebarToIds(root, ids);
-      });
-
-      // 4) Mark the task as started on open
-      if (taskId) { markTaskStartedOnce(taskId); }
-
-      // 5) Live reflect per-park status + write handlers
-      if (taskId) {
-        attachAssignmentListener(taskId, ids);
-        wireCompletionHandlers(taskId);
+        console.warn('Failed to mark task started:', e);
       }
     });
   })();
   </script>
+
+  <!-- 5) LAZY-FILL perSite: add Start/Done controls and live status -->
+  <script>
+  (function () {
+    const db = firebase.firestore();
+    const params = new URLSearchParams(location.search);
+    const assignmentId = params.get('task'); // optional, but needed for writes
+
+    // Create/Update just one dotted perSite key; no pre-seeding required
+    async function setSiteStatus(siteId, newStatus, note) {
+      if (!assignmentId) {
+        alert('Cannot update status: missing ?task=<assignmentId> in the URL');
+        return;
+      }
+      const uid  = firebase.auth().currentUser?.uid || null;
+      const base = `perSite.${String(siteId).toUpperCase()}`;
+      const data = {
+        [`${base}.status`]: newStatus, // 'assigned' | 'in_progress' | 'completed'
+        [`${base}.updatedAt`]: firebase.firestore.FieldValue.serverTimestamp(),
+        [`${base}.operatorUid`]: uid
+      };
+      if (note !== undefined) data[`${base}.note`] = note;
+      if (newStatus === 'completed') {
+        data[`${base}.completedAt`] = firebase.firestore.FieldValue.serverTimestamp();
+      }
+      await db.collection('assignments').doc(assignmentId).set(data, { merge: true });
+    }
+
+    // Public hooks for inline onclick (optional)
+    window.startSite = (id) => setSiteStatus(id, 'in_progress');
+    window.completeSite = async (id, note) => setSiteStatus(id, 'completed', note);
+
+    // Utility: find site ID from row text
+    const idRx = /\bM\d{3,5}\b/i;
+    function detectIdFromText(el){
+      const m = (el.textContent || '').match(idRx);
+      return m ? m[0].toUpperCase() : null;
+    }
+
+    // Decorate the sidebar rows once it’s populated
+    function enhanceSidebar(root) {
+      const rows = root.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row, div');
+      rows.forEach(row => {
+        if (row.dataset.enhanced === '1') return;
+
+        // skip obvious headings / summaries
+        if (row.tagName.toLowerCase() === 'summary') return;
+
+        let siteId = row.getAttribute('data-site-id');
+        if (!siteId) {
+          const id = detectIdFromText(row);
+          if (id) {
+            siteId = id;
+            row.setAttribute('data-site-id', id);
+          }
+        }
+        if (!siteId) return; // not a site row
+
+        row.classList.add('site-row');
+        row.dataset.enhanced = '1';
+
+        // Left label
+        let label = row.querySelector('.label');
+        if (!label) {
+          label = document.createElement('span');
+          label.className = 'label';
+          label.textContent = siteId;
+          row.prepend(label);
+        }
+
+        // Actions area
+        let actions = row.querySelector('.site-actions');
+        if (!actions) {
+          actions = document.createElement('span');
+          actions.className = 'site-actions';
+          row.appendChild(actions);
+        }
+
+        // Status pill
+        let pill = row.querySelector('.status-pill');
+        if (!pill) {
+          pill = document.createElement('span');
+          pill.className = 'status-pill';
+          pill.textContent = 'Assigned';
+          actions.appendChild(pill);
+        }
+
+        // Start button
+        let btnStart = row.querySelector('.btn-start');
+        if (!btnStart) {
+          btnStart = document.createElement('button');
+          btnStart.className = 'btn-mini btn-start';
+          btnStart.textContent = 'Start';
+          btnStart.addEventListener('click', () => window.startSite(siteId));
+          actions.appendChild(btnStart);
+        }
+
+        // Done button (asks for optional note)
+        let btnDone = row.querySelector('.btn-done');
+        if (!btnDone) {
+          btnDone = document.createElement('button');
+          btnDone.className = 'btn-mini primary btn-done';
+          btnDone.textContent = 'Done';
+          btnDone.addEventListener('click', async () => {
+            const note = prompt('Add a note (optional):', '');
+            await window.completeSite(siteId, note || undefined);
+          });
+          actions.appendChild(btnDone);
+        }
+      });
+    }
+
+    // Wait for sidebar content, then enhance and keep it enhanced on changes
+    function whenSidebarReady(cb) {
+      const root = document.getElementById('sidebar-content');
+      if (!root) return;
+      if (root.children.length > 0) { cb(root); return; }
+      const obs = new MutationObserver((muts, observer) => {
+        if (root.children.length > 0) {
+          observer.disconnect();
+          cb(root);
+        }
+      });
+      obs.observe(root, { childList: true, subtree: true });
+      setTimeout(() => obs.disconnect(), 10000);
+    }
+    whenSidebarReady((root) => {
+      enhanceSidebar(root);
+      const mo = new MutationObserver(() => enhanceSidebar(root));
+      mo.observe(root, { childList: true, subtree: true });
+    });
+
+    // Live status reflection from Firestore
+    firebase.auth().onAuthStateChanged(() => {
+      if (!assignmentId) return;
+      db.collection('assignments').doc(assignmentId).onSnapshot((doc) => {
+        const d = doc.data() || {};
+        const perSite = d.perSite || {};
+        document.querySelectorAll('[data-site-id]').forEach(row => {
+          const id = String(row.getAttribute('data-site-id')).toUpperCase();
+          const status = (perSite[id]?.status || 'assigned');
+          const pill = row.querySelector('.status-pill');
+          if (pill) {
+            pill.textContent = status.replace('_',' ').replace(/^\w/, m => m.toUpperCase());
+          }
+        });
+      });
+    });
+  })();
+  </script>
+
 </body>
 </html>
