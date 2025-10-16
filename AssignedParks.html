@@ -23,14 +23,14 @@
 
     /* Sidebar container – compact, rounded, with small margins */
     #sidebar{
-      position: fixed;              /* the scripts will set top/bottom/left */
+      position: fixed;              /* scripts set top/bottom/left */
       width: 340px;
       max-width: 86vw;
       background:#fff;
       border-right:1px solid var(--muted);
       box-shadow:0 8px 26px rgba(16,24,40,.08);
       border-radius:14px;
-      overflow: hidden;             /* clip rounded corners */
+      overflow: hidden;
       display: flex; flex-direction: column;
       z-index: 1000;
       pointer-events: auto;
@@ -65,27 +65,38 @@
       padding:8px 12px 16px;
     }
 
-    /* Groups/items – compact visuals to fit mobile nicely */
-    #sidebar-content details{
-      border:1px solid var(--muted); border-radius:12px; overflow:hidden;
-      background:#fff; margin-bottom:8px;
+    /* FORCE VERTICAL STACKING for any list/sidebar body the map creates */
+    #sidebar-content ul,
+    #sidebar-content ol,
+    #sidebar-content .sites,
+    #sidebar-content .site-list,
+    #sidebar-content .group-body,
+    #sidebar-content .items {
+      display:block !important;
+      padding:0;
+      margin:0;
     }
-    #sidebar-content details > summary{
-      list-style:none; cursor:pointer; user-select:none;
-      padding:8px 10px; background:var(--soft-2);
-      display:flex; align-items:center; justify-content:space-between; gap:10px;
-      font-weight:700; color:var(--ink);
-    }
-    #sidebar-content details[open] > summary{ background:#eef2f7; }
+    #sidebar-content li{ list-style:none; }
 
-    /* site row – we’ll decorate dynamically */
+    /* One row per site (stacked) */
     .site-row{
-      display:flex; align-items:center; justify-content:space-between; gap:10px;
-      padding:8px 10px; border-top:1px solid #eef2f7; background:#fff;
+      display:flex !important;
+      flex-direction: row;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap: nowrap;
+      width:100%;
+      padding:8px 10px;
+      border-top:1px solid #eef2f7;
+      background:#fff;
       font-weight:600; color:#111827;
     }
-    .site-row .label{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .site-actions{ display:inline-flex; align-items:center; gap:8px; white-space:nowrap; }
+    /* Make sure every row occupies full width (prevents horizontal grid) */
+    #sidebar-content details > * { width:100%; }
+    .label{ flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .site-actions{ display:inline-flex; align-items:center; gap:8px; flex-shrink:0; white-space:nowrap; }
+
     .status-pill{
       display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:800;
       background:#fee2e2; border:1px solid #fecaca; color:#7f1d1d;
@@ -120,7 +131,7 @@
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
 
-  <!-- Sidebar toggle button (kept for keyboard users / fallback) -->
+  <!-- Sidebar toggle button (fallback/keyboard) -->
   <button id="sidebar-toggle" style="position:fixed;top:12px;left:12px;z-index:1000;background:#d11e2b;color:#fff;border:0;border-radius:10px;padding:8px 10px;font-weight:800;box-shadow:0 6px 18px rgba(16,24,40,.18)">☰</button>
 
   <!-- Sidebar container -->
@@ -156,13 +167,10 @@
   <!-- 1) Filter sidebar to focus IDs (from ?focus=… or from Firestore assignments) -->
   <script>
   (function () {
-    // Parse ?focus=M0123,M0361,... from URL
     function getFocusFromQuery() {
       const q = new URLSearchParams(location.search).get('focus') || '';
       return q.split(',').map(s => s.trim()).filter(Boolean).map(s => s.toUpperCase());
     }
-
-    // Fallback: if no focus param, fetch assignments for the signed-in user and use their IDs
     async function getFocusFromFirestore() {
       try {
         const u = firebase.auth().currentUser;
@@ -181,8 +189,6 @@
         return [];
       }
     }
-
-    // Wait until your sidebar gets populated by script.js/sidebar.js
     function whenSidebarReady(cb) {
       const root = document.getElementById('sidebar-content');
       if (!root) return;
@@ -196,12 +202,9 @@
       obs.observe(root, { childList: true, subtree: true });
       setTimeout(() => obs.disconnect(), 10000);
     }
-
-    // Heuristic: hide any row that doesn’t contain one of the wanted IDs
     function filterSidebarToIds(root, ids) {
       const wanted = new Set(ids.map(s => s.toUpperCase()));
 
-      // Banner to show how many
       const bannerId = 'assigned-filter-banner';
       let banner = document.getElementById(bannerId);
       if (!banner) {
@@ -225,7 +228,6 @@
         el.style.display = keep ? '' : 'none';
       });
 
-      // Open <details> that contain matches; hide empty ones
       root.querySelectorAll('details').forEach(d => {
         const visibleChild = [...d.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row')]
           .some(el => el.style.display !== 'none');
@@ -261,7 +263,6 @@
         document.querySelector('input[placeholder="Search ID..."]')
       );
     }
-
     function repositionSidebar() {
       const sidebar = document.getElementById('sidebar');
       if (!sidebar) return;
@@ -278,7 +279,6 @@
       sidebar.style.maxHeight = `calc(100vh - ${topPx + 8}px)`;
       sidebar.style.overflow = 'hidden';
     }
-
     const rerun = () => { repositionSidebar(); setTimeout(repositionSidebar, 0); };
     window.addEventListener('load', rerun);
     window.addEventListener('resize', repositionSidebar);
@@ -381,7 +381,7 @@
   })();
   </script>
 
-  <!-- 5) LAZY-FILL perSite: add Start/Done controls and live status -->
+  <!-- 5) LAZY-FILL perSite: Status + Done (no Start button) -->
   <script>
   (function () {
     const db = firebase.firestore();
@@ -408,24 +408,19 @@
       await db.collection('assignments').doc(assignmentId).set(data, { merge: true });
     }
 
-    // Public hooks for inline onclick (optional)
-    window.startSite = (id) => setSiteStatus(id, 'in_progress');
+    // Public hook used by the button
     window.completeSite = async (id, note) => setSiteStatus(id, 'completed', note);
 
-    // Utility: find site ID from row text
     const idRx = /\bM\d{3,5}\b/i;
     function detectIdFromText(el){
       const m = (el.textContent || '').match(idRx);
       return m ? m[0].toUpperCase() : null;
     }
 
-    // Decorate the sidebar rows once it’s populated
     function enhanceSidebar(root) {
       const rows = root.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row, div');
       rows.forEach(row => {
         if (row.dataset.enhanced === '1') return;
-
-        // skip obvious headings / summaries
         if (row.tagName.toLowerCase() === 'summary') return;
 
         let siteId = row.getAttribute('data-site-id');
@@ -436,12 +431,12 @@
             row.setAttribute('data-site-id', id);
           }
         }
-        if (!siteId) return; // not a site row
+        if (!siteId) return;
 
         row.classList.add('site-row');
         row.dataset.enhanced = '1';
 
-        // Left label
+        // Label on the left
         let label = row.querySelector('.label');
         if (!label) {
           label = document.createElement('span');
@@ -450,7 +445,7 @@
           row.prepend(label);
         }
 
-        // Actions area
+        // Actions on the right (Status + Done)
         let actions = row.querySelector('.site-actions');
         if (!actions) {
           actions = document.createElement('span');
@@ -467,17 +462,7 @@
           actions.appendChild(pill);
         }
 
-        // Start button
-        let btnStart = row.querySelector('.btn-start');
-        if (!btnStart) {
-          btnStart = document.createElement('button');
-          btnStart.className = 'btn-mini btn-start';
-          btnStart.textContent = 'Start';
-          btnStart.addEventListener('click', () => window.startSite(siteId));
-          actions.appendChild(btnStart);
-        }
-
-        // Done button (asks for optional note)
+        // Done button only (optionally ask for a note)
         let btnDone = row.querySelector('.btn-done');
         if (!btnDone) {
           btnDone = document.createElement('button');
@@ -492,7 +477,6 @@
       });
     }
 
-    // Wait for sidebar content, then enhance and keep it enhanced on changes
     function whenSidebarReady(cb) {
       const root = document.getElementById('sidebar-content');
       if (!root) return;
@@ -520,10 +504,10 @@
         const perSite = d.perSite || {};
         document.querySelectorAll('[data-site-id]').forEach(row => {
           const id = String(row.getAttribute('data-site-id')).toUpperCase();
-          const status = (perSite[id]?.status || 'assigned');
+          const s = (perSite[id]?.status || 'assigned');
           const pill = row.querySelector('.status-pill');
           if (pill) {
-            pill.textContent = status.replace('_',' ').replace(/^\w/, m => m.toUpperCase());
+            pill.textContent = s.replace('_',' ').replace(/^\w/, m => m.toUpperCase());
           }
         });
       });
