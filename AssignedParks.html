@@ -138,7 +138,6 @@
       font-family:inherit; font-size:13px;
       background:#fff; color:#0f172a;
     }
-    .note-actions{ display:flex; justify-content:flex-end; gap:8px; }
 
     /* Floating mini toggle */
     #sbMiniToggle{
@@ -262,15 +261,14 @@
   })();
   </script>
 
-  <!-- Assigned view with numbering, Done button and Notes (live sync) -->
+  <!-- Assigned view (keeps M-code, prepends 1., 2., 3., …; Done + Notes; live sync) -->
   <script>
   (function () {
     const db = firebase.firestore();
     const params = new URLSearchParams(location.search);
     const taskId = params.get('task') || '';
-    const SHOW_M_ID = false; // set true if you want to display M-code next to index
 
-    // Helpers
+    // --- Utilities -----------------------------------------------------------
     const idNum = (id) => {
       const m = String(id).match(/\d+/); return m ? parseInt(m[0],10) : Number.MAX_SAFE_INTEGER;
     };
@@ -286,7 +284,38 @@
       return [...set];
     }
 
-    // Firestore writes (lazy fill)
+    // Try to read names/zones from data.geojson so we can show "M0123 — Helens Street"
+    let META = null; // { [Mxxxx]: { name, zone } }
+    async function loadMeta() {
+      try {
+        const resp = await fetch('data.geojson', { cache: 'no-store' });
+        const gj = await resp.json();
+        const map = {};
+        (gj.features || []).forEach(f => {
+          const p = f.properties || {};
+          let mcode = null;
+          for (const k in p) {
+            const v = p[k];
+            if (typeof v === 'string') {
+              const m = v.toUpperCase().match(/^M\d{3,4}$/);
+              if (m) { mcode = m[0]; break; }
+            }
+          }
+          if (!mcode) return;
+          const name = p.name || p.Name || p.PARK_NAME || p.ParkName || p.Location || '';
+          const zone = p.zone || p.Zone || p.ZONE || '';
+          map[mcode.toUpperCase()] = { name: String(name || '').trim(), zone: String(zone || '').trim() };
+        });
+        META = map;
+      } catch (e) {
+        META = {};
+        console.warn('meta load failed', e);
+      }
+    }
+    function nameFor(id){ return (META && META[id]?.name) || ''; }
+    function zoneFor(id){ return (META && META[id]?.zone) || ''; }
+
+    // --- Firestore writes (lazy fill) ---------------------------------------
     async function setSiteStatus(siteId, status) {
       if (!taskId) return;
       const uid = firebase.auth().currentUser?.uid || null;
@@ -301,7 +330,6 @@
       }
       await db.collection('assignments').doc(taskId).set(data, { merge: true });
     }
-    // Save note
     let saveTimer = null;
     function saveNoteDebounced(siteId, value) {
       if (!taskId) return;
@@ -317,14 +345,20 @@
       }, 350);
     }
 
-    // Build assigned-only UI
-    function buildAssigned(root, ids, perSite, zoneName) {
+    // --- Render --------------------------------------------------------------
+    function buildAssigned(root, ids, perSite) {
       root.innerHTML = '';
+
+      // Work out a zone heading if all IDs share one
+      const zones = new Set(ids.map(z => zoneFor(z)).filter(Boolean));
+      const zoneTitle = zones.size === 1 ? [...zones][0] : 'Assigned Parks';
+
       const card = document.createElement('div');
       card.className = 'assigned-card';
+
       const header = document.createElement('div');
       header.className = 'zone-title';
-      header.textContent = zoneName || 'Assigned Parks';
+      header.textContent = zoneTitle || 'Assigned Parks';
       card.appendChild(header);
 
       if (!ids.length) {
@@ -356,13 +390,10 @@
 
         const label = document.createElement('div');
         label.className = 'site-label';
-        label.textContent = `Park ${idx + 1}`;
-        label.title = siteId; // show M-code in tooltip
-        if (SHOW_M_ID) {
-          const m = document.createElement('small');
-          m.textContent = `(${siteId})`;
-          label.appendChild(m);
-        }
+        const nm = nameFor(siteId);
+        // >>> THIS is the key line that keeps the M-code and adds "1. " <<<
+        label.textContent = `${idx + 1}. ${siteId}${nm ? ' — ' + nm : ''}`;
+        label.title = siteId; // tooltip still shows M-code
         main.appendChild(label);
 
         const meta = document.createElement('div');
@@ -410,25 +441,15 @@
       root.appendChild(card);
     }
 
-    // Parse a zone name from existing markup if present
-    function detectZoneName() {
-      // If your original sidebar prints a single Zone header element, try to read it:
-      const guess = document.querySelector('#sidebar-content h2, #sidebar-content .zone-title, #sidebar-content summary, #sidebar-content .group-title');
-      const txt = (guess?.textContent || '').trim();
-      if (/^zone\s+\d+/i.test(txt)) return txt;
-      return params.get('zone') || '';
-    }
-
     async function computeAndRender(perSite = {}) {
       let ids = getFocusFromQuery();
       if (!ids.length) ids = await getFocusFromFirestore();
 
-      // Sort by numeric part, but show **index** 1..n (not M-code)
-      ids = ids.map(s => s.toUpperCase()).sort((a,b)=> idNum(a)-idNum(b));
+      // Normalize, sort by numeric part, and unique (in case of dups)
+      ids = Array.from(new Set(ids.map(s => s.toUpperCase()))).sort((a,b)=> idNum(a)-idNum(b));
 
       const sc = document.getElementById('sidebar-content');
-      const zoneName = detectZoneName();
-      buildAssigned(sc, ids, perSite, zoneName);
+      buildAssigned(sc, ids, perSite);
     }
 
     // Live listener for perSite updates (keeps operator/admin in sync)
@@ -471,6 +492,7 @@
 
     firebase.auth().onAuthStateChanged(async (u) => {
       if (!u) return;
+      await loadMeta();           // load names/zones so label can be "M0123 — Name"
       trackStarted();
       computeAndRender({});
       startLive();
