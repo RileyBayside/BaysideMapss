@@ -19,12 +19,12 @@
       --accent:#d11e2b; --accent-600:#b71a24;
       --soft:#f8fafc; --soft-2:#f1f5f9;
       --chip:#f8fafc; --chip-border:#e2e8f0;
-      --chip-text:#111827; --chip-done:#16a34a; /* green */
+      --chip-text:#111827; --chip-done:#16a34a;
     }
 
     #map { height: 100vh; }
 
-    /* Sidebar container – rounded, small margins; stays below search */
+    /* Sidebar frame */
     #sidebar{
       position: fixed;
       width: 340px; max-width:86vw;
@@ -62,7 +62,7 @@
       padding:8px 12px 16px;
     }
 
-    /* ======= ASSIGNED VIEW (chips) ======= */
+    /* Assigned-only view */
     #assigned-wrapper{
       border:1px solid var(--muted);
       border-radius:12px;
@@ -94,7 +94,7 @@
       color:var(--chip-done);
     }
 
-    /* Floating chevron (collapse/expand) */
+    /* Collapse/expand button */
     #sbMiniToggle{
       position: fixed; width:36px; height:36px;
       border:0; border-radius:9999px;
@@ -103,7 +103,7 @@
       cursor:pointer; z-index:1002; display:inline-flex; align-items:center; justify-content:center;
     }
 
-    /* Fallback/keyboard sidebar toggle button */
+    /* Fallback menu button */
     #sidebar-toggle{
       position: fixed; top:12px; left:12px; z-index:1000;
       background:#d11e2b; color:#fff; border:0; border-radius:10px;
@@ -134,9 +134,8 @@
       <div class="title">Assigned Parks</div>
     </div>
 
-    <button id="toggle-all">Expand All</button>
+    <button id="toggle-all" type="button">Expand All</button>
 
-    <!-- Our assigned chips view will be injected here -->
     <div id="sidebar-content"></div>
 
     <div style="padding:10px 12px 16px">
@@ -153,7 +152,7 @@
   <!-- Map -->
   <div id="map"></div>
 
-  <!-- Core scripts shared with ParksMowing -->
+  <!-- Core scripts used by ParksMowing -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="script.js"></script>
   <script src="sidebar.js"></script>
@@ -256,7 +255,7 @@
   })();
   </script>
 
-  <!-- Focus (IDs) utilities -->
+  <!-- Focus helpers -->
   <script>
   function getFocusFromQuery() {
     const q = new URLSearchParams(location.search).get('focus') || '';
@@ -294,14 +293,14 @@
   }
   </script>
 
-  <!-- Build “Assigned View” (Zone header line + wrapped chips), sorted ascending -->
+  <!-- Assigned-only builder -->
   <script>
   (function () {
     const db = firebase.firestore();
     const params = new URLSearchParams(location.search);
-    const assignmentId = params.get('task'); // needed for writes (chip click => completed)
+    const assignmentId = params.get('task');
 
-    // Write only the single perSite dotted key (lazy fill)
+    // Write only the dotted perSite key (lazy fill)
     async function setSiteStatus(siteId, newStatus) {
       if (!assignmentId) return;
       const uid = firebase.auth().currentUser?.uid || null;
@@ -317,22 +316,21 @@
       await db.collection('assignments').doc(assignmentId).set(data, { merge: true });
     }
 
-    // Extract numeric part for sorting (M0123 -> 123)
+    // Numeric sort (M0123 => 123)
     const idNum = (id) => {
       const m = String(id).match(/\d+/);
       return m ? parseInt(m[0], 10) : Number.MAX_SAFE_INTEGER;
     };
 
-    // Parse the original sidebar to map Zone -> [IDs]
+    // Parse zones from existing sidebar (Zone 1.., Zone 2..)
     function parseZonesFromExisting(root) {
-      const zoneMap = new Map(); // "Zone 1" -> Set(ids)
+      const zoneMap = new Map(); // "Zone 1" -> Set([M....])
       const details = root.querySelectorAll('details');
       details.forEach(d => {
         const title = (d.querySelector('summary')?.textContent || '').trim();
         if (!/^zone\s+\d+/i.test(title)) return;
-        const key = title.replace(/\s+/g,' ').trim(); // normalized "Zone X"
+        const key = title.replace(/\s+/g,' ').trim();
         const ids = new Set();
-        // find anything ID-like under this zone section
         d.querySelectorAll('*').forEach(el => {
           const txt = (el.textContent || '').toUpperCase();
           const match = txt.match(/\bM\d{3,5}\b/g);
@@ -343,23 +341,20 @@
       return zoneMap;
     }
 
-    // Build our chips UI: only show zones that have any of the focused IDs
+    // Build assigned-only UI and REPLACE the original sidebar
     function buildAssignedView(root, focusedIds, perSiteStatuses) {
-      // Remove old wrapper if present
-      document.getElementById('assigned-wrapper')?.remove();
-
       const zoneMap = parseZonesFromExisting(root);
+
       const wrapper = document.createElement('div');
       wrapper.id = 'assigned-wrapper';
 
       const wanted = new Set(focusedIds.map(s => s.toUpperCase()));
 
-      // For each zone in original order
       zoneMap.forEach((idsSet, zoneName) => {
+        // keep only IDs for this task
         const ids = [...idsSet].filter(id => wanted.has(id));
-        if (!ids.length) return; // skip zones with no assigned parks
+        if (!ids.length) return;
 
-        // Sort numerically
         ids.sort((a,b) => idNum(a) - idNum(b));
 
         const block = document.createElement('div');
@@ -377,18 +372,15 @@
           const chip = document.createElement('div');
           chip.className = 'chip';
           chip.textContent = id;
-          chip.setAttribute('data-site-id', id);
 
-          // initial style from perSite
+          // initial status -> styling
           const status = (perSiteStatuses[id]?.status || 'assigned');
           if (status === 'completed') chip.classList.add('done');
 
           // click to mark completed
           chip.addEventListener('click', async () => {
-            if (chip.classList.contains('done')) return; // already done
-            try {
-              await setSiteStatus(id, 'completed');
-            } catch(e) { console.warn('status update failed', e); }
+            if (chip.classList.contains('done')) return;
+            try { await setSiteStatus(id, 'completed'); } catch(e) { console.warn(e); }
           });
 
           list.appendChild(chip);
@@ -398,7 +390,6 @@
         wrapper.appendChild(block);
       });
 
-      // If nothing matched, show a small note
       if (!wrapper.children.length) {
         const empty = document.createElement('div');
         empty.className = 'chip';
@@ -407,42 +398,34 @@
         wrapper.appendChild(empty);
       }
 
-      // Inject our view at the top; keep original content beneath
-      const sc = document.getElementById('sidebar-content');
-      sc.prepend(wrapper);
+      // IMPORTANT: replace original sidebar so ONLY relevant zone(s) show
+      root.innerHTML = '';
+      root.appendChild(wrapper);
     }
 
-    // Watch original sidebar populate, then build our view
-    function init() {
+    async function computeAndBuild(perSite = {}) {
+      let ids = getFocusFromQuery();
+      if (!ids.length) ids = await getFocusFromFirestore();
+
       const sc = document.getElementById('sidebar-content');
       if (!sc) return;
 
-      // Determine the focused IDs (query first, else Firestore)
-      async function computeAndBuild(perSite = {}) {
-        let ids = getFocusFromQuery();
-        if (!ids.length) ids = await getFocusFromFirestore();
-        if (!ids.length) {
-          // still render empty block (nice message)
-          buildAssignedView(sc, [], {});
-          return;
-        }
-        buildAssignedView(sc, ids, perSite);
-      }
+      buildAssignedView(sc, ids, perSite);
+    }
 
-      // 1) Wait for existing sidebar content to be present (so we can read zones)
+    function init() {
+      // Wait until the original sidebar (from sidebar.js) renders at least once
       whenSidebarReady(async () => {
-        // 2) Build now with no statuses (they’ll refresh below when snapshot arrives)
         await computeAndBuild({});
 
-        // 3) If we have an assignmentId, reflect live perSite statuses (turn chips green)
-        const params = new URLSearchParams(location.search);
-        const assignmentId = params.get('task');
-        if (assignmentId) {
-          firebase.firestore().collection('assignments').doc(assignmentId)
+        // Live color updates if ?task= is present
+        const task = new URLSearchParams(location.search).get('task');
+        if (task) {
+          firebase.firestore().collection('assignments').doc(task)
             .onSnapshot(async (doc) => {
               const d = doc.data() || {};
               const perSite = d.perSite || {};
-              await computeAndBuild(perSite); // rebuild to color chips accordingly
+              await computeAndBuild(perSite);
             });
         }
       });
@@ -452,12 +435,11 @@
   })();
   </script>
 
-  <!-- Mark assignment started on open (if ?task=...) -->
+  <!-- Mark assignment started (if ?task=...) -->
   <script>
   (function () {
     const db = firebase.firestore();
-    const params = new URLSearchParams(location.search);
-    const taskId = params.get('task');
+    const taskId = new URLSearchParams(location.search).get('task');
     if (!taskId) return;
 
     firebase.auth().onAuthStateChanged(async (u) => {
@@ -486,6 +468,5 @@
     });
   })();
   </script>
-
 </body>
 </html>
