@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="sidebar.css" />
 
   <style>
-    /* Keep your existing look; a couple of layout tweaks */
+    /* Keep your look; only small, additive tweaks */
     #sidebar{
       left: 8px !important;
       right: auto;
@@ -25,6 +25,8 @@
       flex-direction: column;
       z-index: 1000;
       pointer-events: auto;
+
+      /* collapse support (mini toggle) */
       transition: transform .25s ease;
       will-change: transform;
     }
@@ -37,7 +39,7 @@
     }
     #sidebar.is-collapsed { transform: translateX(calc(-100% - 12px)); }
 
-    /* Floating collapse button */
+    /* Small floating collapse button */
     #sbMiniToggle{
       position: fixed; width:36px; height:36px;
       border:0; border-radius:9999px;
@@ -46,8 +48,44 @@
       display:inline-flex; align-items:center; justify-content:center;
     }
 
-    /* 1., 2., 3., … */
+    /* Ordinal before each visible site row */
     .ap-num{ font-weight:800; margin-right:6px; }
+
+    /* Per-site inline controls container */
+    .ap-controls{
+      display:flex; align-items:center; gap:8px; margin-left:auto; flex-wrap:wrap;
+    }
+    .ap-pill{
+      display:inline-block; font-size:12px; font-weight:800;
+      padding:4px 8px; border-radius:999px; white-space:nowrap;
+      border:1px solid #fecaca; background:#fee2e2; color:#7f1d1d;
+    }
+    .ap-pill.done{
+      border-color:#86efac; background:#dcfce7; color:#166534;
+    }
+    .ap-btn{
+      border:0; border-radius:8px; padding:6px 10px; font-weight:800; cursor:pointer;
+      background:#111827; color:#fff;
+    }
+    .ap-btn:hover{ filter:brightness(1.08); }
+    .ap-note{
+      width:100%; margin-top:6px; display:block;
+      border:1px solid #e5e7eb; border-radius:8px; padding:8px 10px; font-size:13px;
+      background:#fff; color:#111827;
+    }
+    .ap-note::placeholder{ color:#9ca3af; }
+
+    /* When a row has our extra controls, keep them inside the “bubble” */
+    .ap-row{
+      display:flex; flex-direction:column; gap:6px;
+    }
+    .ap-row-head{
+      display:flex; align-items:center; gap:8px; min-width:0;
+    }
+    .ap-row-title{
+      flex:1 1 auto; min-width:0;
+      overflow:hidden; text-overflow:ellipsis;
+    }
 
     @media (max-width:768px){
       #sidebar{ left: 6px !important; right: 6px; border-radius:12px; }
@@ -63,59 +101,76 @@
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
 
-  <!-- Sidebar toggle kept for your CSS/JS -->
+  <!-- Sidebar toggle (id kept for your CSS/JS) -->
   <button id="sidebar-toggle">☰</button>
 
-  <!-- Sidebar (IDs must match your sidebar.js) -->
+  <!-- Sidebar (ids/classes kept so sidebar.css + sidebar.js work) -->
   <div id="sidebar">
+    <div class="sidebar-head">
+      <img src="logo.png" alt="Bayside" onerror="this.style.display='none'">
+      <div class="title">Assigned Parks</div>
+    </div>
+
     <button id="toggle-all">Expand All</button>
     <div id="sidebar-content"></div>
 
-    <button onclick="adminLogin()">Admin Login</button>
-    <div id="admin-tools" style="display:none">
-      <button onclick="exportPDFCouncil()">PDF report for Council</button>
-      <button onclick="exportPDFBayside()">PDF Report for Bayside</button>
-      <button onclick="clearUserData()">Clear All User Data</button>
-      <button onclick="showToday()">Show Completed Today</button>
+    <div style="padding:10px 12px 16px">
+      <button class="ap-btn" onclick="adminLogin()">Admin Login</button>
+      <div id="admin-tools" style="display:none; margin-top:8px; display:grid; gap:6px">
+        <button class="ap-btn" onclick="exportPDFCouncil()" style="background:#111827">PDF report for Council</button>
+        <button class="ap-btn" onclick="exportPDFBayside()"  style="background:#111827">PDF Report for Bayside</button>
+        <button class="ap-btn" onclick="clearUserData()"     style="background:#64748b">Clear All User Data</button>
+        <button class="ap-btn" onclick="showToday()"         style="background:#64748b">Show Completed Today</button>
+      </div>
     </div>
   </div>
 
-  <!-- Map -->
+  <!-- Map (created by your existing script.js) -->
   <div id="map"></div>
 
-  <!-- Core scripts (same order as ParksMowing) -->
+  <!-- Core scripts (exact order) -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="script.js"></script>
   <script src="sidebar.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <script>
-    /* ----------------- helpers ----------------- */
-    function qs(sel, root=document){ return root.querySelector(sel); }
-    function focusIdsFromQuery(){
-      const q = new URLSearchParams(location.search).get('focus') || '';
-      return q.split(',').map(s=>s.trim()).filter(Boolean).map(s=>s.toUpperCase());
-    }
+    /* ----------------- tiny helpers ----------------- */
+    const qsp = (k) => new URLSearchParams(location.search).get(k) || '';
+    const getFocusIds = () =>
+      (qsp('focus') || '')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(s => s.toUpperCase());
 
-    /* ----------------- keep sidebar under search ----------------- */
-    (function stickSidebarUnderSearch(){
+    /* ----------------- Keep the sidebar below the 'Search ID…' control ----------------- */
+    (function positionSidebarBelowSearch(){
       function findSearch(){
         return (
-          qs('#site-search') || qs('.site-search') || qs('#searchBar') ||
-          qs('.search-bar')  || qs('#searchSite')  || qs('#search') ||
-          qs('input[placeholder="Search ID..."]')
+          document.querySelector('#site-search') ||
+          document.querySelector('.site-search') ||
+          document.querySelector('#searchBar') ||
+          document.querySelector('.search-bar') ||
+          document.querySelector('#searchSite') ||
+          document.querySelector('#search') ||
+          document.querySelector('input[placeholder="Search ID..."]')
         );
       }
       function apply(){
-        const sb = qs('#sidebar'); if (!sb) return;
-        let top = 8;
-        const s = findSearch();
-        if (s){ const r = s.getBoundingClientRect(); top = Math.max(6, Math.round(r.bottom)) + 6; }
-        sb.style.position = 'fixed';
-        sb.style.top = top + 'px';
-        sb.style.maxHeight = `calc(100vh - ${top + 8}px)`;
+        const sbEl = document.getElementById('sidebar');
+        if (!sbEl) return;
+        let topPx = 8;
+        const search = findSearch();
+        if (search){
+          const r = search.getBoundingClientRect();
+          topPx = Math.max(6, Math.round(r.bottom)) + 6;
+        }
+        sbEl.style.position = 'fixed';
+        sbEl.style.top = topPx + 'px';
+        sbEl.style.maxHeight = `calc(100vh - ${topPx + 8}px)`;
       }
-      const rerun = ()=>{ apply(); requestAnimationFrame(apply); };
+      const rerun = ()=>{ apply(); setTimeout(apply, 0); };
       window.addEventListener('load', rerun);
       window.addEventListener('resize', apply);
       const mo = new MutationObserver(apply);
@@ -123,57 +178,63 @@
       setTimeout(()=>mo.disconnect(), 6000);
     })();
 
-    /* ----------------- mini collapse button ----------------- */
-    (function miniToggle(){
-      const sidebar = qs('#sidebar');
+    /* ----------------- Mini floating collapse toggle ----------------- */
+    (function setupMiniToggle(){
+      const sidebar = document.getElementById('sidebar');
       if (!sidebar) return;
-      let t = qs('#sbMiniToggle');
-      if (!t){
-        t = document.createElement('button');
-        t.id = 'sbMiniToggle'; t.type = 'button';
-        t.setAttribute('aria-expanded','true');
-        t.textContent = '‹';
-        document.body.appendChild(t);
+      let toggle = document.getElementById('sbMiniToggle');
+      if (!toggle){
+        toggle = document.createElement('button');
+        toggle.id = 'sbMiniToggle';
+        toggle.type = 'button';
+        toggle.setAttribute('aria-expanded','true');
+        toggle.textContent = '‹';
+        document.body.appendChild(toggle);
       }
-      const topPx = ()=> parseInt(sidebar.style.top || '8',10) || 8;
-      const clamp = (n,min,max)=> Math.max(min, Math.min(max,n));
+      function sidebarTop(){
+        const t = parseInt(sidebar.style.top || '8', 10);
+        return Number.isFinite(t) ? t : 8;
+      }
+      function clamp(n,min,max){ return Math.max(min, Math.min(max,n)); }
       function position(){
-        if (!t) return;
+        const top = sidebarTop();
         if (sidebar.classList.contains('is-collapsed')){
-          t.style.left = '8px';
+          toggle.style.left = '8px';
         } else {
           const rect = sidebar.getBoundingClientRect();
-          const left = clamp(rect.right + 8, 8, (innerWidth||360) - 44);
-          t.style.left = left + 'px';
+          const left = rect.right + 8;
+          const maxLeft = (window.innerWidth || 360) - 44;
+          toggle.style.left = clamp(left, 8, maxLeft) + 'px';
         }
-        t.style.top = (topPx()+4) + 'px';
+        toggle.style.top = (top + 4) + 'px';
       }
       function setExpanded(expanded){
         sidebar.classList.toggle('is-collapsed', !expanded);
-        t.setAttribute('aria-expanded', String(expanded));
-        t.textContent = expanded ? '‹' : '›';
+        toggle.setAttribute('aria-expanded', String(expanded));
+        toggle.textContent = expanded ? '‹' : '›';
         position();
       }
-      t.addEventListener('click', ()=>{
-        setExpanded(sidebar.classList.contains('is-collapsed'));
+      toggle.addEventListener('click', ()=>{
+        const expanded = !sidebar.classList.contains('is-collapsed');
+        setExpanded(!expanded);
       });
-      addEventListener('load', position);
-      addEventListener('resize', position);
+      window.addEventListener('load', position);
+      window.addEventListener('resize', position);
       const mo = new MutationObserver(position);
       mo.observe(document.body, { attributes:true, childList:true, subtree:true });
       setTimeout(()=>mo.disconnect(), 6000);
       position();
     })();
 
-    /* ----------------- mark task in_progress if ?task= ----------------- */
-    (function markTaskStarted(){
+    /* ----------------- Mark task started (?task=) ----------------- */
+    (function trackTaskOpen(){
       const db = firebase.firestore();
-      const taskId = new URLSearchParams(location.search).get('task') || '';
+      const taskId = qsp('task');
       if (!taskId) return;
       firebase.auth().onAuthStateChanged(async (u)=>{
         if (!u) return;
         try{
-          await db.runTransaction(async tx=>{
+          await db.runTransaction(async (tx)=>{
             const ref = db.collection('assignments').doc(taskId);
             const snap = await tx.get(ref);
             if (!snap.exists) return;
@@ -189,106 +250,272 @@
               tx.update(ref, { lastOpenedAt: firebase.firestore.FieldValue.serverTimestamp() });
             }
           });
-        }catch(e){ console.warn('markTaskStarted:', e); }
+        } catch(e){ console.warn('Failed to mark task started:', e); }
       });
     })();
 
-    /* ----------------- filter sidebar to ?focus= ----------------- */
-    (function filterAssigned(){
-      const ids = focusIdsFromQuery();
-      if (!ids.length){ return; }              // no filter requested
-      const wanted = new Set(ids);
-
-      const root = qs('#sidebar-content');
+    /* ===============================================================
+       Assigned-only filtering + per-site controls (lazy fill)
+       =============================================================== */
+    (function main(){
+      const db = firebase.firestore();
+      const root = document.getElementById('sidebar-content');
       if (!root) return;
 
-      function rowId(el){
+      const taskId   = qsp('task');                // optional; enables per-site controls
+      const focusIds = getFocusIds();              // from ?focus=...
+      const ROW_SEL  =
+        '[data-site-id],[data-siteid],[data-id],[data-site],[data-code],[data-sitecode],' +
+        'li,.site-row,.site-item,.sidebar-row,.list-item,.item';
+
+      let assignmentRef  = null;   // DocumentReference (if taskId is valid)
+      let perSiteCache   = {};     // Latest perSite map from Firestore
+      let wantedIds      = [];     // allowed site IDs (M####)
+
+      /* ---------- helpers ---------- */
+      function setBanner(text){
+        let b = document.getElementById('assigned-filter-banner');
+        if (!b) {
+          b = document.createElement('div');
+          b.id = 'assigned-filter-banner';
+          b.style.cssText =
+            'margin:10px;padding:10px;border:1px solid #e2e8f0;border-radius:8px;' +
+            'background:#fff8f8;color:#7f1d1d;font-weight:700;';
+          root.prepend(b);
+        }
+        b.textContent = text;
+      }
+      function clearBanner(){ const b = document.getElementById('assigned-filter-banner'); if (b) b.remove(); }
+
+      function extractId(el){
         const ds = el.dataset || {};
         let id = (ds.siteId || ds.siteid || ds.site || ds.id || ds.code || ds.sitecode || '').toUpperCase();
         if (!/^M\d{3,4}$/.test(id)){
-          const m = (el.textContent||'').toUpperCase().match(/\bM\d{3,4}\b/);
+          const t = (el.textContent || '').toUpperCase();
+          const m = t.match(/\bM\d{3,4}\b/);
           if (m) id = m[0];
         }
         return /^M\d{3,4}$/.test(id) ? id : '';
       }
 
-      function siteRows(){
-        const nodes = root.querySelectorAll(
-          '[data-site-id],[data-siteid],[data-id],[data-site],[data-code],[data-sitecode],'+
-          'li,.site-row,.site-item,.sidebar-row,.list-item,.item'
-        );
-        const out=[];
-        nodes.forEach(el=>{
-          if (el.closest('summary')) return;
-          const id = rowId(el);
-          if (id) out.push({el,id});
-        });
-        return out;
-      }
-
       function numberRows(visible){
-        visible.forEach(r=>{ const x=r.querySelector('.ap-num'); if (x) x.remove(); });
-        let n=1;
-        visible.forEach(row=>{
-          const host = row.firstElementChild || row;
+        visible.forEach(el => { const x = el.querySelector('.ap-num'); if (x) x.remove(); });
+        let n = 1;
+        visible.forEach(el => {
+          const head = el.querySelector(':scope > *') || el;
           const span = document.createElement('span');
-          span.className='ap-num'; span.textContent = `${n++}.`;
-          host.insertBefore(span, host.firstChild);
+          span.className = 'ap-num';
+          span.textContent = `${n++}.`;
+          head.insertBefore(span, head.firstChild);
         });
       }
 
       function hideEmptyZones(){
-        root.querySelectorAll('details,.zone,.zone-group').forEach(g=>{
-          const any = [...g.querySelectorAll('li,.site-row,.site-item,.sidebar-row,.list-item,.item')]
-            .some(el=> el.style.display !== 'none');
-          g.style.display = any ? '' : 'none';
-          if (any && 'open' in g) g.open = true;
+        root.querySelectorAll('details,.zone,.zone-group').forEach(group => {
+          const any = [...group.querySelectorAll(ROW_SEL)].some(x => x.style.display !== 'none');
+          group.style.display = any ? '' : 'none';
+          if (any && 'open' in group) group.open = true;
         });
       }
 
-      function banner(text){
-        let b = qs('#assigned-filter-banner');
-        if (!b){
-          b = document.createElement('div');
-          b.id='assigned-filter-banner';
-          b.style.cssText='margin:10px;padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff8f8;color:#7f1d1d;font-weight:700;';
-          root.prepend(b);
-        }
-        b.textContent = text;
-      }
-      function clearBanner(){ const b=qs('#assigned-filter-banner'); if (b) b.remove(); }
+      /* ---------- per-site UI (only when taskId valid) ---------- */
+      function decorateRowWithControls(rowEl, siteId){
+        if (!assignmentRef) return; // no task => read-only
 
-      // retry loop: try up to 40 times (~4s) until sidebar items exist
-      let tries = 0;
-      (function tick(){
-        tries++;
-        const rows = siteRows();
+        // Avoid duplicating
+        if (rowEl.classList.contains('ap-row')) return;
+
+        // Try to locate a title element we can augment, otherwise wrap the row
+        let titleHost = rowEl.firstElementChild || rowEl;
+        let titleTextNode = titleHost.firstChild; // keep existing title
+
+        // Wrap structure to keep inside your bubble
+        rowEl.classList.add('ap-row');
+        const head = document.createElement('div');
+        head.className = 'ap-row-head';
+
+        // Move the current first child (title etc.) into ap-row-head
+        head.appendChild(titleHost.cloneNode(true));
+        rowEl.replaceChild(head, titleHost);
+
+        // Title receives the ordinal + existing text
+        head.firstElementChild.classList.add('ap-row-title');
+
+        // Controls container
+        const ctrls = document.createElement('div');
+        ctrls.className = 'ap-controls';
+
+        // Status pill
+        const pill = document.createElement('span');
+        pill.className = 'ap-pill';
+        ctrls.appendChild(pill);
+
+        // Done button
+        const btn = document.createElement('button');
+        btn.className = 'ap-btn';
+        btn.textContent = 'Done';
+        ctrls.appendChild(btn);
+
+        head.appendChild(ctrls);
+
+        // Note input
+        const note = document.createElement('textarea');
+        note.className = 'ap-note';
+        note.rows = 2;
+        note.placeholder = 'Add a note (optional)…';
+        rowEl.appendChild(note);
+
+        // Load initial state from perSiteCache (if any)
+        const current = perSiteCache[siteId] || {};
+        const status  = (current.status || '').toLowerCase();
+        const isDone  = status === 'completed';
+        pill.textContent = isDone ? 'Done' : 'Assigned';
+        pill.classList.toggle('done', isDone);
+        if (current.note) note.value = current.note;
+
+        // Wire updates
+        btn.addEventListener('click', async () => {
+          try{
+            await assignmentRef.set({
+              perSite: {
+                [siteId]: {
+                  status: 'completed',
+                  updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                  completedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                  note: note.value || ''
+                }
+              }
+            }, { merge: true });
+          } catch(e){ console.warn('perSite complete failed:', e); }
+        });
+
+        let noteTimer = null;
+        note.addEventListener('input', ()=>{
+          if (noteTimer) clearTimeout(noteTimer);
+          noteTimer = setTimeout(async ()=>{
+            try{
+              await assignmentRef.set({
+                perSite: {
+                  [siteId]: {
+                    status: (perSiteCache[siteId]?.status || 'in_progress'),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    note: note.value || ''
+                  }
+                }
+              }, { merge: true });
+            } catch(e){ console.warn('perSite note failed:', e); }
+          }, 500);
+        });
+      }
+
+      function refreshPills(visible){
+        if (!assignmentRef) return;
+        visible.forEach(el => {
+          const id = extractId(el);
+          const data = perSiteCache[id] || {};
+          const pill = el.querySelector('.ap-pill');
+          if (!pill) return;
+          const isDone = (data.status || '').toLowerCase() === 'completed';
+          pill.textContent = isDone ? 'Done' : 'Assigned';
+          pill.classList.toggle('done', isDone);
+          const note = el.querySelector('.ap-note');
+          if (note && typeof data.note === 'string' && note.value !== data.note){
+            note.value = data.note;
+          }
+        });
+      }
+
+      /* ---------- apply assigned-only filter ---------- */
+      function applyFilter(){
+        const wanted = new Set(wantedIds);
+        const rows = [...root.querySelectorAll(ROW_SEL)].filter(el => !el.closest('summary'));
 
         if (!rows.length){
-          banner('Loading sites…');
-          if (tries < 40) return setTimeout(tick, 100);
-          // Give up quietly if nothing ever appeared
-          clearBanner();
+          setBanner('Loading sites…');
           return;
         }
 
-        // We have rows – apply filter
-        const visible=[];
-        rows.forEach(({el,id})=>{
-          const keep = wanted.has(id);
-          el.style.display = keep ? '' : 'none';
-          if (keep) visible.push(el);
+        // Hide all; reveal only matches
+        rows.forEach(el => { el.style.display = 'none'; });
+        const visible = [];
+        rows.forEach(el => {
+          const id = extractId(el);
+          if (wanted.has(id)){
+            el.style.display = '';
+            visible.push(el);
+            decorateRowWithControls(el, id);
+          }
         });
 
         if (!visible.length){
-          banner('No assigned sites to show.');
-        }else{
+          setBanner('No assigned sites to show.');
+        } else {
           clearBanner();
           numberRows(visible);
           hideEmptyZones();
+          refreshPills(visible);
         }
-      })();
+      }
+
+      /* ---------- load wanted ids ---------- */
+      async function loadWantedIdsFromFirestore(u){
+        const snap = await db.collection('assignments').where('userId', '==', u.uid).get();
+        const set = new Set();
+        snap.forEach(doc => (doc.data().siteIds || []).forEach(id => set.add(String(id).toUpperCase())));
+        wantedIds = [...set];
+      }
+
+      /* ---------- maybe bind to assignment doc (for perSite live updates) ---------- */
+      async function maybeBindAssignment(u){
+        if (!taskId) return;
+        const ref  = db.collection('assignments').doc(taskId);
+        const snap = await ref.get();
+        if (!snap.exists) return;
+        const d = snap.data() || {};
+        if (d.userId !== u.uid) return;  // safety
+
+        assignmentRef = ref;             // enable per-site controls
+        perSiteCache  = d.perSite || {};
+
+        // Live updates for perSite pill/notes reflecting to UI
+        ref.onSnapshot(s => {
+          const dd = s.data() || {};
+          perSiteCache = dd.perSite || {};
+          applyFilter();
+        });
+      }
+
+      /* ---------- boot ---------- */
+      firebase.auth().onAuthStateChanged(async (u) => {
+        if (!u) return;
+
+        // Determine allowed IDs
+        if (getFocusIds().length){
+          wantedIds = getFocusIds();
+        } else {
+          try { await loadWantedIdsFromFirestore(u); }
+          catch(e){ console.warn('Failed to load assigned ids:', e); }
+        }
+
+        // Bind assignment doc if present
+        try { await maybeBindAssignment(u); }
+        catch(e){ console.warn('Failed to bind assignment:', e); }
+
+        // Keep re-applying while sidebar renders
+        let tries = 0;
+        const spin = setInterval(()=>{
+          tries++;
+          applyFilter();
+          if (tries > 40) clearInterval(spin); // ~4s
+        }, 100);
+
+        // Also re-run whenever sidebar content changes
+        const mo = new MutationObserver(applyFilter);
+        mo.observe(root, { childList:true, subtree:true });
+        setTimeout(()=>mo.disconnect(), 30000);
+      });
     })();
   </script>
 </body>
 </html>
+
