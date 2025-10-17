@@ -110,52 +110,21 @@
       #sidebar{ width: 100vw; max-width:none; }
     }
 
-    /* ------------------ ADDED OVERRIDES: stack sites vertically ------------------ */
-
-    /* Kill horizontal overflow; keep only vertical scrolling */
-    #sidebar, #sidebar-content {
-      overflow-x: hidden;
-    }
-
-    /* Make each site row occupy full width so it stacks, even if parent is flex/grid */
+    /* ------------------ OVERRIDES: stack sites vertically ------------------ */
+    #sidebar, #sidebar-content { overflow-x: hidden; }
     #sidebar-content .site-row,
-    #sidebar-content [data-site-id] {
-      display: flex !important;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      width: 100% !important;
-      flex: 0 0 auto !important;
-      margin: 0;
+    #sidebar-content [data-site-id]{
+      display:flex !important; align-items:center; justify-content:space-between;
+      gap:10px; width:100% !important; flex:0 0 auto !important; margin:0;
     }
-
-    /* Ensure non-summary children inside details span full width */
-    #sidebar-content details > :not(summary) {
-      width: 100%;
+    #sidebar-content details > :not(summary){ width:100%; }
+    #sidebar-content .site-row .label{
+      flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     }
-
-    /* Labels truncate instead of causing horizontal scroll */
-    #sidebar-content .site-row .label {
-      flex: 1 1 auto;
-      min-width: 0;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+    #sidebar-content .site-row + .site-row{ border-top:1px solid #eef2f7; }
+    #sidebar-content .sites-grid, #sidebar-content .site-list, #sidebar-content .items, #sidebar-content .list{
+      display:block !important;
     }
-
-    /* Optional subtle separators between rows */
-    #sidebar-content .site-row + .site-row {
-      border-top: 1px solid #eef2f7;
-    }
-
-    /* If any container grid tries to tile sites horizontally, force block layout */
-    #sidebar-content .sites-grid,
-    #sidebar-content .site-list,
-    #sidebar-content .items,
-    #sidebar-content .list {
-      display: block !important;
-    }
-    /* ------------------ END ADDED OVERRIDES ------------------ */
   </style>
 </head>
 <body>
@@ -201,164 +170,168 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <!-- 1) Filter sidebar to focus IDs (from ?focus=… or from Firestore assignments) -->
-  <!-- 1) Filter sidebar to focus IDs (from ?focus=… or from Firestore assignments) -->
-<script>
-(function () {
-  // Parse ?focus=M0123,M0361,...
-  function getFocusFromQuery() {
-    const q = new URLSearchParams(location.search).get('focus') || '';
-    return q.split(',').map(s => s.trim()).filter(Boolean).map(s => s.toUpperCase());
-  }
-
-  // Fallback: if no focus param, gather all siteIds from this operator's assignments
-  async function getFocusFromFirestore() {
-    try {
-      const u = firebase.auth().currentUser;
-      if (!u) return [];
-      const snap = await firebase.firestore().collection('assignments')
-        .where('userId', '==', u.uid).get();
-
-      const set = new Set();
-      snap.forEach(doc => (doc.data()?.siteIds || [])
-        .forEach(id => set.add(String(id).toUpperCase())));
-      return Array.from(set);
-    } catch (e) {
-      console.warn('[AssignedParks] focus load failed:', e);
-      return [];
-    }
-  }
-
-  // Wait until script.js/sidebar.js has built the DOM
-  function whenSidebarReady(cb) {
-    const root = document.getElementById('sidebar-content');
-    if (!root) return;
-    if (root.children.length > 0) { cb(root); return; }
-    const obs = new MutationObserver((_, o) => {
-      if (root.children.length > 0) { o.disconnect(); cb(root); }
-    });
-    obs.observe(root, { childList: true, subtree: true });
-    setTimeout(() => obs.disconnect(), 10000);
-  }
-
-  // --- helpers ---------------------------------------------------
-  const idRx = /\bM\d{3,5}\b/i;
-
-  function extractId(el) {
-    // Prefer data attributes if present
-    const ds = el.dataset || {};
-    let id = (ds.siteId || ds.siteid || ds.id || ds.site || ds.code || ds.sitecode || '').toUpperCase();
-    if (!/^M\d{3,5}$/.test(id)) {
-      const t = (el.textContent || '').toUpperCase();
-      const m = t.match(idRx);
-      if (m) id = m[0];
-    }
-    return /^M\d{3,5}$/.test(id) ? id : '';
-  }
-
-  // Mark all elements that look like real site rows
-  function markSiteRows(root) {
-    const candidates = root.querySelectorAll(
-      '[data-site-id], li, .site-row, .sidebar-row, .list-item, .item'
-    );
-    const rows = [];
-    candidates.forEach(el => {
-      if (el.closest('summary')) return;          // skip headers
-      const id = extractId(el);
-      if (!id) return;
-      el.dataset.siteId = id;                     // normalize for later finds
-      el.dataset.isSite = '1';
-      rows.push(el);
-    });
-    return rows;
-  }
-
-  function openAncestors(el) {
-    // reveal details/containers all the way up
-    let p = el.parentElement;
-    while (p && p.id !== 'sidebar-content') {
-      if ('open' in p) p.open = true;
-      if (p.style) p.style.display = '';
-      p = p.parentElement;
-    }
-  }
-
-  function hideEmptyZones(root) {
-    root.querySelectorAll('details, .zone, .zone-group').forEach(g => {
-      const any = [...g.querySelectorAll('[data-is-site="1"]')]
-        .some(r => r.style.display !== 'none');
-      g.style.display = any ? '' : 'none';
-      if (any && 'open' in g) g.open = true;
-    });
-  }
-
-  function ensureBanner(root, text) {
-    let b = document.getElementById('assigned-filter-banner');
-    if (!b) {
-      b = document.createElement('div');
-      b.id = 'assigned-filter-banner';
-      b.style.cssText =
-        'padding:8px 10px;margin:6px 0;border:1px solid #e2e8f0;' +
-        'background:#fff8f8;color:#7f1d1d;border-radius:8px;font-weight:700';
-      root.prepend(b);
-    }
-    b.textContent = text;
-  }
-  function removeBanner() {
-    const b = document.getElementById('assigned-filter-banner');
-    if (b) b.remove();
-  }
-
-  // Strict filter: hide all site rows, then reveal only wanted ones
-  function filterSidebarStrict(root, ids) {
-    const wanted = new Set(ids.map(s => s.toUpperCase()));
-    const rows = markSiteRows(root);
-
-    if (!rows.length) {
-      ensureBanner(root, 'Loading sites…');
-      return;
+  <script>
+  (function () {
+    // Parse ?focus=M0123,M0361,...
+    function getFocusFromQuery() {
+      const q = new URLSearchParams(location.search).get('focus') || '';
+      return q.split(',').map(s => s.trim()).filter(Boolean).map(s => s.toUpperCase());
     }
 
-    let visibleCount = 0;
+    // Fallback: union of this operator’s assigned siteIds
+    async function getFocusFromFirestore() {
+      try {
+        const u = firebase.auth().currentUser;
+        if (!u) return [];
+        const snap = await firebase.firestore().collection('assignments')
+          .where('userId', '==', u.uid).get();
 
-    // Hide all site rows first
-    rows.forEach(el => { el.style.display = 'none'; });
-
-    // Reveal only whitelisted IDs and their ancestors
-    rows.forEach(el => {
-      const id = el.dataset.siteId;
-      if (wanted.has(id)) {
-        el.style.display = '';
-        openAncestors(el);
-        visibleCount++;
+        const set = new Set();
+        snap.forEach(doc => (doc.data()?.siteIds || [])
+          .forEach(id => set.add(String(id).toUpperCase())));
+        return Array.from(set);
+      } catch (e) {
+        console.warn('[AssignedParks] focus load failed:', e);
+        return [];
       }
-    });
-
-    if (visibleCount === 0) {
-      ensureBanner(root, 'No assigned sites to show.');
-    } else {
-      removeBanner();
     }
 
-    hideEmptyZones(root);
-  }
+    // Wait until script.js/sidebar.js has built the DOM
+    function whenSidebarReady(cb) {
+      const root = document.getElementById('sidebar-content');
+      if (!root) return;
+      if (root.children.length > 0) { cb(root); return; }
+      const obs = new MutationObserver((_, o) => {
+        if (root.children.length > 0) { o.disconnect(); cb(root); }
+      });
+      obs.observe(root, { childList: true, subtree: true });
+      setTimeout(() => obs.disconnect(), 10000);
+    }
 
-  // ----------------------------------------------------------------
-  firebase.auth().onAuthStateChanged(async () => {
-    let ids = getFocusFromQuery();
-    if (!ids.length) ids = await getFocusFromFirestore(); // fallback
-    if (!ids.length) return;
+    // --- helpers ---------------------------------------------------
+    const idRx = /\bM\d{3,5}\b/i;
 
-    whenSidebarReady(root => {
-      // First pass + keep filtering while sidebar content changes
-      filterSidebarStrict(root, ids);
-      const mo = new MutationObserver(() => filterSidebarStrict(root, ids));
-      mo.observe(root, { childList: true, subtree: true });
-      // stop after 30s to avoid running forever
-      setTimeout(() => mo.disconnect(), 30000);
+    function extractId(el) {
+      // Prefer data attributes if present
+      const ds = el.dataset || {};
+      let id = (ds.siteId || ds.siteid || ds.id || ds.site || ds.code || ds.sitecode || '').toUpperCase();
+      if (!/^M\d{3,5}$/.test(id)) {
+        const t = (el.textContent || '').toUpperCase();
+        const m = t.match(idRx);
+        if (m) id = m[0];
+      }
+      return /^M\d{3,5}$/.test(id) ? id : '';
+    }
+
+    // Mark elements that look like real site rows (avoid generic <div>)
+    function markSiteRows(root) {
+      const candidates = root.querySelectorAll(
+        '[data-site-id], li, .site-row, .sidebar-row, .list-item, .item'
+      );
+      const rows = [];
+      candidates.forEach(el => {
+        if (el.closest('summary')) return;          // skip headers
+        const id = extractId(el);
+        if (!id) return;
+        el.dataset.siteId = id;                     // normalize
+        el.dataset.isSite = '1';
+        rows.push(el);
+      });
+      return rows;
+    }
+
+    function openAncestors(el) {
+      let p = el.parentElement;
+      while (p && p.id !== 'sidebar-content') {
+        if ('open' in p) p.open = true;
+        if (p.style) p.style.display = '';
+        p = p.parentElement;
+      }
+    }
+
+    function hideEmptyZones(root) {
+      root.querySelectorAll('details, .zone, .zone-group').forEach(g => {
+        const any = [...g.querySelectorAll('[data-is-site="1"]')]
+          .some(r => r.style.display !== 'none');
+        g.style.display = any ? '' : 'none';
+        if (any && 'open' in g) g.open = true;
+      });
+    }
+
+    function ensureBanner(root, text) {
+      let b = document.getElementById('assigned-filter-banner');
+      if (!b) {
+        b = document.createElement('div');
+        b.id = 'assigned-filter-banner';
+        b.style.cssText =
+          'padding:8px 10px;margin:6px 0;border:1px solid #e2e8f0;' +
+          'background:#fff8f8;color:#7f1d1d;border-radius:8px;font-weight:700';
+        root.prepend(b);
+      }
+      b.textContent = text;
+    }
+    function removeBanner() {
+      const b = document.getElementById('assigned-filter-banner');
+      if (b) b.remove();
+    }
+
+    // Strict filter: hide all site rows, then reveal only wanted ones (throttled)
+    function filterSidebarStrict(root, ids) {
+      const wanted = new Set(ids.map(s => s.toUpperCase()));
+      const rows = markSiteRows(root);
+
+      if (!rows.length) {
+        ensureBanner(root, 'Loading sites…');
+        return;
+      }
+
+      let visibleCount = 0;
+      rows.forEach(el => { el.style.display = 'none'; });
+      rows.forEach(el => {
+        if (wanted.has(el.dataset.siteId)) {
+          el.style.display = '';
+          openAncestors(el);
+          visibleCount++;
+        }
+      });
+
+      if (visibleCount === 0) ensureBanner(root, 'No assigned sites to show.');
+      else removeBanner();
+
+      hideEmptyZones(root);
+    }
+
+    // ----------------------------------------------------------------
+    firebase.auth().onAuthStateChanged(async () => {
+      let ids = getFocusFromQuery();
+      if (!ids.length) ids = await getFocusFromFirestore(); // fallback
+      if (!ids.length) return;
+
+      whenSidebarReady(root => {
+        // throttle re-runs
+        let scheduled = false;
+        const schedule = () => {
+          if (scheduled) return;
+          scheduled = true;
+          requestAnimationFrame(() => {
+            scheduled = false;
+            filterSidebarStrict(root, ids);
+          });
+        };
+
+        // Initial filter
+        schedule();
+
+        // Keep filtering as the sidebar changes (but throttled)
+        const mo = new MutationObserver(schedule);
+        mo.observe(root, { childList: true, subtree: true });
+
+        // stop after ~30s (enough for initial mount)
+        setTimeout(() => mo.disconnect(), 30000);
+      });
     });
-  });
-})();
-</script>
+  })();
+  </script>
 
   <!-- 2) Reposition sidebar just below the Site ID search control -->
   <script>
@@ -537,17 +510,12 @@
       const rows = root.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row, div');
       rows.forEach(row => {
         if (row.dataset.enhanced === '1') return;
-
-        // skip obvious headings / summaries
         if (row.tagName.toLowerCase() === 'summary') return;
 
         let siteId = row.getAttribute('data-site-id');
         if (!siteId) {
           const id = detectIdFromText(row);
-          if (id) {
-            siteId = id;
-            row.setAttribute('data-site-id', id);
-          }
+          if (id) { siteId = id; row.setAttribute('data-site-id', id); }
         }
         if (!siteId) return; // not a site row
 
@@ -611,10 +579,7 @@
       if (!root) return;
       if (root.children.length > 0) { cb(root); return; }
       const obs = new MutationObserver((muts, observer) => {
-        if (root.children.length > 0) {
-          observer.disconnect();
-          cb(root);
-        }
+        if (root.children.length > 0) { observer.disconnect(); cb(root); }
       });
       obs.observe(root, { childList: true, subtree: true });
       setTimeout(() => obs.disconnect(), 10000);
@@ -643,114 +608,6 @@
     });
   })();
   </script>
-
-  <script>
-/* Assigned-only filter: show only rows that match ?focus=... (or fall back to user's assignments) */
-(function () {
-  const db = firebase.firestore();
-
-  // 1) Read focus IDs from URL (e.g. ?focus=M0123,M0361)
-  function getFocusFromQuery() {
-    const q = new URLSearchParams(location.search).get('focus') || '';
-    return q.split(',').map(s => s.trim()).filter(Boolean).map(s => s.toUpperCase());
-  }
-
-  // 2) If no ?focus, fall back to this operator's assignments (union of siteIds)
-  async function getFocusFromFirestore() {
-    try {
-      const u = firebase.auth().currentUser;
-      if (!u) return [];
-      const snap = await db.collection('assignments').where('userId', '==', u.uid).get();
-      const set = new Set();
-      snap.forEach(doc => (doc.data()?.siteIds || []).forEach(id => set.add(String(id).toUpperCase())));
-      return Array.from(set);
-    } catch (e) {
-      console.warn('[AssignedParks] fallback focus load failed:', e);
-      return [];
-    }
-  }
-
-  // 3) Wait for #sidebar-content to be populated by sidebar.js
-  function whenSidebarReady(cb) {
-    const root = document.getElementById('sidebar-content');
-    if (!root) return;
-    if (root.children.length > 0) { cb(root); return; }
-    const obs = new MutationObserver(() => {
-      if (root.children.length > 0) { obs.disconnect(); cb(root); }
-    });
-    obs.observe(root, { childList: true, subtree: true });
-    setTimeout(() => obs.disconnect(), 12000);
-  }
-
-  // 4) Filter helper
-  function applyFilter(root, focusIds) {
-    const wanted = new Set(focusIds.map(s => s.toUpperCase()));
-    if (!root) return;
-
-    // Banner
-    const bannerId = 'assigned-filter-banner';
-    let banner = document.getElementById(bannerId);
-    if (!banner) {
-      banner = document.createElement('div');
-      banner.id = bannerId;
-      banner.style.cssText = 'margin:8px 0 10px;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff8f8;color:#7f1d1d;font-weight:700';
-      root.prepend(banner);
-    }
-
-    // Identify site rows (prefer data-site-id; fall back to regex on text)
-    const rx = /\bM\d{3,5}\b/;
-    const rows = root.querySelectorAll('[data-site-id], .site-row, li, .sidebar-row, .list-item, .item');
-    let visibleCount = 0;
-
-    rows.forEach(el => {
-      if (el.closest('summary')) return; // skip zone headers
-
-      // Find/normalize siteId
-      let id = (el.getAttribute && el.getAttribute('data-site-id')) || '';
-      if (!id) {
-        const m = (el.textContent || '').match(rx);
-        if (m) { id = m[0].toUpperCase(); el.setAttribute && el.setAttribute('data-site-id', id); }
-      }
-
-      // Only toggle elements that represent a site row (i.e., have an M#### id)
-      if (id && /^M\d{3,5}$/i.test(id)) {
-        const keep = wanted.has(id.toUpperCase());
-        el.style.display = keep ? '' : 'none';
-        if (keep) visibleCount++;
-      }
-    });
-
-    // Hide empty zones, open non-empty ones
-    root.querySelectorAll('details').forEach(d => {
-      const anyVisible = [...d.querySelectorAll('[data-site-id]')].some(n => n.style.display !== 'none');
-      d.style.display = anyVisible ? '' : 'none';
-      if (anyVisible) d.open = true;
-    });
-
-    banner.textContent = visibleCount
-      ? `Showing ${visibleCount} assigned site${visibleCount > 1 ? 's' : ''}.`
-      : 'No assigned sites to show.';
-  }
-
-  // 5) Wire it up
-  firebase.auth().onAuthStateChanged(async () => {
-    let focusIds = getFocusFromQuery();
-    if (!focusIds.length) focusIds = await getFocusFromFirestore();
-    if (!focusIds.length) return;
-
-    whenSidebarReady(root => {
-      // Run once now…
-      applyFilter(root, focusIds);
-      // …and keep applying as the sidebar changes
-      const mo = new MutationObserver(() => applyFilter(root, focusIds));
-      mo.observe(root, { childList: true, subtree: true });
-      // stop after a while (optional)
-      setTimeout(() => mo.disconnect(), 30000);
-    });
-  });
-})();
-</script>
-
 
 </body>
 </html>
