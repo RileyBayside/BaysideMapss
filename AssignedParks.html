@@ -4,92 +4,47 @@
   <meta charset="utf-8" />
   <title>Assigned Parks</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="icon" href="logo.png" type="image/png" />
 
-  <!-- Same stack as ParksMowing -->
-  <link rel="stylesheet" href="style.css" />
+  <!-- discourage caching -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
+  <link rel="icon" href="logo.png?v=2025-10-17-01" type="image/png" />
+
+  <!-- Same stack as ParksMowing (add ?v=... to bust GitHub Pages cache) -->
+  <link rel="stylesheet" href="style.css?v=2025-10-17-01" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <link rel="stylesheet" href="sidebar.css" />
+  <link rel="stylesheet" href="sidebar.css?v=2025-10-17-01" />
 
   <style>
-    /* Keep your look; only small, additive tweaks */
+    /* (same small tweaks as before) */
     #sidebar{
-      left: 8px !important;
-      right: auto;
-      bottom: 8px;
-      height: auto;
-      max-height: calc(100vh - 16px);
-      border-radius: 14px;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      z-index: 1000;
-      pointer-events: auto;
-
-      /* collapse support (mini toggle) */
-      transition: transform .25s ease;
-      will-change: transform;
+      left: 8px !important; right:auto; bottom:8px;
+      height:auto; max-height:calc(100vh - 16px);
+      border-radius:14px; overflow:hidden; display:flex; flex-direction:column;
+      z-index:1000; pointer-events:auto; transition:transform .25s ease; will-change:transform;
     }
-    #sidebar-content{
-      flex: 1 1 auto;
-      min-height: 0;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      padding-right: 8px;
-    }
-    #sidebar.is-collapsed { transform: translateX(calc(-100% - 12px)); }
-
-    /* Small floating collapse button */
+    #sidebar-content{ flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding-right:8px; }
+    #sidebar.is-collapsed{ transform:translateX(calc(-100% - 12px)); }
     #sbMiniToggle{
-      position: fixed; width:36px; height:36px;
-      border:0; border-radius:9999px;
+      position:fixed; width:36px; height:36px; border:0; border-radius:9999px;
       background:#d11e2b; color:#fff; font-weight:900; font-size:18px; line-height:36px;
       box-shadow:0 6px 18px rgba(0,0,0,.22); cursor:pointer; z-index:1002;
       display:inline-flex; align-items:center; justify-content:center;
     }
-
-    /* Ordinal before each visible site row */
     .ap-num{ font-weight:800; margin-right:6px; }
-
-    /* Per-site inline controls container */
-    .ap-controls{
-      display:flex; align-items:center; gap:8px; margin-left:auto; flex-wrap:wrap;
-    }
-    .ap-pill{
-      display:inline-block; font-size:12px; font-weight:800;
-      padding:4px 8px; border-radius:999px; white-space:nowrap;
-      border:1px solid #fecaca; background:#fee2e2; color:#7f1d1d;
-    }
-    .ap-pill.done{
-      border-color:#86efac; background:#dcfce7; color:#166534;
-    }
-    .ap-btn{
-      border:0; border-radius:8px; padding:6px 10px; font-weight:800; cursor:pointer;
-      background:#111827; color:#fff;
-    }
+    .ap-controls{ display:flex; align-items:center; gap:8px; margin-left:auto; flex-wrap:wrap; }
+    .ap-pill{ display:inline-block; font-size:12px; font-weight:800; padding:4px 8px; border-radius:999px; white-space:nowrap;
+      border:1px solid #fecaca; background:#fee2e2; color:#7f1d1d; }
+    .ap-pill.done{ border-color:#86efac; background:#dcfce7; color:#166534; }
+    .ap-btn{ border:0; border-radius:8px; padding:6px 10px; font-weight:800; cursor:pointer; background:#111827; color:#fff; }
     .ap-btn:hover{ filter:brightness(1.08); }
-    .ap-note{
-      width:100%; margin-top:6px; display:block;
-      border:1px solid #e5e7eb; border-radius:8px; padding:8px 10px; font-size:13px;
-      background:#fff; color:#111827;
-    }
-    .ap-note::placeholder{ color:#9ca3af; }
-
-    /* When a row has our extra controls, keep them inside the “bubble” */
-    .ap-row{
-      display:flex; flex-direction:column; gap:6px;
-    }
-    .ap-row-head{
-      display:flex; align-items:center; gap:8px; min-width:0;
-    }
-    .ap-row-title{
-      flex:1 1 auto; min-width:0;
-      overflow:hidden; text-overflow:ellipsis;
-    }
-
-    @media (max-width:768px){
-      #sidebar{ left: 6px !important; right: 6px; border-radius:12px; }
-    }
+    .ap-note{ width:100%; margin-top:6px; display:block; border:1px solid #e5e7eb; border-radius:8px; padding:8px 10px; font-size:13px; background:#fff; color:#111827; }
+    .ap-row{ display:flex; flex-direction:column; gap:6px; }
+    .ap-row-head{ display:flex; align-items:center; gap:8px; min-width:0; }
+    .ap-row-title{ flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+    @media (max-width:768px){ #sidebar{ left:6px !important; right:6px; border-radius:12px; } }
   </style>
 </head>
 <body>
@@ -98,16 +53,14 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-  <script src="firebase-init.js"></script>
-  <script src="auth-guard.js"></script>
+  <script src="firebase-init.js?v=2025-10-17-01"></script>
+  <script src="auth-guard.js?v=2025-10-17-01"></script>
 
-  <!-- Sidebar toggle (id kept for your CSS/JS) -->
   <button id="sidebar-toggle">☰</button>
 
-  <!-- Sidebar (ids/classes kept so sidebar.css + sidebar.js work) -->
   <div id="sidebar">
     <div class="sidebar-head">
-      <img src="logo.png" alt="Bayside" onerror="this.style.display='none'">
+      <img src="logo.png?v=2025-10-17-01" alt="Bayside" onerror="this.style.display='none'">
       <div class="title">Assigned Parks</div>
     </div>
 
@@ -125,26 +78,24 @@
     </div>
   </div>
 
-  <!-- Map (created by your existing script.js) -->
   <div id="map"></div>
 
   <!-- Core scripts (exact order) -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="script.js"></script>
-  <script src="sidebar.js"></script>
+  <script src="script.js?v=2025-10-17-01"></script>
+  <script src="sidebar.js?v=2025-10-17-01"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <script>
-    /* ----------------- tiny helpers ----------------- */
+    console.info('AssignedParks build', '2025-10-17-01'); // visible in console so you know it’s the new file
+
+    /* --- helpers --- */
     const qsp = (k) => new URLSearchParams(location.search).get(k) || '';
     const getFocusIds = () =>
       (qsp('focus') || '')
-        .split(',')
-        .map(s => s.trim())
-        .filter(Boolean)
-        .map(s => s.toUpperCase());
+        .split(',').map(s => s.trim()).filter(Boolean).map(s => s.toUpperCase());
 
-    /* ----------------- Keep the sidebar below the 'Search ID…' control ----------------- */
+    /* position sidebar below Search ID… */
     (function positionSidebarBelowSearch(){
       function findSearch(){
         return (
@@ -178,7 +129,7 @@
       setTimeout(()=>mo.disconnect(), 6000);
     })();
 
-    /* ----------------- Mini floating collapse toggle ----------------- */
+    /* mini collapse toggle */
     (function setupMiniToggle(){
       const sidebar = document.getElementById('sidebar');
       if (!sidebar) return;
@@ -198,9 +149,8 @@
       function clamp(n,min,max){ return Math.max(min, Math.min(max,n)); }
       function position(){
         const top = sidebarTop();
-        if (sidebar.classList.contains('is-collapsed')){
-          toggle.style.left = '8px';
-        } else {
+        if (sidebar.classList.contains('is-collapsed')) toggle.style.left = '8px';
+        else {
           const rect = sidebar.getBoundingClientRect();
           const left = rect.right + 8;
           const maxLeft = (window.innerWidth || 360) - 44;
@@ -226,7 +176,7 @@
       position();
     })();
 
-    /* ----------------- Mark task started (?task=) ----------------- */
+    /* mark task started if ?task= */
     (function trackTaskOpen(){
       const db = firebase.firestore();
       const taskId = qsp('task');
@@ -254,25 +204,22 @@
       });
     })();
 
-    /* ===============================================================
-       Assigned-only filtering + per-site controls (lazy fill)
-       =============================================================== */
+    /* assigned-only filtering + per-site controls */
     (function main(){
-      const db = firebase.firestore();
+      const db   = firebase.firestore();
       const root = document.getElementById('sidebar-content');
       if (!root) return;
 
-      const taskId   = qsp('task');                // optional; enables per-site controls
-      const focusIds = getFocusIds();              // from ?focus=...
+      const taskId   = qsp('task');
+      const focusIds = getFocusIds();
       const ROW_SEL  =
         '[data-site-id],[data-siteid],[data-id],[data-site],[data-code],[data-sitecode],' +
         'li,.site-row,.site-item,.sidebar-row,.list-item,.item';
 
-      let assignmentRef  = null;   // DocumentReference (if taskId is valid)
-      let perSiteCache   = {};     // Latest perSite map from Firestore
-      let wantedIds      = [];     // allowed site IDs (M####)
+      let assignmentRef = null;
+      let perSiteCache  = {};
+      let wantedIds     = [];
 
-      /* ---------- helpers ---------- */
       function setBanner(text){
         let b = document.getElementById('assigned-filter-banner');
         if (!b) {
@@ -286,7 +233,6 @@
         b.textContent = text;
       }
       function clearBanner(){ const b = document.getElementById('assigned-filter-banner'); if (b) b.remove(); }
-
       function extractId(el){
         const ds = el.dataset || {};
         let id = (ds.siteId || ds.siteid || ds.site || ds.id || ds.code || ds.sitecode || '').toUpperCase();
@@ -297,19 +243,15 @@
         }
         return /^M\d{3,4}$/.test(id) ? id : '';
       }
-
       function numberRows(visible){
         visible.forEach(el => { const x = el.querySelector('.ap-num'); if (x) x.remove(); });
-        let n = 1;
-        visible.forEach(el => {
+        let n = 1; visible.forEach(el => {
           const head = el.querySelector(':scope > *') || el;
           const span = document.createElement('span');
-          span.className = 'ap-num';
-          span.textContent = `${n++}.`;
+          span.className = 'ap-num'; span.textContent = `${n++}.`;
           head.insertBefore(span, head.firstChild);
         });
       }
-
       function hideEmptyZones(){
         root.querySelectorAll('details,.zone,.zone-group').forEach(group => {
           const any = [...group.querySelectorAll(ROW_SEL)].some(x => x.style.display !== 'none');
@@ -318,54 +260,26 @@
         });
       }
 
-      /* ---------- per-site UI (only when taskId valid) ---------- */
       function decorateRowWithControls(rowEl, siteId){
-        if (!assignmentRef) return; // no task => read-only
-
-        // Avoid duplicating
+        if (!assignmentRef) return;           // no task => read-only
         if (rowEl.classList.contains('ap-row')) return;
 
-        // Try to locate a title element we can augment, otherwise wrap the row
         let titleHost = rowEl.firstElementChild || rowEl;
-        let titleTextNode = titleHost.firstChild; // keep existing title
 
-        // Wrap structure to keep inside your bubble
         rowEl.classList.add('ap-row');
-        const head = document.createElement('div');
-        head.className = 'ap-row-head';
-
-        // Move the current first child (title etc.) into ap-row-head
+        const head = document.createElement('div'); head.className = 'ap-row-head';
         head.appendChild(titleHost.cloneNode(true));
         rowEl.replaceChild(head, titleHost);
-
-        // Title receives the ordinal + existing text
         head.firstElementChild.classList.add('ap-row-title');
 
-        // Controls container
-        const ctrls = document.createElement('div');
-        ctrls.className = 'ap-controls';
-
-        // Status pill
-        const pill = document.createElement('span');
-        pill.className = 'ap-pill';
-        ctrls.appendChild(pill);
-
-        // Done button
-        const btn = document.createElement('button');
-        btn.className = 'ap-btn';
-        btn.textContent = 'Done';
-        ctrls.appendChild(btn);
-
+        const ctrls = document.createElement('div'); ctrls.className = 'ap-controls';
+        const pill  = document.createElement('span'); pill.className = 'ap-pill'; ctrls.appendChild(pill);
+        const btn   = document.createElement('button'); btn.className = 'ap-btn'; btn.textContent = 'Done'; ctrls.appendChild(btn);
         head.appendChild(ctrls);
 
-        // Note input
-        const note = document.createElement('textarea');
-        note.className = 'ap-note';
-        note.rows = 2;
-        note.placeholder = 'Add a note (optional)…';
+        const note  = document.createElement('textarea'); note.className = 'ap-note'; note.rows = 2; note.placeholder = 'Add a note (optional)…';
         rowEl.appendChild(note);
 
-        // Load initial state from perSiteCache (if any)
         const current = perSiteCache[siteId] || {};
         const status  = (current.status || '').toLowerCase();
         const isDone  = status === 'completed';
@@ -373,36 +287,29 @@
         pill.classList.toggle('done', isDone);
         if (current.note) note.value = current.note;
 
-        // Wire updates
         btn.addEventListener('click', async () => {
           try{
             await assignmentRef.set({
-              perSite: {
-                [siteId]: {
-                  status: 'completed',
-                  updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                  completedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                  note: note.value || ''
-                }
-              }
-            }, { merge: true });
+              perSite: { [siteId]: {
+                status:'completed',
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                completedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                note: note.value || ''
+              }}}, { merge:true });
           } catch(e){ console.warn('perSite complete failed:', e); }
         });
 
-        let noteTimer = null;
+        let t=null;
         note.addEventListener('input', ()=>{
-          if (noteTimer) clearTimeout(noteTimer);
-          noteTimer = setTimeout(async ()=>{
+          if (t) clearTimeout(t);
+          t=setTimeout(async ()=>{
             try{
               await assignmentRef.set({
-                perSite: {
-                  [siteId]: {
-                    status: (perSiteCache[siteId]?.status || 'in_progress'),
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    note: note.value || ''
-                  }
-                }
-              }, { merge: true });
+                perSite: { [siteId]: {
+                  status: (perSiteCache[siteId]?.status || 'in_progress'),
+                  updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                  note: note.value || ''
+                }}}, { merge:true });
             } catch(e){ console.warn('perSite note failed:', e); }
           }, 500);
         });
@@ -413,29 +320,20 @@
         visible.forEach(el => {
           const id = extractId(el);
           const data = perSiteCache[id] || {};
-          const pill = el.querySelector('.ap-pill');
-          if (!pill) return;
+          const pill = el.querySelector('.ap-pill'); if (!pill) return;
           const isDone = (data.status || '').toLowerCase() === 'completed';
           pill.textContent = isDone ? 'Done' : 'Assigned';
           pill.classList.toggle('done', isDone);
           const note = el.querySelector('.ap-note');
-          if (note && typeof data.note === 'string' && note.value !== data.note){
-            note.value = data.note;
-          }
+          if (note && typeof data.note === 'string' && note.value !== data.note) note.value = data.note;
         });
       }
 
-      /* ---------- apply assigned-only filter ---------- */
       function applyFilter(){
         const wanted = new Set(wantedIds);
         const rows = [...root.querySelectorAll(ROW_SEL)].filter(el => !el.closest('summary'));
+        if (!rows.length){ setBanner('Loading sites…'); return; }
 
-        if (!rows.length){
-          setBanner('Loading sites…');
-          return;
-        }
-
-        // Hide all; reveal only matches
         rows.forEach(el => { el.style.display = 'none'; });
         const visible = [];
         rows.forEach(el => {
@@ -447,75 +345,38 @@
           }
         });
 
-        if (!visible.length){
-          setBanner('No assigned sites to show.');
-        } else {
-          clearBanner();
-          numberRows(visible);
-          hideEmptyZones();
-          refreshPills(visible);
-        }
+        if (!visible.length){ setBanner('No assigned sites to show.'); }
+        else { clearBanner(); numberRows(visible); hideEmptyZones(); refreshPills(visible); }
       }
 
-      /* ---------- load wanted ids ---------- */
       async function loadWantedIdsFromFirestore(u){
-        const snap = await db.collection('assignments').where('userId', '==', u.uid).get();
+        const snap = await db.collection('assignments').where('userId','==',u.uid).get();
         const set = new Set();
         snap.forEach(doc => (doc.data().siteIds || []).forEach(id => set.add(String(id).toUpperCase())));
         wantedIds = [...set];
       }
 
-      /* ---------- maybe bind to assignment doc (for perSite live updates) ---------- */
       async function maybeBindAssignment(u){
-        if (!taskId) return;
-        const ref  = db.collection('assignments').doc(taskId);
-        const snap = await ref.get();
-        if (!snap.exists) return;
-        const d = snap.data() || {};
-        if (d.userId !== u.uid) return;  // safety
-
-        assignmentRef = ref;             // enable per-site controls
-        perSiteCache  = d.perSite || {};
-
-        // Live updates for perSite pill/notes reflecting to UI
-        ref.onSnapshot(s => {
-          const dd = s.data() || {};
-          perSiteCache = dd.perSite || {};
-          applyFilter();
-        });
+        const id = qsp('task'); if (!id) return;
+        const ref = db.collection('assignments').doc(id);
+        const snap = await ref.get(); if (!snap.exists) return;
+        const d = snap.data() || {}; if (d.userId !== u.uid) return;
+        assignmentRef = ref; perSiteCache = d.perSite || {};
+        ref.onSnapshot(s => { perSiteCache = (s.data() || {}).perSite || {}; applyFilter(); });
       }
 
-      /* ---------- boot ---------- */
-      firebase.auth().onAuthStateChanged(async (u) => {
+      firebase.auth().onAuthStateChanged(async (u)=>{
         if (!u) return;
 
-        // Determine allowed IDs
-        if (getFocusIds().length){
-          wantedIds = getFocusIds();
-        } else {
-          try { await loadWantedIdsFromFirestore(u); }
-          catch(e){ console.warn('Failed to load assigned ids:', e); }
-        }
+        if (getFocusIds().length) wantedIds = getFocusIds();
+        else { try { await loadWantedIdsFromFirestore(u); } catch(e){ console.warn(e); } }
 
-        // Bind assignment doc if present
-        try { await maybeBindAssignment(u); }
-        catch(e){ console.warn('Failed to bind assignment:', e); }
+        try { await maybeBindAssignment(u); } catch(e){ console.warn(e); }
 
-        // Keep re-applying while sidebar renders
-        let tries = 0;
-        const spin = setInterval(()=>{
-          tries++;
-          applyFilter();
-          if (tries > 40) clearInterval(spin); // ~4s
-        }, 100);
-
-        // Also re-run whenever sidebar content changes
-        const mo = new MutationObserver(applyFilter);
-        mo.observe(root, { childList:true, subtree:true });
-        setTimeout(()=>mo.disconnect(), 30000);
+        let tries=0; const spin=setInterval(()=>{ tries++; applyFilter(); if (tries>40) clearInterval(spin); }, 100);
+        const mo = new MutationObserver(applyFilter); mo.observe(root, { childList:true, subtree:true }); setTimeout(()=>mo.disconnect(), 30000);
       });
     })();
   </script>
 </body>
 </html>
-
