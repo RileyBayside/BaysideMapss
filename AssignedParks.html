@@ -4,63 +4,129 @@
   <meta charset="utf-8" />
   <title>Assigned Parks</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="logo.png" type="image/png" />
 
-  <!-- discourage caching -->
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
-
-  <link rel="icon" href="logo.png?v=2025-10-17-01" type="image/png" />
-
-  <!-- Same stack as ParksMowing (add ?v=... to bust GitHub Pages cache) -->
-  <link rel="stylesheet" href="style.css?v=2025-10-17-01" />
+  <!-- Core styles (same as ParksMowing) -->
+  <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <link rel="stylesheet" href="sidebar.css?v=2025-10-17-01" />
+
+  <!-- Sidebar styles (same as ParksMowing) -->
+  <link rel="stylesheet" href="sidebar.css" />
 
   <style>
-    /* (same small tweaks as before) */
+    :root{
+      --ink:#0f172a; --muted:#e5e7eb; --card:#ffffff;
+      --accent:#d11e2b; --accent-600:#b71a24;
+      --soft:#f8fafc; --soft-2:#f1f5f9;
+    }
+    #map { height: 100vh; }
+
+    /* Sidebar container – compact, rounded, with small margins */
     #sidebar{
-      left: 8px !important; right:auto; bottom:8px;
-      height:auto; max-height:calc(100vh - 16px);
-      border-radius:14px; overflow:hidden; display:flex; flex-direction:column;
-      z-index:1000; pointer-events:auto; transition:transform .25s ease; will-change:transform;
+      position: fixed;              /* the scripts will set top/bottom/left */
+      width: 340px;
+      max-width: 86vw;
+      background:#fff;
+      border-right:1px solid var(--muted);
+      box-shadow:0 8px 26px rgba(16,24,40,.08);
+      border-radius:14px;
+      overflow: hidden;             /* clip rounded corners */
+      display: flex; flex-direction: column;
+      z-index: 1000;
+      pointer-events: auto;
+      transition: transform .25s ease;
+      will-change: transform;
     }
-    #sidebar-content{ flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding-right:8px; }
-    #sidebar.is-collapsed{ transform:translateX(calc(-100% - 12px)); }
+    #sidebar.is-collapsed { transform: translateX(calc(-100% - 12px)); }
+
+    #sidebar .sidebar-head{
+      position: sticky; top:0; z-index: 5;
+      display:flex; align-items:center; gap:10px;
+      padding:10px 12px;
+      color:#fff; font-weight:800;
+      background: linear-gradient(90deg, var(--accent), #eb4550);
+      border-bottom:1px solid rgba(255,255,255,.15);
+    }
+    #sidebar .sidebar-head img{ height:24px; width:auto; display:block }
+    #sidebar .sidebar-head .title{ font-size:14px; letter-spacing:.3px }
+
+    #sidebar #toggle-all{
+      display:block; width:calc(100% - 24px);
+      margin:10px 12px 8px; background:var(--accent);
+      border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer; color:#fff;
+    }
+    #sidebar #toggle-all:hover{ background:var(--accent-600); }
+
+    /* Scrolling content area */
+    #sidebar-content{
+      flex: 1 1 auto; min-height: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding:8px 12px 16px;
+    }
+
+    /* Groups/items – compact visuals to fit mobile nicely */
+    #sidebar-content details{
+      border:1px solid var(--muted); border-radius:12px; overflow:hidden;
+      background:#fff; margin-bottom:8px;
+    }
+    #sidebar-content details > summary{
+      list-style:none; cursor:pointer; user-select:none;
+      padding:8px 10px; background:var(--soft-2);
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      font-weight:700; color:var(--ink);
+    }
+    #sidebar-content details[open] > summary{ background:#eef2f7; }
+
+    /* site row – we’ll decorate dynamically */
+    .site-row{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      padding:8px 10px; border-top:1px solid #eef2f7; background:#fff;
+      font-weight:600; color:#111827;
+    }
+    .site-row .label{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .site-actions{ display:inline-flex; align-items:center; gap:8px; white-space:nowrap; }
+    .status-pill{
+      display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:800;
+      background:#fee2e2; border:1px solid #fecaca; color:#7f1d1d;
+    }
+    .btn-mini{
+      border:0; border-radius:10px; padding:6px 10px; font-weight:800; cursor:pointer; color:#fff; background:#111827;
+    }
+    .btn-mini.primary{ background:var(--accent); }
+    .btn-mini:active{ transform: translateY(1px); }
+
+    /* Floating chevron button */
     #sbMiniToggle{
-      position:fixed; width:36px; height:36px; border:0; border-radius:9999px;
-      background:#d11e2b; color:#fff; font-weight:900; font-size:18px; line-height:36px;
-      box-shadow:0 6px 18px rgba(0,0,0,.22); cursor:pointer; z-index:1002;
-      display:inline-flex; align-items:center; justify-content:center;
+      position: fixed; width: 36px; height: 36px;
+      border: 0; border-radius: 9999px;
+      background: var(--accent); color: #fff; font-weight: 900; font-size: 18px; line-height: 36px;
+      box-shadow: 0 6px 18px rgba(0,0,0,.22);
+      cursor: pointer; z-index: 1002;
+      display: inline-flex; align-items: center; justify-content: center;
     }
-    .ap-num{ font-weight:800; margin-right:6px; }
-    .ap-controls{ display:flex; align-items:center; gap:8px; margin-left:auto; flex-wrap:wrap; }
-    .ap-pill{ display:inline-block; font-size:12px; font-weight:800; padding:4px 8px; border-radius:999px; white-space:nowrap;
-      border:1px solid #fecaca; background:#fee2e2; color:#7f1d1d; }
-    .ap-pill.done{ border-color:#86efac; background:#dcfce7; color:#166534; }
-    .ap-btn{ border:0; border-radius:8px; padding:6px 10px; font-weight:800; cursor:pointer; background:#111827; color:#fff; }
-    .ap-btn:hover{ filter:brightness(1.08); }
-    .ap-note{ width:100%; margin-top:6px; display:block; border:1px solid #e5e7eb; border-radius:8px; padding:8px 10px; font-size:13px; background:#fff; color:#111827; }
-    .ap-row{ display:flex; flex-direction:column; gap:6px; }
-    .ap-row-head{ display:flex; align-items:center; gap:8px; min-width:0; }
-    .ap-row-title{ flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }
-    @media (max-width:768px){ #sidebar{ left:6px !important; right:6px; border-radius:12px; } }
+
+    @media (max-width: 768px){
+      #sidebar{ width: 100vw; max-width:none; }
+    }
   </style>
 </head>
 <body>
 
-  <!-- Firebase + guard -->
+  <!-- Firebase + auth guard -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-  <script src="firebase-init.js?v=2025-10-17-01"></script>
-  <script src="auth-guard.js?v=2025-10-17-01"></script>
+  <script src="firebase-init.js"></script>
+  <script src="auth-guard.js"></script>
 
-  <button id="sidebar-toggle">☰</button>
+  <!-- Sidebar toggle button (kept for keyboard users / fallback) -->
+  <button id="sidebar-toggle" style="position:fixed;top:12px;left:12px;z-index:1000;background:#d11e2b;color:#fff;border:0;border-radius:10px;padding:8px 10px;font-weight:800;box-shadow:0 6px 18px rgba(16,24,40,.18)">☰</button>
 
+  <!-- Sidebar container -->
   <div id="sidebar">
     <div class="sidebar-head">
-      <img src="logo.png?v=2025-10-17-01" alt="Bayside" onerror="this.style.display='none'">
+      <img src="logo.png" alt="Bayside" onerror="this.style.display='none'">
       <div class="title">Assigned Parks</div>
     </div>
 
@@ -68,315 +134,402 @@
     <div id="sidebar-content"></div>
 
     <div style="padding:10px 12px 16px">
-      <button class="ap-btn" onclick="adminLogin()">Admin Login</button>
+      <button onclick="adminLogin()" class="btn-mini primary">Admin Login</button>
       <div id="admin-tools" style="display:none; margin-top:8px; display:grid; gap:6px">
-        <button class="ap-btn" onclick="exportPDFCouncil()" style="background:#111827">PDF report for Council</button>
-        <button class="ap-btn" onclick="exportPDFBayside()"  style="background:#111827">PDF Report for Bayside</button>
-        <button class="ap-btn" onclick="clearUserData()"     style="background:#64748b">Clear All User Data</button>
-        <button class="ap-btn" onclick="showToday()"         style="background:#64748b">Show Completed Today</button>
+        <button onclick="exportPDFCouncil()" class="btn-mini" style="background:#111827">PDF report for Council</button>
+        <button onclick="exportPDFBayside()" class="btn-mini" style="background:#111827">PDF Report for Bayside</button>
+        <button onclick="clearUserData()" class="btn-mini" style="background:#64748b">Clear All User Data</button>
+        <button onclick="showToday()" class="btn-mini" style="background:#64748b">Show Completed Today</button>
       </div>
     </div>
   </div>
 
+  <!-- Map -->
   <div id="map"></div>
 
-  <!-- Core scripts (exact order) -->
+  <!-- Core scripts shared with ParksMowing -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="script.js?v=2025-10-17-01"></script>
-  <script src="sidebar.js?v=2025-10-17-01"></script>
+  <script src="script.js"></script>
+  <script src="sidebar.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
+  <!-- 1) Filter sidebar to focus IDs (from ?focus=… or from Firestore assignments) -->
   <script>
-    console.info('AssignedParks build', '2025-10-17-01'); // visible in console so you know it’s the new file
+  (function () {
+    // Parse ?focus=M0123,M0361,... from URL
+    function getFocusFromQuery() {
+      const q = new URLSearchParams(location.search).get('focus') || '';
+      return q.split(',').map(s => s.trim()).filter(Boolean).map(s => s.toUpperCase());
+    }
 
-    /* --- helpers --- */
-    const qsp = (k) => new URLSearchParams(location.search).get(k) || '';
-    const getFocusIds = () =>
-      (qsp('focus') || '')
-        .split(',').map(s => s.trim()).filter(Boolean).map(s => s.toUpperCase());
+    // Fallback: if no focus param, fetch assignments for the signed-in user and use their IDs
+    async function getFocusFromFirestore() {
+      try {
+        const u = firebase.auth().currentUser;
+        if (!u) return [];
+        const snap = await firebase.firestore().collection('assignments')
+          .where('userId', '==', u.uid)
+          .get();
+        const set = new Set();
+        snap.forEach(doc => {
+          const d = doc.data() || {};
+          (d.siteIds || []).forEach(id => set.add(String(id).toUpperCase()));
+        });
+        return Array.from(set);
+      } catch (e) {
+        console.warn('fallback focus load failed:', e);
+        return [];
+      }
+    }
 
-    /* position sidebar below Search ID… */
-    (function positionSidebarBelowSearch(){
-      function findSearch(){
-        return (
-          document.querySelector('#site-search') ||
-          document.querySelector('.site-search') ||
-          document.querySelector('#searchBar') ||
-          document.querySelector('.search-bar') ||
-          document.querySelector('#searchSite') ||
-          document.querySelector('#search') ||
-          document.querySelector('input[placeholder="Search ID..."]')
-        );
-      }
-      function apply(){
-        const sbEl = document.getElementById('sidebar');
-        if (!sbEl) return;
-        let topPx = 8;
-        const search = findSearch();
-        if (search){
-          const r = search.getBoundingClientRect();
-          topPx = Math.max(6, Math.round(r.bottom)) + 6;
-        }
-        sbEl.style.position = 'fixed';
-        sbEl.style.top = topPx + 'px';
-        sbEl.style.maxHeight = `calc(100vh - ${topPx + 8}px)`;
-      }
-      const rerun = ()=>{ apply(); setTimeout(apply, 0); };
-      window.addEventListener('load', rerun);
-      window.addEventListener('resize', apply);
-      const mo = new MutationObserver(apply);
-      mo.observe(document.body, { childList:true, subtree:true });
-      setTimeout(()=>mo.disconnect(), 6000);
-    })();
-
-    /* mini collapse toggle */
-    (function setupMiniToggle(){
-      const sidebar = document.getElementById('sidebar');
-      if (!sidebar) return;
-      let toggle = document.getElementById('sbMiniToggle');
-      if (!toggle){
-        toggle = document.createElement('button');
-        toggle.id = 'sbMiniToggle';
-        toggle.type = 'button';
-        toggle.setAttribute('aria-expanded','true');
-        toggle.textContent = '‹';
-        document.body.appendChild(toggle);
-      }
-      function sidebarTop(){
-        const t = parseInt(sidebar.style.top || '8', 10);
-        return Number.isFinite(t) ? t : 8;
-      }
-      function clamp(n,min,max){ return Math.max(min, Math.min(max,n)); }
-      function position(){
-        const top = sidebarTop();
-        if (sidebar.classList.contains('is-collapsed')) toggle.style.left = '8px';
-        else {
-          const rect = sidebar.getBoundingClientRect();
-          const left = rect.right + 8;
-          const maxLeft = (window.innerWidth || 360) - 44;
-          toggle.style.left = clamp(left, 8, maxLeft) + 'px';
-        }
-        toggle.style.top = (top + 4) + 'px';
-      }
-      function setExpanded(expanded){
-        sidebar.classList.toggle('is-collapsed', !expanded);
-        toggle.setAttribute('aria-expanded', String(expanded));
-        toggle.textContent = expanded ? '‹' : '›';
-        position();
-      }
-      toggle.addEventListener('click', ()=>{
-        const expanded = !sidebar.classList.contains('is-collapsed');
-        setExpanded(!expanded);
-      });
-      window.addEventListener('load', position);
-      window.addEventListener('resize', position);
-      const mo = new MutationObserver(position);
-      mo.observe(document.body, { attributes:true, childList:true, subtree:true });
-      setTimeout(()=>mo.disconnect(), 6000);
-      position();
-    })();
-
-    /* mark task started if ?task= */
-    (function trackTaskOpen(){
-      const db = firebase.firestore();
-      const taskId = qsp('task');
-      if (!taskId) return;
-      firebase.auth().onAuthStateChanged(async (u)=>{
-        if (!u) return;
-        try{
-          await db.runTransaction(async (tx)=>{
-            const ref = db.collection('assignments').doc(taskId);
-            const snap = await tx.get(ref);
-            if (!snap.exists) return;
-            const d = snap.data() || {};
-            if (d.userId !== u.uid) return;
-            if (d.status !== 'in_progress' && d.status !== 'completed'){
-              tx.update(ref, {
-                status: 'in_progress',
-                startedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                startedBy: u.uid
-              });
-            } else {
-              tx.update(ref, { lastOpenedAt: firebase.firestore.FieldValue.serverTimestamp() });
-            }
-          });
-        } catch(e){ console.warn('Failed to mark task started:', e); }
-      });
-    })();
-
-    /* assigned-only filtering + per-site controls */
-    (function main(){
-      const db   = firebase.firestore();
+    // Wait until your sidebar gets populated by script.js/sidebar.js
+    function whenSidebarReady(cb) {
       const root = document.getElementById('sidebar-content');
       if (!root) return;
-
-      const taskId   = qsp('task');
-      const focusIds = getFocusIds();
-      const ROW_SEL  =
-        '[data-site-id],[data-siteid],[data-id],[data-site],[data-code],[data-sitecode],' +
-        'li,.site-row,.site-item,.sidebar-row,.list-item,.item';
-
-      let assignmentRef = null;
-      let perSiteCache  = {};
-      let wantedIds     = [];
-
-      function setBanner(text){
-        let b = document.getElementById('assigned-filter-banner');
-        if (!b) {
-          b = document.createElement('div');
-          b.id = 'assigned-filter-banner';
-          b.style.cssText =
-            'margin:10px;padding:10px;border:1px solid #e2e8f0;border-radius:8px;' +
-            'background:#fff8f8;color:#7f1d1d;font-weight:700;';
-          root.prepend(b);
+      if (root.children.length > 0) { cb(root); return; }
+      const obs = new MutationObserver((muts, observer) => {
+        if (root.children.length > 0) {
+          observer.disconnect();
+          cb(root);
         }
-        b.textContent = text;
+      });
+      obs.observe(root, { childList: true, subtree: true });
+      setTimeout(() => obs.disconnect(), 10000);
+    }
+
+    // Heuristic: hide any row that doesn’t contain one of the wanted IDs
+    function filterSidebarToIds(root, ids) {
+      const wanted = new Set(ids.map(s => s.toUpperCase()));
+
+      // Banner to show how many
+      const bannerId = 'assigned-filter-banner';
+      let banner = document.getElementById(bannerId);
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = bannerId;
+        banner.style.cssText = 'padding:8px 10px;margin:6px 0;border:1px solid #e2e8f0;background:#fff8f8;color:#7f1d1d;border-radius:8px;font-weight:700';
+        document.getElementById('sidebar-content')?.prepend(banner);
       }
-      function clearBanner(){ const b = document.getElementById('assigned-filter-banner'); if (b) b.remove(); }
-      function extractId(el){
-        const ds = el.dataset || {};
-        let id = (ds.siteId || ds.siteid || ds.site || ds.id || ds.code || ds.sitecode || '').toUpperCase();
-        if (!/^M\d{3,4}$/.test(id)){
-          const t = (el.textContent || '').toUpperCase();
-          const m = t.match(/\bM\d{3,4}\b/);
-          if (m) id = m[0];
+      banner.textContent = ids.length ? `Showing ${ids.length} assigned site(s)` : 'No assigned sites to show.';
+
+      const hasAnyId = (el) => {
+        const txt = (el.textContent || '').toUpperCase();
+        for (const id of wanted) if (txt.includes(id)) return true;
+        return false;
+      };
+
+      const candidates = root.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row, div');
+      candidates.forEach(el => {
+        if (el.id === bannerId) return;
+        const keep = hasAnyId(el) || [...el.querySelectorAll('*')].some(hasAnyId);
+        el.style.display = keep ? '' : 'none';
+      });
+
+      // Open <details> that contain matches; hide empty ones
+      root.querySelectorAll('details').forEach(d => {
+        const visibleChild = [...d.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row')]
+          .some(el => el.style.display !== 'none');
+        if (visibleChild) {
+          d.style.display = '';
+          d.open = true;
+        } else {
+          d.style.display = 'none';
         }
-        return /^M\d{3,4}$/.test(id) ? id : '';
+      });
+    }
+
+    firebase.auth().onAuthStateChanged(async (u) => {
+      let ids = getFocusFromQuery();
+      if (!ids.length) ids = await getFocusFromFirestore();
+      if (!ids.length) return;
+      whenSidebarReady((root) => filterSidebarToIds(root, ids));
+    });
+  })();
+  </script>
+
+  <!-- 2) Reposition sidebar just below the Site ID search control -->
+  <script>
+  (function () {
+    function findSearchBar() {
+      return (
+        document.querySelector('#site-search') ||
+        document.querySelector('.site-search') ||
+        document.querySelector('#searchBar') ||
+        document.querySelector('.search-bar') ||
+        document.querySelector('#searchSite') ||
+        document.querySelector('#search') ||
+        document.querySelector('input[placeholder="Search ID..."]')
+      );
+    }
+
+    function repositionSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      if (!sidebar) return;
+      let topPx = 8;
+      const sb = findSearchBar();
+      if (sb) {
+        const r = sb.getBoundingClientRect();
+        topPx = Math.max(6, Math.round(r.bottom)) + 6;
       }
-      function numberRows(visible){
-        visible.forEach(el => { const x = el.querySelector('.ap-num'); if (x) x.remove(); });
-        let n = 1; visible.forEach(el => {
-          const head = el.querySelector(':scope > *') || el;
-          const span = document.createElement('span');
-          span.className = 'ap-num'; span.textContent = `${n++}.`;
-          head.insertBefore(span, head.firstChild);
-        });
+      sidebar.style.left = '8px';
+      sidebar.style.top = topPx + 'px';
+      sidebar.style.bottom = '8px';
+      sidebar.style.height = 'auto';
+      sidebar.style.maxHeight = `calc(100vh - ${topPx + 8}px)`;
+      sidebar.style.overflow = 'hidden';
+    }
+
+    const rerun = () => { repositionSidebar(); setTimeout(repositionSidebar, 0); };
+    window.addEventListener('load', rerun);
+    window.addEventListener('resize', repositionSidebar);
+    const mo = new MutationObserver(repositionSidebar);
+    mo.observe(document.body, { childList: true, subtree: true });
+    setTimeout(() => mo.disconnect(), 6000);
+  })();
+  </script>
+
+  <!-- 3) Floating chevron (collapse/expand) -->
+  <script>
+  (function () {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+
+    let toggle = document.getElementById('sbMiniToggle');
+    if (!toggle) {
+      toggle = document.createElement('button');
+      toggle.id = 'sbMiniToggle';
+      toggle.type = 'button';
+      toggle.setAttribute('aria-label', 'Collapse sidebar');
+      toggle.setAttribute('aria-expanded', 'true');
+      toggle.textContent = '‹';
+      document.body.appendChild(toggle);
+    }
+
+    function sidebarTopPx() {
+      const t = parseInt(sidebar.style.top || '8', 10);
+      return Number.isFinite(t) ? t : 8;
+    }
+    function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+
+    function positionToggle() {
+      const top = sidebarTopPx();
+      if (sidebar.classList.contains('is-collapsed')) {
+        toggle.style.left = '8px';
+      } else {
+        const rect = sidebar.getBoundingClientRect();
+        const left = rect.right + 8;
+        const maxLeft = (window.innerWidth || 360) - 44;
+        toggle.style.left = clamp(left, 8, maxLeft) + 'px';
       }
-      function hideEmptyZones(){
-        root.querySelectorAll('details,.zone,.zone-group').forEach(group => {
-          const any = [...group.querySelectorAll(ROW_SEL)].some(x => x.style.display !== 'none');
-          group.style.display = any ? '' : 'none';
-          if (any && 'open' in group) group.open = true;
-        });
-      }
+      toggle.style.top = (top + 4) + 'px';
+    }
 
-      function decorateRowWithControls(rowEl, siteId){
-        if (!assignmentRef) return;           // no task => read-only
-        if (rowEl.classList.contains('ap-row')) return;
+    function setExpanded(expanded) {
+      sidebar.classList.toggle('is-collapsed', !expanded);
+      toggle.setAttribute('aria-expanded', String(expanded));
+      toggle.setAttribute('aria-label', expanded ? 'Collapse sidebar' : 'Expand sidebar');
+      toggle.textContent = expanded ? '‹' : '›';
+      positionToggle();
+    }
 
-        let titleHost = rowEl.firstElementChild || rowEl;
+    toggle.addEventListener('click', () => {
+      const expanded = !sidebar.classList.contains('is-collapsed');
+      setExpanded(!expanded);
+    });
 
-        rowEl.classList.add('ap-row');
-        const head = document.createElement('div'); head.className = 'ap-row-head';
-        head.appendChild(titleHost.cloneNode(true));
-        rowEl.replaceChild(head, titleHost);
-        head.firstElementChild.classList.add('ap-row-title');
+    window.addEventListener('load', positionToggle);
+    window.addEventListener('resize', positionToggle);
+    const mo = new MutationObserver(positionToggle);
+    mo.observe(document.body, { attributes: true, childList: true, subtree: true });
+    setTimeout(() => mo.disconnect(), 6000);
+    positionToggle();
+  })();
+  </script>
 
-        const ctrls = document.createElement('div'); ctrls.className = 'ap-controls';
-        const pill  = document.createElement('span'); pill.className = 'ap-pill'; ctrls.appendChild(pill);
-        const btn   = document.createElement('button'); btn.className = 'ap-btn'; btn.textContent = 'Done'; ctrls.appendChild(btn);
-        head.appendChild(ctrls);
+  <!-- 4) Mark assignment started on open (if ?task=...) -->
+  <script>
+  (function () {
+    const db = firebase.firestore();
+    const params = new URLSearchParams(location.search);
+    const taskId = params.get('task');
+    if (!taskId) return;
 
-        const note  = document.createElement('textarea'); note.className = 'ap-note'; note.rows = 2; note.placeholder = 'Add a note (optional)…';
-        rowEl.appendChild(note);
+    firebase.auth().onAuthStateChanged(async (u) => {
+      if (!u) return;
+      try {
+        await db.runTransaction(async (tx) => {
+          const ref = db.collection('assignments').doc(taskId);
+          const snap = await tx.get(ref);
+          if (!snap.exists) return;
+          const d = snap.data() || {};
+          if (d.userId !== u.uid) return;
 
-        const current = perSiteCache[siteId] || {};
-        const status  = (current.status || '').toLowerCase();
-        const isDone  = status === 'completed';
-        pill.textContent = isDone ? 'Done' : 'Assigned';
-        pill.classList.toggle('done', isDone);
-        if (current.note) note.value = current.note;
-
-        btn.addEventListener('click', async () => {
-          try{
-            await assignmentRef.set({
-              perSite: { [siteId]: {
-                status:'completed',
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                completedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                note: note.value || ''
-              }}}, { merge:true });
-          } catch(e){ console.warn('perSite complete failed:', e); }
-        });
-
-        let t=null;
-        note.addEventListener('input', ()=>{
-          if (t) clearTimeout(t);
-          t=setTimeout(async ()=>{
-            try{
-              await assignmentRef.set({
-                perSite: { [siteId]: {
-                  status: (perSiteCache[siteId]?.status || 'in_progress'),
-                  updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                  note: note.value || ''
-                }}}, { merge:true });
-            } catch(e){ console.warn('perSite note failed:', e); }
-          }, 500);
-        });
-      }
-
-      function refreshPills(visible){
-        if (!assignmentRef) return;
-        visible.forEach(el => {
-          const id = extractId(el);
-          const data = perSiteCache[id] || {};
-          const pill = el.querySelector('.ap-pill'); if (!pill) return;
-          const isDone = (data.status || '').toLowerCase() === 'completed';
-          pill.textContent = isDone ? 'Done' : 'Assigned';
-          pill.classList.toggle('done', isDone);
-          const note = el.querySelector('.ap-note');
-          if (note && typeof data.note === 'string' && note.value !== data.note) note.value = data.note;
-        });
-      }
-
-      function applyFilter(){
-        const wanted = new Set(wantedIds);
-        const rows = [...root.querySelectorAll(ROW_SEL)].filter(el => !el.closest('summary'));
-        if (!rows.length){ setBanner('Loading sites…'); return; }
-
-        rows.forEach(el => { el.style.display = 'none'; });
-        const visible = [];
-        rows.forEach(el => {
-          const id = extractId(el);
-          if (wanted.has(id)){
-            el.style.display = '';
-            visible.push(el);
-            decorateRowWithControls(el, id);
+          if (d.status !== 'in_progress' && d.status !== 'completed') {
+            tx.update(ref, {
+              status: 'in_progress',
+              startedAt: firebase.firestore.FieldValue.serverTimestamp(),
+              startedBy: u.uid
+            });
+          } else {
+            tx.update(ref, { lastOpenedAt: firebase.firestore.FieldValue.serverTimestamp() });
           }
         });
-
-        if (!visible.length){ setBanner('No assigned sites to show.'); }
-        else { clearBanner(); numberRows(visible); hideEmptyZones(); refreshPills(visible); }
+      } catch (e) {
+        console.warn('Failed to mark task started:', e);
       }
-
-      async function loadWantedIdsFromFirestore(u){
-        const snap = await db.collection('assignments').where('userId','==',u.uid).get();
-        const set = new Set();
-        snap.forEach(doc => (doc.data().siteIds || []).forEach(id => set.add(String(id).toUpperCase())));
-        wantedIds = [...set];
-      }
-
-      async function maybeBindAssignment(u){
-        const id = qsp('task'); if (!id) return;
-        const ref = db.collection('assignments').doc(id);
-        const snap = await ref.get(); if (!snap.exists) return;
-        const d = snap.data() || {}; if (d.userId !== u.uid) return;
-        assignmentRef = ref; perSiteCache = d.perSite || {};
-        ref.onSnapshot(s => { perSiteCache = (s.data() || {}).perSite || {}; applyFilter(); });
-      }
-
-      firebase.auth().onAuthStateChanged(async (u)=>{
-        if (!u) return;
-
-        if (getFocusIds().length) wantedIds = getFocusIds();
-        else { try { await loadWantedIdsFromFirestore(u); } catch(e){ console.warn(e); } }
-
-        try { await maybeBindAssignment(u); } catch(e){ console.warn(e); }
-
-        let tries=0; const spin=setInterval(()=>{ tries++; applyFilter(); if (tries>40) clearInterval(spin); }, 100);
-        const mo = new MutationObserver(applyFilter); mo.observe(root, { childList:true, subtree:true }); setTimeout(()=>mo.disconnect(), 30000);
-      });
-    })();
+    });
+  })();
   </script>
+
+  <!-- 5) LAZY-FILL perSite: add Start/Done controls and live status -->
+  <script>
+  (function () {
+    const db = firebase.firestore();
+    const params = new URLSearchParams(location.search);
+    const assignmentId = params.get('task'); // optional, but needed for writes
+
+    // Create/Update just one dotted perSite key; no pre-seeding required
+    async function setSiteStatus(siteId, newStatus, note) {
+      if (!assignmentId) {
+        alert('Cannot update status: missing ?task=<assignmentId> in the URL');
+        return;
+      }
+      const uid  = firebase.auth().currentUser?.uid || null;
+      const base = `perSite.${String(siteId).toUpperCase()}`;
+      const data = {
+        [`${base}.status`]: newStatus, // 'assigned' | 'in_progress' | 'completed'
+        [`${base}.updatedAt`]: firebase.firestore.FieldValue.serverTimestamp(),
+        [`${base}.operatorUid`]: uid
+      };
+      if (note !== undefined) data[`${base}.note`] = note;
+      if (newStatus === 'completed') {
+        data[`${base}.completedAt`] = firebase.firestore.FieldValue.serverTimestamp();
+      }
+      await db.collection('assignments').doc(assignmentId).set(data, { merge: true });
+    }
+
+    // Public hooks for inline onclick (optional)
+    window.startSite = (id) => setSiteStatus(id, 'in_progress');
+    window.completeSite = async (id, note) => setSiteStatus(id, 'completed', note);
+
+    // Utility: find site ID from row text
+    const idRx = /\bM\d{3,5}\b/i;
+    function detectIdFromText(el){
+      const m = (el.textContent || '').match(idRx);
+      return m ? m[0].toUpperCase() : null;
+    }
+
+    // Decorate the sidebar rows once it’s populated
+    function enhanceSidebar(root) {
+      const rows = root.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row, div');
+      rows.forEach(row => {
+        if (row.dataset.enhanced === '1') return;
+
+        // skip obvious headings / summaries
+        if (row.tagName.toLowerCase() === 'summary') return;
+
+        let siteId = row.getAttribute('data-site-id');
+        if (!siteId) {
+          const id = detectIdFromText(row);
+          if (id) {
+            siteId = id;
+            row.setAttribute('data-site-id', id);
+          }
+        }
+        if (!siteId) return; // not a site row
+
+        row.classList.add('site-row');
+        row.dataset.enhanced = '1';
+
+        // Left label
+        let label = row.querySelector('.label');
+        if (!label) {
+          label = document.createElement('span');
+          label.className = 'label';
+          label.textContent = siteId;
+          row.prepend(label);
+        }
+
+        // Actions area
+        let actions = row.querySelector('.site-actions');
+        if (!actions) {
+          actions = document.createElement('span');
+          actions.className = 'site-actions';
+          row.appendChild(actions);
+        }
+
+        // Status pill
+        let pill = row.querySelector('.status-pill');
+        if (!pill) {
+          pill = document.createElement('span');
+          pill.className = 'status-pill';
+          pill.textContent = 'Assigned';
+          actions.appendChild(pill);
+        }
+
+        // Start button
+        let btnStart = row.querySelector('.btn-start');
+        if (!btnStart) {
+          btnStart = document.createElement('button');
+          btnStart.className = 'btn-mini btn-start';
+          btnStart.textContent = 'Start';
+          btnStart.addEventListener('click', () => window.startSite(siteId));
+          actions.appendChild(btnStart);
+        }
+
+        // Done button (asks for optional note)
+        let btnDone = row.querySelector('.btn-done');
+        if (!btnDone) {
+          btnDone = document.createElement('button');
+          btnDone.className = 'btn-mini primary btn-done';
+          btnDone.textContent = 'Done';
+          btnDone.addEventListener('click', async () => {
+            const note = prompt('Add a note (optional):', '');
+            await window.completeSite(siteId, note || undefined);
+          });
+          actions.appendChild(btnDone);
+        }
+      });
+    }
+
+    // Wait for sidebar content, then enhance and keep it enhanced on changes
+    function whenSidebarReady(cb) {
+      const root = document.getElementById('sidebar-content');
+      if (!root) return;
+      if (root.children.length > 0) { cb(root); return; }
+      const obs = new MutationObserver((muts, observer) => {
+        if (root.children.length > 0) {
+          observer.disconnect();
+          cb(root);
+        }
+      });
+      obs.observe(root, { childList: true, subtree: true });
+      setTimeout(() => obs.disconnect(), 10000);
+    }
+    whenSidebarReady((root) => {
+      enhanceSidebar(root);
+      const mo = new MutationObserver(() => enhanceSidebar(root));
+      mo.observe(root, { childList: true, subtree: true });
+    });
+
+    // Live status reflection from Firestore
+    firebase.auth().onAuthStateChanged(() => {
+      if (!assignmentId) return;
+      db.collection('assignments').doc(assignmentId).onSnapshot((doc) => {
+        const d = doc.data() || {};
+        const perSite = d.perSite || {};
+        document.querySelectorAll('[data-site-id]').forEach(row => {
+          const id = String(row.getAttribute('data-site-id')).toUpperCase();
+          const status = (perSite[id]?.status || 'assigned');
+          const pill = row.querySelector('.status-pill');
+          if (pill) {
+            pill.textContent = status.replace('_',' ').replace(/^\w/, m => m.toUpperCase());
+          }
+        });
+      });
+    });
+  })();
+  </script>
+
 </body>
 </html>
