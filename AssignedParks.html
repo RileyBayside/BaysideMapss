@@ -201,98 +201,164 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <!-- 1) Filter sidebar to focus IDs (from ?focus=… or from Firestore assignments) -->
-  <script>
-  (function () {
-    // Parse ?focus=M0123,M0361,... from URL
-    function getFocusFromQuery() {
-      const q = new URLSearchParams(location.search).get('focus') || '';
-      return q.split(',').map(s => s.trim()).filter(Boolean).map(s => s.toUpperCase());
+  <!-- 1) Filter sidebar to focus IDs (from ?focus=… or from Firestore assignments) -->
+<script>
+(function () {
+  // Parse ?focus=M0123,M0361,...
+  function getFocusFromQuery() {
+    const q = new URLSearchParams(location.search).get('focus') || '';
+    return q.split(',').map(s => s.trim()).filter(Boolean).map(s => s.toUpperCase());
+  }
+
+  // Fallback: if no focus param, gather all siteIds from this operator's assignments
+  async function getFocusFromFirestore() {
+    try {
+      const u = firebase.auth().currentUser;
+      if (!u) return [];
+      const snap = await firebase.firestore().collection('assignments')
+        .where('userId', '==', u.uid).get();
+
+      const set = new Set();
+      snap.forEach(doc => (doc.data()?.siteIds || [])
+        .forEach(id => set.add(String(id).toUpperCase())));
+      return Array.from(set);
+    } catch (e) {
+      console.warn('[AssignedParks] focus load failed:', e);
+      return [];
     }
+  }
 
-    // Fallback: if no focus param, fetch assignments for the signed-in user and use their IDs
-    async function getFocusFromFirestore() {
-      try {
-        const u = firebase.auth().currentUser;
-        if (!u) return [];
-        const snap = await firebase.firestore().collection('assignments')
-          .where('userId', '==', u.uid)
-          .get();
-        const set = new Set();
-        snap.forEach(doc => {
-          const d = doc.data() || {};
-          (d.siteIds || []).forEach(id => set.add(String(id).toUpperCase()));
-        });
-        return Array.from(set);
-      } catch (e) {
-        console.warn('fallback focus load failed:', e);
-        return [];
-      }
-    }
-
-    // Wait until your sidebar gets populated by script.js/sidebar.js
-    function whenSidebarReady(cb) {
-      const root = document.getElementById('sidebar-content');
-      if (!root) return;
-      if (root.children.length > 0) { cb(root); return; }
-      const obs = new MutationObserver((muts, observer) => {
-        if (root.children.length > 0) {
-          observer.disconnect();
-          cb(root);
-        }
-      });
-      obs.observe(root, { childList: true, subtree: true });
-      setTimeout(() => obs.disconnect(), 10000);
-    }
-
-    // Heuristic: hide any row that doesn’t contain one of the wanted IDs
-    function filterSidebarToIds(root, ids) {
-      const wanted = new Set(ids.map(s => s.toUpperCase()));
-
-      // Banner to show how many
-      const bannerId = 'assigned-filter-banner';
-      let banner = document.getElementById(bannerId);
-      if (!banner) {
-        banner = document.createElement('div');
-        banner.id = bannerId;
-        banner.style.cssText = 'padding:8px 10px;margin:6px 0;border:1px solid #e2e8f0;background:#fff8f8;color:#7f1d1d;border-radius:8px;font-weight:700';
-        document.getElementById('sidebar-content')?.prepend(banner);
-      }
-      banner.textContent = ids.length ? `Showing ${ids.length} assigned site(s)` : 'No assigned sites to show.';
-
-      const hasAnyId = (el) => {
-        const txt = (el.textContent || '').toUpperCase();
-        for (const id of wanted) if (txt.includes(id)) return true;
-        return false;
-      };
-
-      const candidates = root.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row, div');
-      candidates.forEach(el => {
-        if (el.id === bannerId) return;
-        const keep = hasAnyId(el) || [...el.querySelectorAll('*')].some(hasAnyId);
-        el.style.display = keep ? '' : 'none';
-      });
-
-      // Open <details> that contain matches; hide empty ones
-      root.querySelectorAll('details').forEach(d => {
-        const visibleChild = [...d.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row')]
-          .some(el => el.style.display !== 'none');
-        if (visibleChild) {
-          d.style.display = '';
-          d.open = true;
-        } else {
-          d.style.display = 'none';
-        }
-      });
-    }
-
-    firebase.auth().onAuthStateChanged(async (u) => {
-      let ids = getFocusFromQuery();
-      if (!ids.length) ids = await getFocusFromFirestore();
-      if (!ids.length) return;
-      whenSidebarReady((root) => filterSidebarToIds(root, ids));
+  // Wait until script.js/sidebar.js has built the DOM
+  function whenSidebarReady(cb) {
+    const root = document.getElementById('sidebar-content');
+    if (!root) return;
+    if (root.children.length > 0) { cb(root); return; }
+    const obs = new MutationObserver((_, o) => {
+      if (root.children.length > 0) { o.disconnect(); cb(root); }
     });
-  })();
-  </script>
+    obs.observe(root, { childList: true, subtree: true });
+    setTimeout(() => obs.disconnect(), 10000);
+  }
+
+  // --- helpers ---------------------------------------------------
+  const idRx = /\bM\d{3,5}\b/i;
+
+  function extractId(el) {
+    // Prefer data attributes if present
+    const ds = el.dataset || {};
+    let id = (ds.siteId || ds.siteid || ds.id || ds.site || ds.code || ds.sitecode || '').toUpperCase();
+    if (!/^M\d{3,5}$/.test(id)) {
+      const t = (el.textContent || '').toUpperCase();
+      const m = t.match(idRx);
+      if (m) id = m[0];
+    }
+    return /^M\d{3,5}$/.test(id) ? id : '';
+  }
+
+  // Mark all elements that look like real site rows
+  function markSiteRows(root) {
+    const candidates = root.querySelectorAll(
+      '[data-site-id], li, .site-row, .sidebar-row, .list-item, .item'
+    );
+    const rows = [];
+    candidates.forEach(el => {
+      if (el.closest('summary')) return;          // skip headers
+      const id = extractId(el);
+      if (!id) return;
+      el.dataset.siteId = id;                     // normalize for later finds
+      el.dataset.isSite = '1';
+      rows.push(el);
+    });
+    return rows;
+  }
+
+  function openAncestors(el) {
+    // reveal details/containers all the way up
+    let p = el.parentElement;
+    while (p && p.id !== 'sidebar-content') {
+      if ('open' in p) p.open = true;
+      if (p.style) p.style.display = '';
+      p = p.parentElement;
+    }
+  }
+
+  function hideEmptyZones(root) {
+    root.querySelectorAll('details, .zone, .zone-group').forEach(g => {
+      const any = [...g.querySelectorAll('[data-is-site="1"]')]
+        .some(r => r.style.display !== 'none');
+      g.style.display = any ? '' : 'none';
+      if (any && 'open' in g) g.open = true;
+    });
+  }
+
+  function ensureBanner(root, text) {
+    let b = document.getElementById('assigned-filter-banner');
+    if (!b) {
+      b = document.createElement('div');
+      b.id = 'assigned-filter-banner';
+      b.style.cssText =
+        'padding:8px 10px;margin:6px 0;border:1px solid #e2e8f0;' +
+        'background:#fff8f8;color:#7f1d1d;border-radius:8px;font-weight:700';
+      root.prepend(b);
+    }
+    b.textContent = text;
+  }
+  function removeBanner() {
+    const b = document.getElementById('assigned-filter-banner');
+    if (b) b.remove();
+  }
+
+  // Strict filter: hide all site rows, then reveal only wanted ones
+  function filterSidebarStrict(root, ids) {
+    const wanted = new Set(ids.map(s => s.toUpperCase()));
+    const rows = markSiteRows(root);
+
+    if (!rows.length) {
+      ensureBanner(root, 'Loading sites…');
+      return;
+    }
+
+    let visibleCount = 0;
+
+    // Hide all site rows first
+    rows.forEach(el => { el.style.display = 'none'; });
+
+    // Reveal only whitelisted IDs and their ancestors
+    rows.forEach(el => {
+      const id = el.dataset.siteId;
+      if (wanted.has(id)) {
+        el.style.display = '';
+        openAncestors(el);
+        visibleCount++;
+      }
+    });
+
+    if (visibleCount === 0) {
+      ensureBanner(root, 'No assigned sites to show.');
+    } else {
+      removeBanner();
+    }
+
+    hideEmptyZones(root);
+  }
+
+  // ----------------------------------------------------------------
+  firebase.auth().onAuthStateChanged(async () => {
+    let ids = getFocusFromQuery();
+    if (!ids.length) ids = await getFocusFromFirestore(); // fallback
+    if (!ids.length) return;
+
+    whenSidebarReady(root => {
+      // First pass + keep filtering while sidebar content changes
+      filterSidebarStrict(root, ids);
+      const mo = new MutationObserver(() => filterSidebarStrict(root, ids));
+      mo.observe(root, { childList: true, subtree: true });
+      // stop after 30s to avoid running forever
+      setTimeout(() => mo.disconnect(), 30000);
+    });
+  });
+})();
+</script>
 
   <!-- 2) Reposition sidebar just below the Site ID search control -->
   <script>
