@@ -12,8 +12,8 @@
   <link rel="stylesheet" href="sidebar.css" />
 
   <style>
-    /* Keep sidebar look; only additive tweaks here */
-    #sidebar {
+    /* Keep your look; only small, additive tweaks */
+    #sidebar{
       left: 8px !important;
       right: auto;
       bottom: 8px;
@@ -35,11 +35,12 @@
       -webkit-overflow-scrolling: touch;
       padding-right: 8px;
     }
-
-    /* Collapsible behaviour + floating toggle */
     #sidebar.is-collapsed { transform: translateX(calc(-100% - 12px)); }
+
+    /* Small floating collapse button (kept from previous version) */
     #sbMiniToggle{
-      position: fixed; width:36px; height:36px; border:0; border-radius:9999px;
+      position: fixed; width:36px; height:36px;
+      border:0; border-radius:9999px;
       background:#d11e2b; color:#fff; font-weight:900; font-size:18px; line-height:36px;
       box-shadow:0 6px 18px rgba(0,0,0,.22); cursor:pointer; z-index:1002;
       display:inline-flex; align-items:center; justify-content:center;
@@ -98,110 +99,7 @@
               .map(s => s.toUpperCase());
     }
 
-    /* ----------------- Wait for sidebar build ----------------- */
-    function whenSidebarReady(cb){
-      const root = document.getElementById('sidebar-content');
-      if (!root) return;
-      if (root.children.length > 0) { cb(root); return; }
-      const obs = new MutationObserver(()=>{
-        if (root.children.length > 0){ obs.disconnect(); cb(root); }
-      });
-      obs.observe(root, { childList:true, subtree:true });
-      // safety stop
-      setTimeout(()=>obs.disconnect(), 10000);
-    }
-
-    /* ----------------- Row + ID discovery ----------------- */
-    function findSiteRows(root){
-      // Grab a broad set of possible row types. Skip group headers (<summary>).
-      const candidates = root.querySelectorAll(
-        '[data-site-id], [data-siteid], [data-id], [data-site], ' +
-        'li, .site-row, .sidebar-row, .site-item, .list-item, .item'
-      );
-      const rows = [];
-      candidates.forEach(el=>{
-        if (el.closest('summary')) return;              // ignore zone headers
-        // Extract ID from data-* first
-        let id =
-          (el.dataset && (
-            el.dataset.siteId || el.dataset.siteid || el.dataset.site || el.dataset.id
-          )) || '';
-        id = String(id).toUpperCase();
-
-        // Fallback: scan text for M#### pattern
-        if (!/^M\d{3,4}$/.test(id)){
-          const m = (el.textContent || '').toUpperCase().match(/\bM\d{3,4}\b/);
-          if (m) id = m[0];
-        }
-
-        if (/^M\d{3,4}$/.test(id)){
-          rows.push({ el, id });
-        }
-      });
-      return rows;
-    }
-
-    /* ----------------- Visual helpers ----------------- */
-    function addOrdinalNumbers(els){
-      // remove old numbers
-      els.forEach(r => { const x = r.querySelector('.ap-num'); if (x) x.remove(); });
-      let n = 1;
-      els.forEach(row=>{
-        const host = row.firstElementChild || row;
-        const span = document.createElement('span');
-        span.className = 'ap-num';
-        span.textContent = `${n++}.`;
-        host.insertBefore(span, host.firstChild);
-      });
-    }
-
-    function hideEmptyZones(root){
-      const groups = root.querySelectorAll('details, .zone, .zone-group');
-      groups.forEach(g=>{
-        // a zone is "empty" if none of its site rows are visible
-        const any = [...g.querySelectorAll('li, .site-row, .site-item, .sidebar-row, .item')]
-          .some(el => el.style.display !== 'none');
-        g.style.display = any ? '' : 'none';
-        if (any && 'open' in g) g.open = true; // expand zones that have visible sites
-      });
-    }
-
-    /* ----------------- Filter engine ----------------- */
-    function filterSidebarToIds(ids){
-      const root = document.getElementById('sidebar-content');
-      if (!root) return;
-
-      const wanted = new Set(ids.map(s => s.toUpperCase()));
-      const found  = findSiteRows(root);
-
-      const visible = [];
-      found.forEach(({el, id})=>{
-        const keep = wanted.has(id);
-        el.style.display = keep ? '' : 'none';
-        if (keep) visible.push(el);
-      });
-
-      // Banner when no matches
-      let banner = document.getElementById('assigned-filter-banner');
-      if (!visible.length){
-        if (!banner){
-          banner = document.createElement('div');
-          banner.id = 'assigned-filter-banner';
-          banner.style.cssText =
-            'margin:10px; padding:10px; border:1px solid #e2e8f0; ' +
-            'border-radius:8px; background:#fff8f8; color:#7f1d1d; font-weight:700;';
-          banner.textContent = 'No assigned sites to show.';
-          root.prepend(banner);
-        }
-      } else if (banner) {
-        banner.remove();
-      }
-
-      if (visible.length) addOrdinalNumbers(visible);
-      hideEmptyZones(root);
-    }
-
-    /* ----------------- Sidebar positioning below Search ----------------- */
+    /* ----------------- Keep the sidebar below the search control ----------------- */
     (function positionSidebarBelowSearch(){
       function findSearch(){
         return (
@@ -311,23 +209,125 @@
       });
     })();
 
-    /* ----------------- Main: filter to assigned IDs ----------------- */
+    /* ----------------- Robust row detection + live filtering ----------------- */
     (function main(){
-      const ids = getFocusIds();
-      if (!ids.length) return;
+      const focusIds = getFocusIds();                   // e.g. ["M0123","M0361",...]
+      if (!focusIds.length){ console.debug('[AssignedParks] No focus ids'); return; }
+      console.debug('[AssignedParks] focus ids:', focusIds);
 
-      function applyFilter(){ filterSidebarToIds(ids); }
+      const wanted = new Set(focusIds);
 
-      // Wait for sidebar to exist, then apply a few times during mount
-      firebase.auth().onAuthStateChanged(()=>{
-        whenSidebarReady(()=>{
-          // run immediately and again shortly to catch late-inserted rows
-          applyFilter();
-          setTimeout(applyFilter, 250);
-          setTimeout(applyFilter, 800);
-          setTimeout(applyFilter, 1500);
+      const root = document.getElementById('sidebar-content');
+      if (!root) return;
+
+      let everFoundAny = false;
+
+      function extractIdFrom(el){
+        // Prefer data-* attributes
+        const ds = el.dataset || {};
+        let id = (ds.siteId || ds.siteid || ds.site || ds.id || ds.code || ds.sitecode || '').toUpperCase();
+        // Fallback: scan text
+        if (!/^M\d{3,4}$/.test(id)){
+          const t = (el.textContent || '').toUpperCase();
+          const m = t.match(/\bM\d{3,4}\b/);
+          if (m) id = m[0];
+        }
+        return /^M\d{3,4}$/.test(id) ? id : '';
+      }
+
+      function findRows(){
+        // Avoid headers (<summary>) and pick common item containers
+        const nodes = root.querySelectorAll(
+          '[data-site-id], [data-siteid], [data-id], [data-site], [data-code], [data-sitecode], '+
+          'li, .site-row, .site-item, .sidebar-row, .list-item, .item'
+        );
+        const rows = [];
+        nodes.forEach(el=>{
+          if (el.closest('summary')) return;         // ignore zone headers
+          const id = extractIdFrom(el);
+          if (id) rows.push({ el, id });
         });
-      });
+        return rows;
+      }
+
+      function numberVisible(visible){
+        visible.forEach(r => { const x = r.querySelector('.ap-num'); if (x) x.remove(); });
+        let n = 1;
+        visible.forEach(row=>{
+          const host = row.firstElementChild || row;
+          const span = document.createElement('span');
+          span.className = 'ap-num';
+          span.textContent = `${n++}.`;
+          host.insertBefore(span, host.firstChild);
+        });
+      }
+
+      function hideEmptyZones(){
+        const groups = root.querySelectorAll('details, .zone, .zone-group');
+        groups.forEach(g=>{
+          const any = [...g.querySelectorAll('li, .site-row, .site-item, .sidebar-row, .list-item, .item')]
+            .some(el => el.style.display !== 'none');
+          g.style.display = any ? '' : 'none';
+          if (any && 'open' in g) g.open = true;
+        });
+      }
+
+      function ensureBanner(text){
+        let banner = document.getElementById('assigned-filter-banner');
+        if (!banner){
+          banner = document.createElement('div');
+          banner.id = 'assigned-filter-banner';
+          banner.style.cssText =
+            'margin:10px; padding:10px; border:1px solid #e2e8f0; ' +
+            'border-radius:8px; background:#fff8f8; color:#7f1d1d; font-weight:700;';
+          root.prepend(banner);
+        }
+        banner.textContent = text;
+      }
+      function removeBanner(){
+        const b = document.getElementById('assigned-filter-banner');
+        if (b) b.remove();
+      }
+
+      function applyFilter(){
+        const rows = findRows();
+        console.debug('[AssignedParks] rows seen:', rows.length);
+
+        if (!rows.length){
+          ensureBanner('Loading sites…');
+          return; // don’t hide zones yet; they may still be filling
+        }
+
+        // We’ve seen at least one real row at some point
+        everFoundAny = true;
+
+        // Filter by wanted set
+        const visible = [];
+        rows.forEach(({el, id})=>{
+          const keep = wanted.has(id);
+          el.style.display = keep ? '' : 'none';
+          if (keep) visible.push(el);
+        });
+
+        console.debug('[AssignedParks] matched rows:', visible.length);
+
+        if (!visible.length){
+          ensureBanner('No assigned sites to show.');
+        } else {
+          removeBanner();
+          numberVisible(visible);
+          hideEmptyZones();
+        }
+      }
+
+      // Run now, and keep re-running while content mounts
+      applyFilter();
+
+      const obs = new MutationObserver(() => { applyFilter(); });
+      obs.observe(root, { childList:true, subtree:true });
+
+      // Stop observing after 30s to avoid running forever
+      setTimeout(()=>obs.disconnect(), 30000);
     })();
   </script>
 </body>
