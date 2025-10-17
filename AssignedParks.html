@@ -24,7 +24,7 @@
 
     /* Sidebar compact + brand */
     #sidebar{
-      width: 340px;           /* narrower = more map space */
+      width: 340px;
       max-width: 86vw;
       background:#fff;
       border-right:1px solid var(--muted);
@@ -80,12 +80,24 @@
     }
     #sidebar-content li:first-child{ border-top:0; }
 
-    /* Mini badges (optional) */
+    /* Mini badges (status) */
     .mini-pill{
       display:inline-block; padding:2px 6px; border-radius:999px;
       font-size:11px; font-weight:800; color:#7f1d1d;
       background:#fee2e2; border:1px solid #fecaca;
+      white-space:nowrap;
     }
+
+    /* Operator controls on each row */
+    .site-ops{
+      display:inline-flex; align-items:center; gap:8px; white-space:nowrap;
+    }
+    .site-ops input[type="text"]{
+      width: 140px; max-width: 48vw;
+      padding:6px 8px; border-radius:8px; border:1px solid #e2e8f0; font-weight:600;
+      background:#fff;
+    }
+    .site-ops .site-done{ transform: translateY(1px); }
 
     /* Sidebar toggle button style (mobile friendly) */
     #sidebar-toggle{
@@ -96,7 +108,7 @@
     }
     #sidebar-toggle:active{ transform: translateY(1px); }
 
-    /* Mobile tweaks: sidebar is full width overlayish */
+    /* Mobile tweaks */
     @media (max-width: 768px){
       #sidebar{ width: 100vw; max-width: none; }
       #sidebar .sidebar-head .title{ font-size:13px }
@@ -105,6 +117,7 @@
       #sidebar-content .sidebar-row, #sidebar-content .item{
         padding:8px 10px;
       }
+      .site-ops input[type="text"]{ width: 120px; }
     }
   </style>
 </head>
@@ -145,108 +158,211 @@
   <!-- Map container (Leaflet map is created by script.js the same way as ParksMowing) -->
   <div id="map"></div>
 
-  <!-- Core scripts (use SAME stack as ParksMowing so tiles/data match) -->
+  <!-- Core scripts (same stack as ParksMowing) -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="script.js"></script>
   <script src="sidebar.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
-  <!-- Filter the sidebar to only show assigned IDs (same logic you had) -->
+  <!-- Filter the sidebar to only show assigned IDs -->
   <script>
   (function () {
-    // Parse ?focus=M0123,M0361,... from URL
     function getFocusFromQuery() {
       const q = new URLSearchParams(location.search).get('focus') || '';
       return q.split(',').map(s => s.trim()).filter(Boolean).map(s => s.toUpperCase());
     }
-
-    // Fallback: if no focus param, fetch assignments for the signed-in user and use their IDs
     async function getFocusFromFirestore() {
       try {
         const u = firebase.auth().currentUser;
         if (!u) return [];
         const snap = await firebase.firestore().collection('assignments')
-          .where('userId', '==', u.uid)
-          .get();
+          .where('userId', '==', u.uid).get();
         const set = new Set();
-        snap.forEach(doc => {
-          const d = doc.data() || {};
-          (d.siteIds || []).forEach(id => set.add(String(id).toUpperCase()));
-        });
+        snap.forEach(doc => (doc.data()?.siteIds || [])
+          .forEach(id => set.add(String(id).toUpperCase())));
         return Array.from(set);
       } catch (e) {
         console.warn('fallback focus load failed:', e);
         return [];
       }
     }
-
-    // Wait for #sidebar-content to be populated by your existing code (script.js/sidebar.js)
     function whenSidebarReady(cb) {
       const root = document.getElementById('sidebar-content');
       if (!root) return;
       if (root.children.length > 0) { cb(root); return; }
-      const obs = new MutationObserver((muts, observer) => {
-        if (root.children.length > 0) {
-          observer.disconnect();
-          cb(root);
-        }
+      const obs = new MutationObserver((_, o) => {
+        if (root.children.length > 0) { o.disconnect(); cb(root); }
       });
       obs.observe(root, { childList: true, subtree: true });
-      // safety timeout (10s)
       setTimeout(() => obs.disconnect(), 10000);
     }
-
-    // Heuristic: hide any sidebar row that does not contain one of the wanted IDs in its text
     function filterSidebarToIds(root, ids) {
       const wanted = new Set(ids.map(s => s.toUpperCase()));
-
-      // Add a banner so operators know they’re seeing a filtered view
       const bannerId = 'assigned-filter-banner';
       let banner = document.getElementById(bannerId);
       if (!banner) {
         banner = document.createElement('div');
         banner.id = bannerId;
         banner.style.cssText = 'padding:8px 10px;margin:6px 0;border:1px solid #e2e8f0;background:#fff8f8;color:#7f1d1d;border-radius:8px;font-weight:700';
-        document.getElementById('sidebar-content')?.prepend(banner);
+        root.prepend(banner);
       }
       banner.textContent = ids.length ? `Showing ${ids.length} assigned site(s)` : 'No assigned sites to show.';
 
-      // Helper
       const hasAnyId = (el) => {
-        const txt = (el.textContent || '').toUpperCase();
-        for (const id of wanted) if (txt.includes(id)) return true;
+        const t = (el.textContent || '').toUpperCase();
+        for (const id of wanted) if (t.includes(id)) return true;
         return false;
       };
-
-      // Hide non-matching rows
       const candidates = root.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row, div');
       candidates.forEach(el => {
-        if (el.id === bannerId) return;
+        if (el.id === 'assigned-filter-banner') return;
         const keep = hasAnyId(el) || [...el.querySelectorAll('*')].some(hasAnyId);
         el.style.display = keep ? '' : 'none';
       });
-
-      // Open any <details> that contain matches; hide empty ones
       root.querySelectorAll('details').forEach(d => {
-        const visibleChild = [...d.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row')]
+        const any = [...d.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row')]
           .some(el => el.style.display !== 'none');
-        if (visibleChild) {
-          d.style.display = '';
-          d.open = true;
-        } else {
-          d.style.display = 'none';
-        }
+        d.style.display = any ? '' : 'none';
+        if (any) d.open = true;
       });
     }
-
-    // Main flow: get focus IDs (query or Firestore), then filter once sidebar is ready
-    firebase.auth().onAuthStateChanged(async (u) => {
+    firebase.auth().onAuthStateChanged(async () => {
       let ids = getFocusFromQuery();
       if (!ids.length) ids = await getFocusFromFirestore();
       if (!ids.length) return;
-      whenSidebarReady((root) => filterSidebarToIds(root, ids));
+      whenSidebarReady(root => filterSidebarToIds(root, ids));
     });
   })();
   </script>
+
+  <!-- Operator controls + Firestore writes & live reflection -->
+  <script>
+  (function () {
+    const db = firebase.firestore();
+    const params = new URLSearchParams(location.search);
+    const assignmentId = params.get('task'); // REQUIRED for writes
+
+    // Extract/normalize a site ID (M####) from a row
+    const idRx = /\bM\d{3,5}\b/i;
+    function detectId(row){
+      let id = row.getAttribute('data-site-id');
+      if (id) return id.toUpperCase();
+      const m = (row.textContent || '').match(idRx);
+      if (!m) return '';
+      id = m[0].toUpperCase();
+      row.setAttribute('data-site-id', id);
+      return id;
+    }
+
+    // Attach controls to each visible site row
+    function decorateRow(row){
+      if (row.dataset.opsDecorated === '1') return;
+
+      const siteId = detectId(row);
+      if (!siteId) return;
+
+      // status pill (create if missing)
+      let pill = row.querySelector('.mini-pill');
+      if (!pill){
+        pill = document.createElement('span');
+        pill.className = 'mini-pill';
+        pill.textContent = 'assigned';
+        row.appendChild(pill);
+      }
+
+      // operator controls
+      const ops = document.createElement('span');
+      ops.className = 'site-ops';
+
+      // done checkbox
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.className = 'site-done'; cb.title = 'Mark complete';
+
+      const lbl = document.createElement('label');
+      lbl.textContent = 'Done'; lbl.style.marginLeft = '4px';
+
+      // note field
+      const note = document.createElement('input');
+      note.type = 'text'; note.placeholder = 'Notes...'; note.className = 'site-note';
+
+      ops.appendChild(cb);
+      ops.appendChild(lbl);
+      ops.appendChild(note);
+      row.appendChild(ops);
+
+      // Save handlers
+      cb.addEventListener('change', async () => {
+        if (!assignmentId) { alert('Missing task id in URL'); cb.checked = !cb.checked; return; }
+        const status = cb.checked ? 'completed' : 'in_progress';
+        await db.collection('assignments').doc(assignmentId).set({
+          [`perSite.${siteId}.status`]: status,
+          [`perSite.${siteId}.operatorUid`]: firebase.auth().currentUser?.uid || null,
+          [`perSite.${siteId}.updatedAt`]: firebase.firestore.FieldValue.serverTimestamp(),
+          ...(cb.checked ? { [`perSite.${siteId}.completedAt`]: firebase.firestore.FieldValue.serverTimestamp() } : {})
+        }, { merge: true });
+      });
+
+      // Save note on blur/change
+      async function saveNote() {
+        if (!assignmentId) { alert('Missing task id in URL'); return; }
+        const val = note.value.trim();
+        await db.collection('assignments').doc(assignmentId).set({
+          [`perSite.${siteId}.note`]: val,
+          [`perSite.${siteId}.operatorUid`]: firebase.auth().currentUser?.uid || null,
+          [`perSite.${siteId}.updatedAt`]: firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
+      note.addEventListener('change', saveNote);
+      note.addEventListener('blur', saveNote);
+
+      row.dataset.opsDecorated = '1';
+    }
+
+    // Enhance all current/future rows once the sidebar is ready
+    function whenSidebarReady(cb) {
+      const root = document.getElementById('sidebar-content');
+      if (!root) return;
+      if (root.children.length > 0) { cb(root); return; }
+      const obs = new MutationObserver((_, o) => {
+        if (root.children.length > 0) { o.disconnect(); cb(root); }
+      });
+      obs.observe(root, { childList: true, subtree: true });
+      setTimeout(() => obs.disconnect(), 10000);
+    }
+    whenSidebarReady((root) => {
+      const scan = () => {
+        root.querySelectorAll('li, .list-item, .sidebar-row, .item').forEach(el => {
+          // ignore group headers
+          if (el.closest('summary')) return;
+          decorateRow(el);
+        });
+      };
+      scan();
+      const mo = new MutationObserver(scan);
+      mo.observe(root, { childList:true, subtree:true });
+      setTimeout(() => mo.disconnect(), 30000);
+    });
+
+    // Live reflection from Firestore (keeps pills/checkbox/notes in sync)
+    firebase.auth().onAuthStateChanged(() => {
+      if (!assignmentId) return;
+      db.collection('assignments').doc(assignmentId).onSnapshot(snap => {
+        const d = snap.data() || {};
+        const perSite = d.perSite || {};
+        document.querySelectorAll('#sidebar-content [data-site-id]').forEach(row => {
+          const id = String(row.getAttribute('data-site-id')).toUpperCase();
+          const info = perSite[id] || {};
+          const pill = row.querySelector('.mini-pill');
+          if (pill) pill.textContent = (info.status || 'assigned').replace('_',' ');
+          const cb  = row.querySelector('.site-done');
+          if (cb) cb.checked = info.status === 'completed';
+          const note = row.querySelector('.site-note');
+          if (note && typeof info.note === 'string' && note.value !== info.note) note.value = info.note;
+        });
+      });
+    });
+  })();
+  </script>
+
 </body>
 </html>
