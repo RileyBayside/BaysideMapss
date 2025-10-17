@@ -109,6 +109,53 @@
     @media (max-width: 768px){
       #sidebar{ width: 100vw; max-width:none; }
     }
+
+    /* ------------------ ADDED OVERRIDES: stack sites vertically ------------------ */
+
+    /* Kill horizontal overflow; keep only vertical scrolling */
+    #sidebar, #sidebar-content {
+      overflow-x: hidden;
+    }
+
+    /* Make each site row occupy full width so it stacks, even if parent is flex/grid */
+    #sidebar-content .site-row,
+    #sidebar-content [data-site-id] {
+      display: flex !important;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100% !important;
+      flex: 0 0 auto !important;
+      margin: 0;
+    }
+
+    /* Ensure non-summary children inside details span full width */
+    #sidebar-content details > :not(summary) {
+      width: 100%;
+    }
+
+    /* Labels truncate instead of causing horizontal scroll */
+    #sidebar-content .site-row .label {
+      flex: 1 1 auto;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Optional subtle separators between rows */
+    #sidebar-content .site-row + .site-row {
+      border-top: 1px solid #eef2f7;
+    }
+
+    /* If any container grid tries to tile sites horizontally, force block layout */
+    #sidebar-content .sites-grid,
+    #sidebar-content .site-list,
+    #sidebar-content .items,
+    #sidebar-content .list {
+      display: block !important;
+    }
+    /* ------------------ END ADDED OVERRIDES ------------------ */
   </style>
 </head>
 <body>
