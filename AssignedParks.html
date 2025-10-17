@@ -35,8 +35,6 @@
       -webkit-overflow-scrolling: touch;
       padding-right: 8px;
     }
-    /* Mini ordinal before each visible site row */
-    .ap-num{ font-weight:800; margin-right:6px; }
 
     /* Collapsible behaviour + floating toggle */
     #sidebar.is-collapsed { transform: translateX(calc(-100% - 12px)); }
@@ -46,7 +44,9 @@
       box-shadow:0 6px 18px rgba(0,0,0,.22); cursor:pointer; z-index:1002;
       display:inline-flex; align-items:center; justify-content:center;
     }
-    #sbMiniToggle:focus-visible{ outline:3px solid rgba(209,30,43,.35); outline-offset:2px; }
+
+    /* Ordinal before each visible site row */
+    .ap-num{ font-weight:800; margin-right:6px; }
 
     @media (max-width:768px){
       #sidebar{ left: 6px !important; right: 6px; border-radius:12px; }
@@ -62,10 +62,10 @@
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
 
-  <!-- Sidebar toggle (same control id you already use) -->
+  <!-- Sidebar toggle (id kept for your CSS/JS) -->
   <button id="sidebar-toggle">☰</button>
 
-  <!-- Sidebar (keep ids/classes so sidebar.css applies) -->
+  <!-- Sidebar (ids/classes kept so sidebar.css + sidebar.js work) -->
   <div id="sidebar">
     <button id="toggle-all">Expand All</button>
     <div id="sidebar-content"></div>
@@ -82,19 +82,23 @@
   <!-- Map (created by your existing script.js) -->
   <div id="map"></div>
 
-  <!-- Core scripts (exactly like ParksMowing order) -->
+  <!-- Core scripts (exact order) -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="script.js"></script>
   <script src="sidebar.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <script>
-    // -------- Helpers --------
+    /* ----------------- Query helpers ----------------- */
     function getFocusIds(){
       const q = new URLSearchParams(location.search).get('focus') || '';
-      return q.split(',').map(s=>s.trim()).filter(Boolean).map(s=>s.toUpperCase());
+      return q.split(',')
+              .map(s => s.trim())
+              .filter(Boolean)
+              .map(s => s.toUpperCase());
     }
 
+    /* ----------------- Wait for sidebar build ----------------- */
     function whenSidebarReady(cb){
       const root = document.getElementById('sidebar-content');
       if (!root) return;
@@ -103,19 +107,46 @@
         if (root.children.length > 0){ obs.disconnect(); cb(root); }
       });
       obs.observe(root, { childList:true, subtree:true });
+      // safety stop
       setTimeout(()=>obs.disconnect(), 10000);
     }
 
-    function extractId(el){
-      const txt = (el.textContent || '').toUpperCase();
-      const m = txt.match(/\bM\d{4}\b/);
-      return m ? m[0] : null;
+    /* ----------------- Row + ID discovery ----------------- */
+    function findSiteRows(root){
+      // Grab a broad set of possible row types. Skip group headers (<summary>).
+      const candidates = root.querySelectorAll(
+        '[data-site-id], [data-siteid], [data-id], [data-site], ' +
+        'li, .site-row, .sidebar-row, .site-item, .list-item, .item'
+      );
+      const rows = [];
+      candidates.forEach(el=>{
+        if (el.closest('summary')) return;              // ignore zone headers
+        // Extract ID from data-* first
+        let id =
+          (el.dataset && (
+            el.dataset.siteId || el.dataset.siteid || el.dataset.site || el.dataset.id
+          )) || '';
+        id = String(id).toUpperCase();
+
+        // Fallback: scan text for M#### pattern
+        if (!/^M\d{3,4}$/.test(id)){
+          const m = (el.textContent || '').toUpperCase().match(/\bM\d{3,4}\b/);
+          if (m) id = m[0];
+        }
+
+        if (/^M\d{3,4}$/.test(id)){
+          rows.push({ el, id });
+        }
+      });
+      return rows;
     }
 
-    function addOrdinalNumbers(visibleRows){
-      visibleRows.forEach(r=>{ const x=r.querySelector('.ap-num'); if (x) x.remove(); });
-      let n=1;
-      visibleRows.forEach(row=>{
+    /* ----------------- Visual helpers ----------------- */
+    function addOrdinalNumbers(els){
+      // remove old numbers
+      els.forEach(r => { const x = r.querySelector('.ap-num'); if (x) x.remove(); });
+      let n = 1;
+      els.forEach(row=>{
         const host = row.firstElementChild || row;
         const span = document.createElement('span');
         span.className = 'ap-num';
@@ -127,46 +158,50 @@
     function hideEmptyZones(root){
       const groups = root.querySelectorAll('details, .zone, .zone-group');
       groups.forEach(g=>{
-        const any = [...g.querySelectorAll('li, .list-item, .sidebar-row, .site-row, .item')]
+        // a zone is "empty" if none of its site rows are visible
+        const any = [...g.querySelectorAll('li, .site-row, .site-item, .sidebar-row, .item')]
           .some(el => el.style.display !== 'none');
         g.style.display = any ? '' : 'none';
-        if (any && 'open' in g) g.open = true;
+        if (any && 'open' in g) g.open = true; // expand zones that have visible sites
       });
     }
 
+    /* ----------------- Filter engine ----------------- */
     function filterSidebarToIds(ids){
       const root = document.getElementById('sidebar-content');
-      const wanted = new Set(ids.map(s=>s.toUpperCase()));
+      if (!root) return;
 
-      const rows = [...root.querySelectorAll('li, .list-item, .sidebar-row, .site-row, .item')];
-      const keepers = [];
-      rows.forEach(row=>{
-        if (row.closest('summary')) return;  // don’t treat group headers as sites
-        const id = extractId(row);
-        if (!id) return;
+      const wanted = new Set(ids.map(s => s.toUpperCase()));
+      const found  = findSiteRows(root);
+
+      const visible = [];
+      found.forEach(({el, id})=>{
         const keep = wanted.has(id);
-        row.style.display = keep ? '' : 'none';
-        if (keep) keepers.push(row);
+        el.style.display = keep ? '' : 'none';
+        if (keep) visible.push(el);
       });
 
-      // Show a small note if nothing matched
-      if (!keepers.length){
-        let banner = document.getElementById('assigned-filter-banner');
+      // Banner when no matches
+      let banner = document.getElementById('assigned-filter-banner');
+      if (!visible.length){
         if (!banner){
           banner = document.createElement('div');
           banner.id = 'assigned-filter-banner';
-          banner.style.cssText = 'margin:10px; padding:10px; border:1px solid #e2e8f0; border-radius:8px; background:#fff8f8; color:#7f1d1d; font-weight:700;';
+          banner.style.cssText =
+            'margin:10px; padding:10px; border:1px solid #e2e8f0; ' +
+            'border-radius:8px; background:#fff8f8; color:#7f1d1d; font-weight:700;';
           banner.textContent = 'No assigned sites to show.';
           root.prepend(banner);
         }
-      } else {
-        addOrdinalNumbers(keepers);
+      } else if (banner) {
+        banner.remove();
       }
 
+      if (visible.length) addOrdinalNumbers(visible);
       hideEmptyZones(root);
     }
 
-    // Position the sidebar 6px below your “Search ID…” control
+    /* ----------------- Sidebar positioning below Search ----------------- */
     (function positionSidebarBelowSearch(){
       function findSearch(){
         return (
@@ -200,7 +235,7 @@
       setTimeout(()=>mo.disconnect(), 6000);
     })();
 
-    // Floating collapse toggle
+    /* ----------------- Floating collapse toggle ----------------- */
     (function setupMiniToggle(){
       const sidebar = document.getElementById('sidebar');
       if (!sidebar) return;
@@ -248,7 +283,7 @@
       position();
     })();
 
-    // Mark task in_progress when page is opened via ?task=...
+    /* ----------------- Mark task started (?task=) ----------------- */
     (function trackTaskOpen(){
       const db = firebase.firestore();
       const taskId = new URLSearchParams(location.search).get('task') || '';
@@ -276,12 +311,22 @@
       });
     })();
 
-    // Main: filter after sidebar is built by your existing code
+    /* ----------------- Main: filter to assigned IDs ----------------- */
     (function main(){
       const ids = getFocusIds();
-      if (!ids.length) return; // nothing to filter
+      if (!ids.length) return;
+
+      function applyFilter(){ filterSidebarToIds(ids); }
+
+      // Wait for sidebar to exist, then apply a few times during mount
       firebase.auth().onAuthStateChanged(()=>{
-        whenSidebarReady(()=> filterSidebarToIds(ids));
+        whenSidebarReady(()=>{
+          // run immediately and again shortly to catch late-inserted rows
+          applyFilter();
+          setTimeout(applyFilter, 250);
+          setTimeout(applyFilter, 800);
+          setTimeout(applyFilter, 1500);
+        });
       });
     })();
   </script>
