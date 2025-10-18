@@ -99,7 +99,7 @@
     .sub{ color:#64748b; font-size:12px }
   </style>
 
-  <!-- Tiny pills for the modal (matches previous guidance) -->
+  <!-- Tiny pills for the modal -->
   <style>
     .assign-site-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:10px;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:8px;background:#fff}
     .assign-site-row .sid{font-weight:800}
@@ -108,7 +108,6 @@
     .pill.in_progress{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412}
     .pill.completed{background:#ecfdf5;border:1px solid #bbf7d0;color:#065f46}
   </style>
-
 </head>
 <body>
 
@@ -142,6 +141,8 @@
       <header>
         <h3 id="modalTitle">Assignment details</h3>
         <div style="display:flex; align-items:center; gap:8px">
+          <!-- NEW: report button -->
+          <button id="reportBtn" class="btn">Download report</button>
           <a id="openMapBtn" class="btn btn-red" href="#" target="_blank" rel="noopener">Open in map</a>
           <button class="close" id="closeModalBtn">Close</button>
         </div>
@@ -268,30 +269,28 @@
 
       /* ---------------- Modal: per-park details (LIVE) ---------------- */
 
-      const backdrop = document.getElementById('detailsBackdrop');
-      const closeBtn = document.getElementById('closeModalBtn');
+      const backdrop   = document.getElementById('detailsBackdrop');
+      const closeBtn   = document.getElementById('closeModalBtn');
       const modalTitle = document.getElementById('modalTitle');
-      const metaBox = document.getElementById('assignmentMeta');
-      const sitesBox = document.getElementById('sitesList');
+      const metaBox    = document.getElementById('assignmentMeta');
+      const sitesBox   = document.getElementById('sitesList');
       const openMapBtn = document.getElementById('openMapBtn');
+      const reportBtn  = document.getElementById('reportBtn');   // NEW
 
       let unsubscribeDetails = null;
+      let lastRenderCache = null; // NEW: hold data for PDF (assignment + rows)
 
-      function showModal(){
-        backdrop.classList.add('show');
-        backdrop.setAttribute('aria-hidden','false');
-      }
+      function showModal(){ backdrop.classList.add('show'); backdrop.setAttribute('aria-hidden','false'); }
       function hideModal(){
-        backdrop.classList.remove('show');
-        backdrop.setAttribute('aria-hidden','true');
-        if (unsubscribeDetails) { try { unsubscribeDetails(); } catch(_) {} unsubscribeDetails = null; }
+        backdrop.classList.remove('show'); backdrop.setAttribute('aria-hidden','true');
+        if (unsubscribeDetails) { try{unsubscribeDetails();}catch(_){ } unsubscribeDetails = null; }
       }
       closeBtn.addEventListener('click', hideModal);
       backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) hideModal(); });
 
       // Open details and keep them synced via onSnapshot
       async function openDetails(assignmentId){
-        if (unsubscribeDetails) { try { unsubscribeDetails(); } catch(_) {} unsubscribeDetails = null; }
+        if (unsubscribeDetails) { try{unsubscribeDetails();}catch(_){ } unsubscribeDetails = null; }
 
         const render = async (snap) => {
           if (!snap.exists) { alert('Assignment not found'); return; }
@@ -303,6 +302,7 @@
 
           const total = siteIds.length;
           const completed = siteIds.filter(id => (perSite[id]?.status || '').toLowerCase() === 'completed').length;
+
           metaBox.innerHTML = `
             <div><strong>${completed}/${total}</strong> completed</div>
             ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
@@ -310,7 +310,6 @@
             ${d.startedAt ? `<div>Started: ${fmt(d.startedAt).split(',')[0]}</div>` : ''}
           `;
 
-          // IMPORTANT: include ?task=
           const focusCsv = siteIds.join(',');
           openMapBtn.href = focusCsv
             ? `AssignedParks.html?focus=${encodeURIComponent(focusCsv)}&task=${encodeURIComponent(snap.id)}`
@@ -318,7 +317,9 @@
 
           const permNotes = await loadParkNotes(siteIds);
 
+          // Render rows
           sitesBox.innerHTML = '';
+          const rows = []; // NEW: cache rows for PDF
           siteIds.forEach(id => {
             const s = (perSite[id]?.status || 'assigned').toLowerCase();
             const opNote = (perSite[id]?.note || '').trim();
@@ -346,7 +347,28 @@
             row.appendChild(mid);
             row.appendChild(right);
             sitesBox.appendChild(row);
+
+            // NEW: push to rows cache
+            rows.push({
+              id,
+              status: s,
+              opNote,
+              permNote: perm,
+              completedAt: completedAt ? fmt(completedAt).split(',')[0] : ''
+            });
           });
+
+          // NEW: keep snapshot needed for report
+          lastRenderCache = {
+            assignmentId: snap.id,
+            userName: d.userName || 'Operator',
+            zone: d.zone || 'Task',
+            due: d.dueDate ? fmt(d.dueDate).split(',')[0] : '',
+            started: d.startedAt ? fmt(d.startedAt).split(',')[0] : '',
+            overall: d.status || 'assigned',
+            completed, total,
+            rows
+          };
 
           showModal();
         };
@@ -359,7 +381,99 @@
       function escapeHtml(s){
         return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
       }
+
+      /* ---------- NEW: simple PDF export of the current modal ---------- */
+      reportBtn.addEventListener('click', () => {
+        if (!lastRenderCache) { alert('Open an assignment first.'); return; }
+        if (!window.jspdf)    { alert('PDF library not loaded.');  return; }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ unit:'pt', format:'a4' });
+
+        const padX = 40;
+        let y = 48;
+
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(16);
+        doc.text(`${lastRenderCache.userName} — ${lastRenderCache.zone}`, padX, y);
+        y += 20;
+
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(11);
+        const meta = [
+          `Overall: ${lastRenderCache.overall}`,
+          `Completed: ${lastRenderCache.completed}/${lastRenderCache.total}`,
+          lastRenderCache.started ? `Started: ${lastRenderCache.started}` : '',
+          lastRenderCache.due ? `Due: ${lastRenderCache.due}` : ''
+        ].filter(Boolean).join('   •   ');
+        doc.text(meta, padX, y);
+        y += 24;
+
+        // Header line
+        doc.setLineWidth(0.5);
+        doc.line(padX, y, 555, y);
+        y += 14;
+
+        // Table headers
+        doc.setFont('helvetica','bold');
+        doc.text('Site', padX, y);
+        doc.text('Status', padX+90, y);
+        doc.text('Completed', padX+170, y);
+        doc.text('Operator note', padX+260, y);
+        y += 10;
+        doc.setLineWidth(0.2);
+        doc.line(padX, y, 555, y);
+        y += 12;
+
+        doc.setFont('helvetica','normal');
+
+        const lineHeight = 14;
+        const wrapWidth  = 555 - (padX+260);
+
+        const addRow = (r) => {
+          // page break if needed
+          if (y > 770) { doc.addPage(); y = 48; }
+
+          doc.text(r.id, padX, y);
+          doc.text(r.status.replace('_',' '), padX+90, y);
+          doc.text(r.completedAt || '-', padX+170, y);
+
+          // wrap operator note
+          const note = r.opNote || '';
+          const wrapped = doc.splitTextToSize(note, wrapWidth);
+          doc.text(wrapped.length ? wrapped : ['—'], padX+260, y);
+
+          // advance by the number of wrapped lines
+          y += Math.max(lineHeight, wrapped.length * lineHeight) + 6;
+
+          // permanent note (if any) as a faint line beneath
+          if (r.permNote) {
+            const permWrapped = doc.splitTextToSize(`Permanent: ${r.permNote}`, wrapWidth);
+            doc.setTextColor(90);
+            doc.text(permWrapped, padX+260, y);
+            doc.setTextColor(0);
+            y += permWrapped.length * lineHeight + 6;
+          }
+
+          // row divider
+          doc.setLineWidth(0.2);
+          doc.setDrawColor(220);
+          doc.line(padX, y, 555, y);
+          y += 10;
+        };
+
+        lastRenderCache.rows.forEach(addRow);
+
+        const filename = `${lastRenderCache.userName.replace(/\s+/g,'_')}-${lastRenderCache.zone.replace(/\s+/g,'_')}.pdf`;
+        doc.save(filename);
+      });
+      /* ---------- end PDF export ---------- */
+
     })();
   </script>
+
+  <!-- NEW: jsPDF for the report -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha512-YkN2czUo8p9FQaR3p5Wtk7oCN1jZhZoF3b4eN3N9Qf7F6y5L6n9qj9o9t3c1aT+7oTg4z7n8KQX3Qx0Gm4QZ3w==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </body>
 </html>
+
