@@ -152,7 +152,7 @@
     </div>
   </div>
 
-  <!-- jsPDF (no integrity attr to avoid SRI mismatch on some CDNs) -->
+  <!-- jsPDF -->
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
   <script>
@@ -186,14 +186,13 @@
     const escapeHtml = (s) =>
       String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
-    
     function getPerSiteForId(perSite, rawId){
-    if (!perSite) return undefined;
-    const idU = String(rawId).toUpperCase();       // e.g. M0123
-    const idL = idU.toLowerCase();                 // e.g. m0123
-    const noM = idU.replace(/^M/, '');             // e.g. 0123
-    return perSite[idU] ?? perSite[idL] ?? perSite[noM];
-  }
+      if (!perSite) return undefined;
+      const idU = String(rawId).toUpperCase();       // e.g. M0123
+      const idL = idU.toLowerCase();                 // e.g. m0123
+      const noM = idU.replace(/^M/, '');             // e.g. 0123
+      return perSite[idU] ?? perSite[idL] ?? perSite[noM];
+    }
 
     async function loadParkNotes(siteIds){
       if(!siteIds || !siteIds.length) return {};
@@ -206,6 +205,44 @@
           .where(firebase.firestore.FieldPath.documentId(), 'in', batch)
           .get();
         snap.forEach(doc => byId[doc.id.toUpperCase()] = (doc.data()||{}).note || '');
+      }
+      return byId;
+    }
+
+    /* ---------- NEW: latest logs helper (spliced) ---------- */
+    async function loadLatestWorkLogs(siteIds, assignment) {
+      if (!siteIds || !siteIds.length) return {};
+      const ids = Array.from(new Set(siteIds.map(s => String(s).toUpperCase())));
+      const byId = {};
+      const chunk = 10;
+
+      const opUid = assignment?.userId || null;
+      const startedAt = assignment?.startedAt || null;
+
+      for (let i = 0; i < ids.length; i += chunk) {
+        const batch = ids.slice(i, i + chunk);
+        let q = db.collection('work_logs').where('siteId', 'in', batch);
+        if (opUid) q = q.where('operatorUid', '==', opUid);
+        if (startedAt) q = q.where('timestamp', '>=', startedAt);
+
+        const snap = await q.get();
+        snap.forEach(doc => {
+          const w = doc.data() || {};
+          const sid = String(w.siteId || '').toUpperCase();
+          if (!sid) return;
+          const t =
+            (w.completedAt?.toMillis?.() ?? w.timestamp?.toMillis?.() ??
+             w.createdAt?.toMillis?.() ?? 0);
+          const prev = byId[sid];
+          if (!prev || t > prev._t) {
+            byId[sid] = {
+              status: (w.status || 'completed').toLowerCase(),
+              note: (w.note || '').trim(),
+              completedAt: w.completedAt || w.timestamp || w.createdAt || null,
+              _t: t
+            };
+          }
+        });
       }
       return byId;
     }
@@ -303,12 +340,21 @@
         const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
         const perSite = d.perSite || {};
 
+        // NEW: also load latest operator logs
+        const latestLogs = await loadLatestWorkLogs(siteIds, d);
+
         modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
+
+        // Completed count using merged status
+        const mergedCompleted = siteIds.filter(id => {
+          const ps = getPerSiteForId(perSite, id) || {};
+          const lg = latestLogs[id] || {};
+          return ((ps.status || lg.status || '').toLowerCase() === 'completed');
+        }).length;
         const total = siteIds.length;
-        const completed = siteIds.filter(id => (perSite[id]?.status || '').toLowerCase() === 'completed').length;
 
         metaBox.innerHTML = `
-          <div><strong>${completed}/${total}</strong> completed</div>
+          <div><strong>${mergedCompleted}/${total}</strong> completed</div>
           ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
           ${d.status ? `<div>Overall: ${badge(d.status)}</div>` : ''}
           ${d.startedAt ? `<div>Started: ${fmt(d.startedAt).split(',')[0]}</div>` : ''}
@@ -323,16 +369,19 @@
 
         sitesBox.innerHTML = '';
         siteIds.forEach(id => {
-          const s = (perSite[id]?.status || 'assigned').toLowerCase();
-          const opNote = (perSite[id]?.note || '').trim();
-          const completedAt = perSite[id]?.completedAt || null;
+          const ps = getPerSiteForId(perSite, id) || {};
+          const lg = latestLogs[id] || {};
+
+          const status = (ps.status || lg.status || 'assigned').toLowerCase();
+          const opNote = (ps.note ?? lg.note ?? '').trim();
+          const completedAt = ps.completedAt || lg.completedAt || null;
           const perm = (permNotes[id] || '').trim();
 
           const row = document.createElement('div');
           row.className = 'site-row';
 
           const left = document.createElement('div');
-          left.innerHTML = `<strong>${id}</strong><div class="sub">${badge(s)}</div>`;
+          left.innerHTML = `<strong>${id}</strong><div class="sub">${badge(status)}</div>`;
 
           const mid = document.createElement('div');
           let notesHtml = '';
@@ -357,94 +406,93 @@
       unsubscribeDetails = db.collection('assignments').doc(assignmentId)
         .onSnapshot(render, err => alert('Failed to load details: ' + (err.message||err)));
 
-      // wire report button to the current assignment id
       downloadBtn.onclick = () => downloadReport(assignmentId);
     }
 
-    /* ---------- PDF report ---------- */
+    /* ---------- PDF report (spliced merge) ---------- */
     async function downloadReport(assignmentId){
-    try{
-      const { jsPDF } = window.jspdf || {};
-      if (!jsPDF) { alert('PDF library not loaded'); return; }
+      try{
+        const { jsPDF } = window.jspdf || {};
+        if (!jsPDF) { alert('PDF library not loaded'); return; }
 
-      // Use the same data the modal already rendered, fall back to fetching once.
-      let d = latestDocData;
-      if (!d) {
-        const snap = await db.collection('assignments').doc(assignmentId).get();
-        if (!snap.exists) { alert('Assignment missing'); return; }
-        d = snap.data() || {};
+        // Use already-cached doc if possible
+        let d = latestDocData;
+        if (!d) {
+          const snap = await db.collection('assignments').doc(assignmentId).get();
+          if (!snap.exists) { alert('Assignment missing'); return; }
+          d = snap.data() || {};
+        }
+
+        const siteIds = (d.siteIds || []).map(s => String(s).toUpperCase());
+        const perSite = d.perSite || {};
+
+        // NEW: fetch latest logs to merge for the PDF too
+        const latestLogs = await loadLatestWorkLogs(siteIds, d);
+
+        const doc = new jsPDF({ unit:'pt', format:'a4' });
+        const marginL = 56, startY = 64, lineH = 18;
+
+        const _fmt = (ts) => {
+          if(!ts) return '';
+          const dt = ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+          return dt ? dt.toLocaleString() : '';
+        };
+
+        const total = siteIds.length;
+        const completed = siteIds.filter(id => {
+          const ps = getPerSiteForId(perSite, id) || {};
+          const lg = latestLogs[id] || {};
+          return ((ps.status || lg.status || '').toLowerCase() === 'completed');
+        }).length;
+
+        // Header
+        doc.setFont('helvetica','bold'); doc.setFontSize(18);
+        doc.text(`${d.userName || 'Operator'} — ${d.zone || 'Task'}`, marginL, startY);
+        doc.setFont('helvetica','normal'); doc.setFontSize(12);
+        doc.text(
+          `Overall: ${(d.status||'in_progress')}   •   Completed: ${completed}/${total}   •   Started: ${d.startedAt ? _fmt(d.startedAt).split(',')[0] : '-'}`,
+          marginL, startY + 22
+        );
+
+        // Table header
+        let y = startY + 48;
+        const header = ['Site','Status','Completed','Operator note'];
+        const widths = [100,110,100,280];
+
+        doc.setFont('helvetica','bold');
+        header.forEach((h,i)=> doc.text(h, marginL + widths.slice(0,i).reduce((a,b)=>a+b,0), y));
+        doc.setLineWidth(0.6); doc.line(marginL, y+6, marginL + widths.reduce((a,b)=>a+b,0), y+6);
+        y += 20;
+
+        // Rows
+        doc.setFont('helvetica','normal');
+        for (const id of siteIds){
+          const ps = getPerSiteForId(perSite, id) || {};
+          const lg = latestLogs[id] || {};
+
+          const status      = (ps.status || lg.status || 'assigned').toLowerCase();
+          const completedAt = (ps.completedAt || lg.completedAt) ? _fmt(ps.completedAt || lg.completedAt).split(',')[0] : '-';
+          const note        = (ps.note ?? lg.note ?? '').trim() || '-';
+
+          const cols = [id, status, completedAt, note];
+          cols.forEach((val,i) => {
+            const x = marginL + widths.slice(0,i).reduce((a,b)=>a+b,0);
+            doc.text(String(val), x, y, { maxWidth: widths[i]-6 });
+          });
+          y += lineH;
+          if (y > 780) { doc.addPage(); y = 56; }
+        }
+
+        const filename = `${(d.userName || 'operator').toLowerCase().replace(/\s+/g,'-')}-${(d.zone||'task').toLowerCase().replace(/\s+/g,'-')}.pdf`;
+        doc.save(filename);
+      }catch(e){
+        alert('Failed to generate report: ' + (e.message||e));
+        console.error(e);
       }
-
-      const siteIds = (d.siteIds || []).map(s => String(s).toUpperCase());
-      const perSite = d.perSite || {};
-
-      // Debug — this will help us confirm what keys we actually have
-      console.log('[PDF] siteIds:', siteIds);
-      console.log('[PDF] perSite keys:', Object.keys(perSite || {}));
-
-      const doc = new jsPDF({ unit:'pt', format:'a4' });
-      const marginL = 56, startY = 64, lineH = 18;
-
-      const fmt = (ts) => {
-        if(!ts) return '';
-        const dt = ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
-        return dt ? dt.toLocaleString() : '';
-      };
-
-      const total = siteIds.length;
-      const completed = siteIds.filter(id => {
-        const ps = getPerSiteForId(perSite, id) || {};
-        return (ps.status || '').toLowerCase() === 'completed';
-      }).length;
-
-      // Header
-      doc.setFont('helvetica','bold'); doc.setFontSize(18);
-      doc.text(`${d.userName || 'Operator'} — ${d.zone || 'Task'}`, marginL, startY);
-      doc.setFont('helvetica','normal'); doc.setFontSize(12);
-      doc.text(
-        `Overall: ${(d.status||'in_progress')}   •   Completed: ${completed}/${total}   •   Started: ${d.startedAt ? fmt(d.startedAt).split(',')[0] : '-'}`,
-        marginL, startY + 22
-      );
-
-      // Table header
-      let y = startY + 48;
-      const header = ['Site','Status','Completed','Operator note'];
-      const widths = [100,110,100,280];
-
-      doc.setFont('helvetica','bold');
-      header.forEach((h,i)=> doc.text(h, marginL + widths.slice(0,i).reduce((a,b)=>a+b,0), y));
-      doc.setLineWidth(0.6); doc.line(marginL, y+6, marginL + widths.reduce((a,b)=>a+b,0), y+6);
-      y += 20;
-
-      // Rows
-      doc.setFont('helvetica','normal');
-      for (const id of siteIds){
-        const ps = getPerSiteForId(perSite, id) || {};
-        const status      = (ps.status || 'assigned').toLowerCase();
-        const completedAt = ps.completedAt ? fmt(ps.completedAt).split(',')[0] : '-';
-        const note        = (ps.note || '').trim() || '-';
-
-        // Debug each row we render
-        console.log('[PDF] row', id, { status, completedAt, noteFromPerSite: ps.note });
-
-        const cols = [id, status, completedAt, note];
-        cols.forEach((val,i) => {
-          const x = marginL + widths.slice(0,i).reduce((a,b)=>a+b,0);
-          doc.text(String(val), x, y, { maxWidth: widths[i]-6 });
-        });
-        y += lineH;
-        if (y > 780) { doc.addPage(); y = 56; }
-      }
-
-      const filename = `${(d.userName || 'operator').toLowerCase().replace(/\s+/g,'-')}-${(d.zone||'task').toLowerCase().replace(/\s+/g,'-')}.pdf`;
-      doc.save(filename);
-    }catch(e){
-      alert('Failed to generate report: ' + (e.message||e));
-      console.error(e);
     }
-  }
 
   })();
   </script>
 </body>
 </html>
+
