@@ -275,100 +275,84 @@
       const sitesBox = document.getElementById('sitesList');
       const openMapBtn = document.getElementById('openMapBtn');
 
-      let currentUnsub = null;
+      let unsubscribeDetails = null;
 
-      let unsubscribeDetails = null;   // keep a ref so we can stop listening on close
-      function showModal(){ backdrop.classList.add('show'); backdrop.setAttribute('aria-hidden','false'); }
+      function showModal(){
+        backdrop.classList.add('show');
+        backdrop.setAttribute('aria-hidden','false');
+      }
       function hideModal(){
-        backdrop.classList.remove('show'); backdrop.setAttribute('aria-hidden','true');
-        if (typeof currentUnsub === 'function') { currentUnsub(); currentUnsub = null; }
+        backdrop.classList.remove('show');
+        backdrop.setAttribute('aria-hidden','true');
+        if (unsubscribeDetails) { try { unsubscribeDetails(); } catch(_) {} unsubscribeDetails = null; }
       }
       closeBtn.addEventListener('click', hideModal);
       backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) hideModal(); });
-      backdrop.classList.remove('show');
-      backdrop.setAttribute('aria-hidden','true');
-      if (unsubscribeDetails) { try { unsubscribeDetails(); } catch(_) {} unsubscribeDetails = null; }
-      }
+
       // Open details and keep them synced via onSnapshot
       async function openDetails(assignmentId){
-  // stop any previous listener (if user opened another card)
-  if (unsubscribeDetails) { try { unsubscribeDetails(); } catch(_) {} unsubscribeDetails = null; }
+        if (unsubscribeDetails) { try { unsubscribeDetails(); } catch(_) {} unsubscribeDetails = null; }
 
-  // small helper to (re)render the modal from a doc snapshot
-  const render = async (snap) => {
-    if (!snap.exists) { alert('Assignment not found'); return; }
-    const d = snap.data() || {};
-    const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
-    const perSite = d.perSite || {};
+        const render = async (snap) => {
+          if (!snap.exists) { alert('Assignment not found'); return; }
+          const d = snap.data() || {};
+          const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
+          const perSite = d.perSite || {};
 
-    // header
-    modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
-    const total = siteIds.length;
-    const completed = siteIds.filter(id => (perSite[id]?.status || '').toLowerCase() === 'completed').length;
+          modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
 
-    metaBox.innerHTML = `
-      <div><strong>${completed}/${total}</strong> completed</div>
-      ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
-      ${d.status ? `<div>Overall: ${badge(d.status)}</div>` : ''}
-      ${d.startedAt ? `<div>Started: ${fmt(d.startedAt).split(',')[0]}</div>` : ''}
-    `;
+          const total = siteIds.length;
+          const completed = siteIds.filter(id => (perSite[id]?.status || '').toLowerCase() === 'completed').length;
+          metaBox.innerHTML = `
+            <div><strong>${completed}/${total}</strong> completed</div>
+            ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
+            ${d.status ? `<div>Overall: ${badge(d.status)}</div>` : ''}
+            ${d.startedAt ? `<div>Started: ${fmt(d.startedAt).split(',')[0]}</div>` : ''}
+          `;
 
-    // open-in-map now includes ?task= so AssignedParks can write to this doc
-    const focusCsv = siteIds.join(',');
-    openMapBtn.href = focusCsv
-      ? `AssignedParks.html?focus=${encodeURIComponent(focusCsv)}&task=${encodeURIComponent(snap.id)}`
-      : '#';
+          // IMPORTANT: include ?task=
+          const focusCsv = siteIds.join(',');
+          openMapBtn.href = focusCsv
+            ? `AssignedParks.html?focus=${encodeURIComponent(focusCsv)}&task=${encodeURIComponent(snap.id)}`
+            : '#';
 
-    // load permanent notes for these sites (once per render)
-    const permNotes = await loadParkNotes(siteIds);
+          const permNotes = await loadParkNotes(siteIds);
 
-    // rows
-    sitesBox.innerHTML = '';
-    siteIds.forEach(id => {
-      const s = (perSite[id]?.status || 'assigned').toLowerCase();
-      const opNote = (perSite[id]?.note || '').trim();
-      const completedAt = perSite[id]?.completedAt || null;
-      const perm = (permNotes[id] || '').trim();
+          sitesBox.innerHTML = '';
+          siteIds.forEach(id => {
+            const s = (perSite[id]?.status || 'assigned').toLowerCase();
+            const opNote = (perSite[id]?.note || '').trim();
+            const completedAt = perSite[id]?.completedAt || null;
+            const perm = (permNotes[id] || '').trim();
 
-      const row = document.createElement('div');
-      row.className = 'site-row';
+            const row = document.createElement('div');
+            row.className = 'site-row';
 
-      const left = document.createElement('div');
-      left.innerHTML = `<strong>${id}</strong><div class="sub">${badge(s)}</div>`;
+            const left = document.createElement('div');
+            left.innerHTML = `<strong>${id}</strong><div class="sub">${badge(s)}</div>`;
 
-      const mid = document.createElement('div');
-      let notesHtml = '';
-      if (opNote) notesHtml += `<div class="note" style="border-left-color:#2563eb">Operator: ${escapeHtml(opNote)}</div>`;
-      if (perm)   notesHtml += `<div class="note">Permanent: ${escapeHtml(perm)}</div>`;
-      if (!notesHtml) notesHtml = `<div class="sub">No notes</div>`;
-      mid.innerHTML = notesHtml;
+            const mid = document.createElement('div');
+            let notesHtml = '';
+            if (opNote) notesHtml += `<div class="note" style="border-left-color:#2563eb">Operator: ${escapeHtml(opNote)}</div>`;
+            if (perm)   notesHtml += `<div class="note">Permanent: ${escapeHtml(perm)}</div>`;
+            if (!notesHtml) notesHtml = `<div class="sub">No notes</div>`;
+            mid.innerHTML = notesHtml;
 
-      const right = document.createElement('div');
-      right.className = 'right sub';
-      right.textContent = completedAt ? `Completed: ${fmt(completedAt).split(',')[0]}` : '';
+            const right = document.createElement('div');
+            right.className = 'right sub';
+            right.textContent = completedAt ? `Completed: ${fmt(completedAt).split(',')[0]}` : '';
 
-      row.appendChild(left);
-      row.appendChild(mid);
-      row.appendChild(right);
-      sitesBox.appendChild(row);
-    });
-
-    showModal();
-  };
-
-  // start live listener
-  unsubscribeDetails = db.collection('assignments').doc(assignmentId)
-    .onSnapshot(render, err => alert('Failed to load details: ' + (err.message||err)));
-}
-            showModal();
-          }, (err) => {
-            console.warn('modal snapshot error:', err);
-            alert('Failed to load details: ' + (err.message||err));
+            row.appendChild(left);
+            row.appendChild(mid);
+            row.appendChild(right);
+            sitesBox.appendChild(row);
           });
 
-        }catch(e){
-          alert('Failed to load details: ' + (e.message||e));
-        }
+          showModal();
+        };
+
+        unsubscribeDetails = db.collection('assignments').doc(assignmentId)
+          .onSnapshot(render, err => alert('Failed to load details: ' + (err.message||err)));
       }
 
       // Basic HTML escaper
