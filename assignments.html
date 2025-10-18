@@ -92,7 +92,7 @@
       .site-row .right{ grid-column: 1 / -1 }
     }
     .note{
-      font-size:13px; color:#334155; background:#f8fafc; border:1px solid #e2e8f0; border-left:3px solid var(--accent);
+      font-size:13px; color:#334155; background:#f8fafc; border:1px solid #e2e8f0; border-left:3px solid --accent;
       border-radius:8px; padding:8px 10px; white-space:pre-wrap;
     }
     .sub{ color:#64748b; font-size:12px }
@@ -209,41 +209,65 @@
       return byId;
     }
 
-    /* ---------- NEW: latest logs helper (spliced) ---------- */
-    async function loadLatestWorkLogs(siteIds, assignment) {
+    /* ---------- NEW: robust logs helper (spliced) ---------- */
+    function _pick(obj, names){ for (const n of names){ if (obj && obj[n] !== undefined) return obj[n]; } return undefined; }
+    function _toMillis(ts){
+      if (!ts) return 0;
+      if (typeof ts?.toMillis === 'function') return ts.toMillis();
+      if (ts?.toDate && ts.toDate() instanceof Date) return ts.toDate().getTime();
+      if (ts instanceof Date) return ts.getTime();
+      return Number(ts) || 0;
+    }
+
+    async function loadLatestWorkLogs(siteIds, assignment, assignmentId) {
       if (!siteIds || !siteIds.length) return {};
-      const ids = Array.from(new Set(siteIds.map(s => String(s).toUpperCase())));
+      const siteSet = new Set(siteIds.map(s => String(s).toUpperCase()));
       const byId = {};
-      const chunk = 10;
+      let snap = null;
 
-      const opUid = assignment?.userId || null;
-      const startedAt = assignment?.startedAt || null;
+      // 1) Try by assignment id with several possible field names
+      const candidateAssignFields = ['assignmentId','assignment','taskId','assignment_id'];
+      for (const f of candidateAssignFields) {
+        try {
+          const trySnap = await db.collection('work_logs').where(f, '==', assignmentId).get();
+          if (!trySnap.empty) { snap = trySnap; break; }
+        } catch(_) {}
+      }
 
-      for (let i = 0; i < ids.length; i += chunk) {
-        const batch = ids.slice(i, i + chunk);
-        let q = db.collection('work_logs').where('siteId', 'in', batch);
+      // 2) Fallback: operatorUid + startedAt range
+      if (!snap || snap.empty) {
+        let q = db.collection('work_logs');
+        const opUid = assignment?.userId || assignment?.operatorUid || null;
+        const startedAt = assignment?.startedAt || null;
         if (opUid) q = q.where('operatorUid', '==', opUid);
         if (startedAt) q = q.where('timestamp', '>=', startedAt);
-
-        const snap = await q.get();
-        snap.forEach(doc => {
-          const w = doc.data() || {};
-          const sid = String(w.siteId || '').toUpperCase();
-          if (!sid) return;
-          const t =
-            (w.completedAt?.toMillis?.() ?? w.timestamp?.toMillis?.() ??
-             w.createdAt?.toMillis?.() ?? 0);
-          const prev = byId[sid];
-          if (!prev || t > prev._t) {
-            byId[sid] = {
-              status: (w.status || 'completed').toLowerCase(),
-              note: (w.note || '').trim(),
-              completedAt: w.completedAt || w.timestamp || w.createdAt || null,
-              _t: t
-            };
-          }
-        });
+        snap = await q.get();
       }
+
+      // 3) Reduce to latest per site, accepting alternate field names
+      snap.forEach(doc => {
+        const w = doc.data() || {};
+        const sidRaw = _pick(w, ['siteId','site','parkId','sid']);
+        if (!sidRaw) return;
+        const sid = String(sidRaw).toUpperCase();
+        if (!siteSet.has(sid)) return;
+
+        const status = String(_pick(w, ['status','state','siteStatus']) || '').toLowerCase();
+        const note   = String(_pick(w, ['note','notes','operatorNote','comment']) || '').trim();
+        const time   = _pick(w, ['completedAt','updatedAt','timestamp','createdAt','doneAt']);
+        const tms    = _toMillis(time);
+
+        const prev = byId[sid];
+        if (!prev || tms > prev._t) {
+          byId[sid] = {
+            status: status || 'completed',
+            note,
+            completedAt: time || null,
+            _t: tms
+          };
+        }
+      });
+
       return byId;
     }
 
@@ -340,8 +364,8 @@
         const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
         const perSite = d.perSite || {};
 
-        // NEW: also load latest operator logs
-        const latestLogs = await loadLatestWorkLogs(siteIds, d);
+        // NEW: also load latest operator logs (pass assignmentId)
+        const latestLogs = await loadLatestWorkLogs(siteIds, d, assignmentId);
 
         modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
 
@@ -426,8 +450,8 @@
         const siteIds = (d.siteIds || []).map(s => String(s).toUpperCase());
         const perSite = d.perSite || {};
 
-        // NEW: fetch latest logs to merge for the PDF too
-        const latestLogs = await loadLatestWorkLogs(siteIds, d);
+        // NEW: fetch latest logs with assignmentId
+        const latestLogs = await loadLatestWorkLogs(siteIds, d, assignmentId);
 
         const doc = new jsPDF({ unit:'pt', format:'a4' });
         const marginL = 56, startY = 64, lineH = 18;
@@ -495,4 +519,3 @@
   </script>
 </body>
 </html>
-
