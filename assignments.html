@@ -139,12 +139,11 @@
   <div id="detailsBackdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true">
     <div class="modal">
       <header>
-        <h3 id="modalTitle">Assignment details</h3>
-        <div style="display:flex; align-items:center; gap:8px">
-          <!-- NEW: report button -->
-          <button id="reportBtn" class="btn">Download report</button>
-          <a id="openMapBtn" class="btn btn-red" href="#" target="_blank" rel="noopener">Open in map</a>
-          <button class="close" id="closeModalBtn">Close</button>
+         <h3 id="modalTitle">Assignment details</h3>
+  <div style="display:flex; align-items:center; gap:8px">
+    <button id="downloadPdfBtn" class="btn">Download report</button>
+    <a id="openMapBtn" class="btn btn-red" href="#" target="_blank" rel="noopener">Open in map</a>
+    <button class="close" id="closeModalBtn">Close</button>
         </div>
       </header>
       <div class="body">
@@ -291,6 +290,7 @@
       // Open details and keep them synced via onSnapshot
       async function openDetails(assignmentId){
         if (unsubscribeDetails) { try{unsubscribeDetails();}catch(_){ } unsubscribeDetails = null; }
+        if (window._setDownloadHandler) window._setDownloadHandler(assignmentId);
 
         const render = async (snap) => {
           if (!snap.exists) { alert('Assignment not found'); return; }
@@ -470,11 +470,89 @@
       /* ---------- end PDF export ---------- */
 
     })();
-  </script>
+<script>
+  // jsPDF handle for UMD build you’re loading
+  const _jsPDF = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : (window.jsPDF || null);
 
-  <!-- NEW: jsPDF for the report -->
-  <!-- jsPDF (no SRI; simplest fix) -->
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  async function downloadReport(assignmentId) {
+    if (!_jsPDF) { alert('PDF library not loaded'); return; }
+
+    // 1) Load the latest assignment doc
+    const snap = await firebase.firestore().collection('assignments').doc(assignmentId).get();
+    if (!snap.exists) { alert('Assignment not found'); return; }
+    const d = snap.data() || {};
+
+    const ids = (d.siteIds || []).map(s => String(s).toUpperCase());
+    const perSite = d.perSite || {};
+
+    // 2) Prepare header values
+    const overall = (d.status || 'assigned').replace('_',' ');
+    const completedCount = ids.filter(id => (perSite[id]?.status || '').toLowerCase() === 'completed').length;
+    const startedStr = d.startedAt?.toDate ? d.startedAt.toDate().toLocaleDateString() : '—';
+
+    // 3) Build PDF
+    const pdf = new _jsPDF({ unit: 'pt', format: 'a4' });
+    const left = 60; let y = 70; const right = 535;
+
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(18);
+    pdf.text(`${d.userName || 'Operator'} — ${d.zone || 'Task'}`, left, y); y += 22;
+
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(11);
+    pdf.text(`Overall: ${overall}   •   Completed: ${completedCount}/${ids.length}   •   Started: ${startedStr}`, left, y); y += 12;
+
+    y += 12; pdf.setLineWidth(1); pdf.line(left, y, right, y); y += 16;
+
+    // Header row
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Site',          left,        y);
+    pdf.text('Status',        left + 120,  y);
+    pdf.text('Completed',     left + 220,  y);
+    pdf.text('Operator note', left + 320,  y);
+    y += 6; pdf.setLineWidth(0.5); pdf.line(left, y, right, y); y += 12;
+    pdf.setFont('helvetica', 'normal');
+
+    // Helper for paging
+    function newPageIfNeeded(rowHeight = 16) {
+      if (y + rowHeight > 792 - 40) { // bottom of A4 minus margin
+        pdf.addPage(); y = 60;
+      }
+    }
+
+    // 4) Rows (read from perSite for each id)
+    ids.forEach(id => {
+      const status = (perSite[id]?.status || 'assigned').replace('_', ' ');
+      const completedAt = perSite[id]?.completedAt?.toDate?.();
+      const completedStr = completedAt ? completedAt.toLocaleDateString() : '-';
+      const note = (perSite[id]?.note || '').trim() || '-';
+
+      const wrapped = pdf.splitTextToSize(note, 200);
+      const rowHeight = Math.max(14, wrapped.length * 12);
+
+      newPageIfNeeded(rowHeight + 10);
+
+      pdf.text(id,            left,        y);
+      pdf.text(status,        left + 120,  y);
+      pdf.text(completedStr,  left + 220,  y);
+      wrapped.forEach((ln, i) => pdf.text(ln, left + 320, y + i * 12));
+
+      y += rowHeight;
+      pdf.setDrawColor(240); pdf.line(left, y + 4, right, y + 4); y += 10;
+    });
+
+    const fname = `${(d.userName || 'assignment')}_${(d.zone || 'report')}.pdf`;
+    pdf.save(fname);
+  }
+
+  // Wire the button when opening the modal
+  (function hookDownloadButton(){
+    const btn = document.getElementById('downloadPdfBtn') || document.getElementById('downloadReportBtn');
+    if (!btn) return;
+    // expose a function you call inside openDetails
+    window._setDownloadHandler = (assignmentId) => {
+      btn.onclick = () => downloadReport(assignmentId);
+    };
+  })();
+</script>
 
 </body>
 </html>
