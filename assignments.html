@@ -174,7 +174,7 @@
     /* ---------- helpers ---------- */
     const fmt = (ts) => {
       if(!ts) return '';
-      const d = ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+      const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
       return d ? d.toLocaleString() : '';
     };
     const badge = (status) => {
@@ -186,11 +186,12 @@
     const escapeHtml = (s) =>
       String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
+    // tolerant key lookup (M0123 / m0123 / 0123)
     function getPerSiteForId(perSite, rawId){
       if (!perSite) return undefined;
-      const idU = String(rawId).toUpperCase();       // e.g. M0123
-      const idL = idU.toLowerCase();                 // e.g. m0123
-      const noM = idU.replace(/^M/, '');             // e.g. 0123
+      const idU = String(rawId).toUpperCase();
+      const idL = idU.toLowerCase();
+      const noM = idU.replace(/^M/, '');
       return perSite[idU] ?? perSite[idL] ?? perSite[noM];
     }
 
@@ -209,15 +210,15 @@
       return byId;
     }
 
-    /* ---------- NEW: latest logs helper (spliced) ---------- */
+    /* ---------- NEW: pull latest operator logs per site ---------- */
     async function loadLatestWorkLogs(siteIds, assignment) {
       if (!siteIds || !siteIds.length) return {};
       const ids = Array.from(new Set(siteIds.map(s => String(s).toUpperCase())));
       const byId = {};
       const chunk = 10;
 
-      const opUid = assignment?.userId || null;
-      const startedAt = assignment?.startedAt || null;
+      const opUid = assignment?.userId || assignment?.assigneeUid || null;
+      const startedAt = assignment?.startedAt || assignment?.createdAt || null;
 
       for (let i = 0; i < ids.length; i += chunk) {
         const batch = ids.slice(i, i + chunk);
@@ -255,7 +256,7 @@
       const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
       const perSite = d.perSite || {};
       const total = siteIds.length;
-      const completed = siteIds.filter(id => (perSite[id]?.status||'').toLowerCase()==='completed').length;
+      const completed = siteIds.filter(id => (getPerSiteForId(perSite,id)?.status||'').toLowerCase()==='completed').length;
 
       const el = document.createElement('div');
       el.className = 'card';
@@ -328,6 +329,7 @@
 
     let unsubscribeDetails = null;
     let latestDocData = null; // keep for PDF
+    let latestLogsCache = null;
 
     async function openDetails(assignmentId){
       if (unsubscribeDetails) { try { unsubscribeDetails(); } catch(_) {} unsubscribeDetails = null; }
@@ -340,15 +342,15 @@
         const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
         const perSite = d.perSite || {};
 
-        // NEW: also load latest operator logs
-        const latestLogs = await loadLatestWorkLogs(siteIds, d);
+        // Load latest operator logs per site (once per snapshot)
+        latestLogsCache = await loadLatestWorkLogs(siteIds, d);
 
         modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
 
         // Completed count using merged status
         const mergedCompleted = siteIds.filter(id => {
           const ps = getPerSiteForId(perSite, id) || {};
-          const lg = latestLogs[id] || {};
+          const lg = latestLogsCache[id] || {};
           return ((ps.status || lg.status || '').toLowerCase() === 'completed');
         }).length;
         const total = siteIds.length;
@@ -370,7 +372,7 @@
         sitesBox.innerHTML = '';
         siteIds.forEach(id => {
           const ps = getPerSiteForId(perSite, id) || {};
-          const lg = latestLogs[id] || {};
+          const lg = latestLogsCache[id] || {};
 
           const status = (ps.status || lg.status || 'assigned').toLowerCase();
           const opNote = (ps.note ?? lg.note ?? '').trim();
@@ -409,13 +411,13 @@
       downloadBtn.onclick = () => downloadReport(assignmentId);
     }
 
-    /* ---------- PDF report (spliced merge) ---------- */
+    /* ---------- PDF report (merged perSite + work_logs) ---------- */
     async function downloadReport(assignmentId){
       try{
         const { jsPDF } = window.jspdf || {};
         if (!jsPDF) { alert('PDF library not loaded'); return; }
 
-        // Use already-cached doc if possible
+        // Use cached doc if possible
         let d = latestDocData;
         if (!d) {
           const snap = await db.collection('assignments').doc(assignmentId).get();
@@ -426,15 +428,15 @@
         const siteIds = (d.siteIds || []).map(s => String(s).toUpperCase());
         const perSite = d.perSite || {};
 
-        // NEW: fetch latest logs to merge for the PDF too
-        const latestLogs = await loadLatestWorkLogs(siteIds, d);
+        // Use cached latest logs if available; otherwise load
+        const latestLogs = latestLogsCache || await loadLatestWorkLogs(siteIds, d);
 
         const doc = new jsPDF({ unit:'pt', format:'a4' });
         const marginL = 56, startY = 64, lineH = 18;
 
         const _fmt = (ts) => {
           if(!ts) return '';
-          const dt = ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+          const dt = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
           return dt ? dt.toLocaleString() : '';
         };
 
