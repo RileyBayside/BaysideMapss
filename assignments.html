@@ -6,7 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="logo.png" type="image/png" />
 
-  <!-- Type & base styles (same feel as your dashboard/delegate) -->
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 
@@ -99,7 +98,7 @@
     .sub{ color:#64748b; font-size:12px }
   </style>
 
-  <!-- Tiny pills for the modal -->
+  <!-- Tiny pills for the modal rows -->
   <style>
     .assign-site-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:10px;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:8px;background:#fff}
     .assign-site-row .sid{font-weight:800}
@@ -139,11 +138,11 @@
   <div id="detailsBackdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true">
     <div class="modal">
       <header>
-         <h3 id="modalTitle">Assignment details</h3>
-  <div style="display:flex; align-items:center; gap:8px">
-    <button id="downloadPdfBtn" class="btn">Download report</button>
-    <a id="openMapBtn" class="btn btn-red" href="#" target="_blank" rel="noopener">Open in map</a>
-    <button class="close" id="closeModalBtn">Close</button>
+        <h3 id="modalTitle">Assignment details</h3>
+        <div style="display:flex; align-items:center; gap:8px">
+          <button id="downloadBtn" class="btn">Download report</button>
+          <a id="openMapBtn" class="btn btn-red" href="#" target="_blank" rel="noopener">Open in map</a>
+          <button class="close" id="closeModalBtn">Close</button>
         </div>
       </header>
       <div class="body">
@@ -153,407 +152,261 @@
     </div>
   </div>
 
+  <!-- jsPDF (no integrity attr to avoid SRI mismatch on some CDNs) -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
   <script>
-    (function(){
-      const db = firebase.firestore();
+  (function(){
+    const db = firebase.firestore();
 
-      // Header email + logout
-      const emailEl = document.getElementById('userEmail');
-      const logoutBtn = document.getElementById('logoutBtn');
-      firebase.auth().onAuthStateChanged(u => {
-        if(!u){ location.href = 'login.html'; return; }
-        emailEl.textContent = u.email || 'Signed in';
-      });
-      logoutBtn.addEventListener('click', async () => {
-        try { await firebase.auth().signOut(); } catch(_) {}
-        location.replace('login.html');
-      });
+    /* ---------- header auth ---------- */
+    const emailEl  = document.getElementById('userEmail');
+    const logoutBtn = document.getElementById('logoutBtn');
+    firebase.auth().onAuthStateChanged(u => {
+      if(!u){ location.href = 'login.html'; return; }
+      emailEl.textContent = u.email || 'Signed in';
+    });
+    logoutBtn.addEventListener('click', async () => {
+      try { await firebase.auth().signOut(); } catch(_) {}
+      location.replace('login.html');
+    });
 
-      // Helpers
-      const fmt = (ts) => {
-        if(!ts) return '';
-        const d = ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
-        return d ? d.toLocaleString() : '';
-      };
-      const badge = (status) => {
-        const s = (status||'assigned').toLowerCase();
-        const map = { assigned:'pill-amber', 'in_progress':'pill-gray', completed:'pill-green' };
-        const txt = s.replace('_',' ');
-        return `<span class="pill ${map[s]||'pill-gray'}">${txt.charAt(0).toUpperCase()+txt.slice(1)}</span>`;
-      };
+    /* ---------- helpers ---------- */
+    const fmt = (ts) => {
+      if(!ts) return '';
+      const d = ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+      return d ? d.toLocaleString() : '';
+    };
+    const badge = (status) => {
+      const s = (status||'assigned').toLowerCase();
+      const map = { assigned:'pill-amber', 'in_progress':'pill-gray', completed:'pill-green' };
+      const txt = s.replace('_',' ');
+      return `<span class="pill ${map[s]||'pill-gray'}">${txt.charAt(0).toUpperCase()+txt.slice(1)}</span>`;
+    };
+    const escapeHtml = (s) =>
+      String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
-      // Load parkNotes for a set of siteIds (chunked 'in' queries)
-      async function loadParkNotes(siteIds){
-        if(!siteIds || !siteIds.length) return {};
-        const ids = Array.from(new Set(siteIds.map(s=>String(s).toUpperCase())));
-        const byId = {};
-        const chunk = 10; // Firestore 'in' max
-        for(let i=0;i<ids.length;i+=chunk){
-          const batch = ids.slice(i, i+chunk);
-          const snap = await db.collection('parkNotes')
-            .where(firebase.firestore.FieldPath.documentId(), 'in', batch)
-            .get();
-          snap.forEach(doc => byId[doc.id.toUpperCase()] = (doc.data()||{}).note || '');
-        }
-        return byId;
+    async function loadParkNotes(siteIds){
+      if(!siteIds || !siteIds.length) return {};
+      const ids = Array.from(new Set(siteIds.map(s=>String(s).toUpperCase())));
+      const byId = {};
+      const chunk = 10;
+      for(let i=0;i<ids.length;i+=chunk){
+        const batch = ids.slice(i, i+chunk);
+        const snap = await db.collection('parkNotes')
+          .where(firebase.firestore.FieldPath.documentId(), 'in', batch)
+          .get();
+        snap.forEach(doc => byId[doc.id.toUpperCase()] = (doc.data()||{}).note || '');
       }
+      return byId;
+    }
 
-      // Render all assignments (admin)
-      const listEl = document.getElementById('assignments');
+    /* ---------- list (admin) ---------- */
+    const listEl = document.getElementById('assignments');
 
-      function renderAssignmentCard(doc){
-        const d = doc.data() || {};
+    function renderAssignmentCard(doc){
+      const d = doc.data() || {};
+      const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
+      const perSite = d.perSite || {};
+      const total = siteIds.length;
+      const completed = siteIds.filter(id => (perSite[id]?.status||'').toLowerCase()==='completed').length;
+
+      const el = document.createElement('div');
+      el.className = 'card';
+
+      const title = document.createElement('h3');
+      title.textContent = (d.userName || 'Operator') + (d.zone ? ` · ${d.zone}` : '');
+      el.appendChild(title);
+
+      const meta = document.createElement('div');
+      meta.className = 'kvs';
+      meta.innerHTML = `
+        <div><strong>${completed}/${total}</strong> completed</div>
+        ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
+        ${d.status ? `<div>Status: ${badge(d.status)}</div>` : ''}
+      `;
+      el.appendChild(meta);
+
+      const row = document.createElement('div');
+      row.className = 'row';
+
+      const muted = document.createElement('div');
+      muted.className = 'muted';
+      muted.textContent = siteIds.length ? siteIds.join(', ') : '—';
+      row.appendChild(muted);
+
+      const openBtn = document.createElement('button');
+      openBtn.className = 'btn btn-red';
+      openBtn.textContent = 'View details';
+      openBtn.addEventListener('click', () => openDetails(doc.id));
+      row.appendChild(openBtn);
+
+      el.appendChild(row);
+      return el;
+    }
+
+    db.collection('assignments').onSnapshot(snap => {
+      listEl.innerHTML = '';
+      if (snap.empty){
+        const c = document.createElement('div');
+        c.className = 'card';
+        c.innerHTML = '<div class="muted">No assignments yet.</div>';
+        listEl.appendChild(c);
+        return;
+      }
+      const docs = [];
+      snap.forEach(doc => docs.push(doc));
+      docs.sort((a,b)=>{
+        const ad = a.data().dueDate?.toDate?.() ?? 0;
+        const bd = b.data().dueDate?.toDate?.() ?? 0;
+        return ad - bd;
+      });
+      docs.forEach(doc => listEl.appendChild(renderAssignmentCard(doc)));
+    }, err => {
+      listEl.innerHTML = `<div class="card"><div class="muted" style="color:#b91c1c">Failed to load assignments: ${err.message||err}</div></div>`;
+    });
+
+    /* ---------- modal (live) ---------- */
+    const backdrop   = document.getElementById('detailsBackdrop');
+    const closeBtn   = document.getElementById('closeModalBtn');
+    const modalTitle = document.getElementById('modalTitle');
+    const metaBox    = document.getElementById('assignmentMeta');
+    const sitesBox   = document.getElementById('sitesList');
+    const openMapBtn = document.getElementById('openMapBtn');
+    const downloadBtn= document.getElementById('downloadBtn');
+
+    function showModal(){ backdrop.classList.add('show'); backdrop.setAttribute('aria-hidden','false'); }
+    function hideModal(){ backdrop.classList.remove('show'); backdrop.setAttribute('aria-hidden','true'); }
+    closeBtn.addEventListener('click', hideModal);
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) hideModal(); });
+
+    let unsubscribeDetails = null;
+    let latestDocData = null; // keep for PDF
+
+    async function openDetails(assignmentId){
+      if (unsubscribeDetails) { try { unsubscribeDetails(); } catch(_) {} unsubscribeDetails = null; }
+
+      const render = async (snap) => {
+        if (!snap.exists) { alert('Assignment not found'); return; }
+        const d = snap.data() || {};
+        latestDocData = d;
+
         const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
         const perSite = d.perSite || {};
+
+        modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
         const total = siteIds.length;
-        let completed = 0;
-        siteIds.forEach(id => { if ((perSite[id]?.status||'').toLowerCase()==='completed') completed++; });
+        const completed = siteIds.filter(id => (perSite[id]?.status || '').toLowerCase() === 'completed').length;
 
-        const el = document.createElement('div');
-        el.className = 'card';
-
-        const title = document.createElement('h3');
-        title.textContent = (d.userName || 'Operator') + (d.zone ? ` · ${d.zone}` : '');
-        el.appendChild(title);
-
-        const meta = document.createElement('div');
-        meta.className = 'kvs';
-        meta.innerHTML = `
+        metaBox.innerHTML = `
           <div><strong>${completed}/${total}</strong> completed</div>
           ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
-          ${d.status ? `<div>Status: ${badge(d.status)}</div>` : ''}
+          ${d.status ? `<div>Overall: ${badge(d.status)}</div>` : ''}
+          ${d.startedAt ? `<div>Started: ${fmt(d.startedAt).split(',')[0]}</div>` : ''}
         `;
-        el.appendChild(meta);
 
-        const row = document.createElement('div');
-        row.className = 'row';
+        const focusCsv = siteIds.join(',');
+        openMapBtn.href = focusCsv
+          ? `AssignedParks.html?focus=${encodeURIComponent(focusCsv)}&task=${encodeURIComponent(snap.id)}`
+          : '#';
 
-        const muted = document.createElement('div');
-        muted.className = 'muted';
-        muted.textContent = siteIds.length ? siteIds.join(', ') : '—';
-        row.appendChild(muted);
+        const permNotes = await loadParkNotes(siteIds);
 
-        const openBtn = document.createElement('button');
-        openBtn.className = 'btn btn-red';
-        openBtn.textContent = 'View details';
-        openBtn.addEventListener('click', () => openDetails(doc.id));
-        row.appendChild(openBtn);
+        sitesBox.innerHTML = '';
+        siteIds.forEach(id => {
+          const s = (perSite[id]?.status || 'assigned').toLowerCase();
+          const opNote = (perSite[id]?.note || '').trim();
+          const completedAt = perSite[id]?.completedAt || null;
+          const perm = (permNotes[id] || '').trim();
 
-        el.appendChild(row);
-        return el;
-      }
+          const row = document.createElement('div');
+          row.className = 'site-row';
 
-      // Live feed (admins only, per rules)
-      db.collection('assignments').onSnapshot(snap => {
-        listEl.innerHTML = '';
-        if (snap.empty){
-          const c = document.createElement('div');
-          c.className = 'card';
-          c.innerHTML = '<div class="muted">No assignments yet.</div>';
-          listEl.appendChild(c);
-          return;
-        }
-        const docs = [];
-        snap.forEach(doc => docs.push(doc));
-        // sort by dueDate asc
-        docs.sort((a,b)=>{
-          const ad = a.data().dueDate?.toDate?.() ?? 0;
-          const bd = b.data().dueDate?.toDate?.() ?? 0;
-          return ad - bd;
+          const left = document.createElement('div');
+          left.innerHTML = `<strong>${id}</strong><div class="sub">${badge(s)}</div>`;
+
+          const mid = document.createElement('div');
+          let notesHtml = '';
+          if (opNote) notesHtml += `<div class="note" style="border-left-color:#2563eb">Operator: ${escapeHtml(opNote)}</div>`;
+          if (perm)   notesHtml += `<div class="note">Permanent: ${escapeHtml(perm)}</div>`;
+          if (!notesHtml) notesHtml = `<div class="sub">No notes</div>`;
+          mid.innerHTML = notesHtml;
+
+          const right = document.createElement('div');
+          right.className = 'right sub';
+          right.textContent = completedAt ? `Completed: ${fmt(completedAt).split(',')[0]}` : '';
+
+          row.appendChild(left);
+          row.appendChild(mid);
+          row.appendChild(right);
+          sitesBox.appendChild(row);
         });
-        docs.forEach(doc => listEl.appendChild(renderAssignmentCard(doc)));
-      }, err => {
-        listEl.innerHTML = `<div class="card"><div class="muted" style="color:#b91c1c">Failed to load assignments: ${err.message||err}</div></div>`;
-      });
 
-      /* ---------------- Modal: per-park details (LIVE) ---------------- */
+        showModal();
+      };
 
-      const backdrop   = document.getElementById('detailsBackdrop');
-      const closeBtn   = document.getElementById('closeModalBtn');
-      const modalTitle = document.getElementById('modalTitle');
-      const metaBox    = document.getElementById('assignmentMeta');
-      const sitesBox   = document.getElementById('sitesList');
-      const openMapBtn = document.getElementById('openMapBtn');
-      const reportBtn  = document.getElementById('reportBtn');   // NEW
+      unsubscribeDetails = db.collection('assignments').doc(assignmentId)
+        .onSnapshot(render, err => alert('Failed to load details: ' + (err.message||err)));
 
-      let unsubscribeDetails = null;
-      let lastRenderCache = null; // NEW: hold data for PDF (assignment + rows)
+      // wire report button to the current assignment id
+      downloadBtn.onclick = () => downloadReport(assignmentId);
+    }
 
-      function showModal(){ backdrop.classList.add('show'); backdrop.setAttribute('aria-hidden','false'); }
-      function hideModal(){
-        backdrop.classList.remove('show'); backdrop.setAttribute('aria-hidden','true');
-        if (unsubscribeDetails) { try{unsubscribeDetails();}catch(_){ } unsubscribeDetails = null; }
-      }
-      closeBtn.addEventListener('click', hideModal);
-      backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) hideModal(); });
+    /* ---------- PDF report ---------- */
+    async function downloadReport(assignmentId){
+      try{
+        const { jsPDF } = window.jspdf || {};
+        if (!jsPDF) { alert('PDF library not loaded'); return; }
 
-      // Open details and keep them synced via onSnapshot
-      async function openDetails(assignmentId){
-        if (unsubscribeDetails) { try{unsubscribeDetails();}catch(_){ } unsubscribeDetails = null; }
-        if (window._setDownloadHandler) window._setDownloadHandler(assignmentId);
+        const snap = await db.collection('assignments').doc(assignmentId).get();
+        if (!snap.exists) { alert('Assignment missing'); return; }
+        const d = snap.data() || {};
+        const siteIds = (d.siteIds || []).map(s => String(s).toUpperCase());
+        const perSite = d.perSite || {};
 
-        const render = async (snap) => {
-          if (!snap.exists) { alert('Assignment not found'); return; }
-          const d = snap.data() || {};
-          const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
-          const perSite = d.perSite || {};
-
-          modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
-
-          const total = siteIds.length;
-          const completed = siteIds.filter(id => (perSite[id]?.status || '').toLowerCase() === 'completed').length;
-
-          metaBox.innerHTML = `
-            <div><strong>${completed}/${total}</strong> completed</div>
-            ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
-            ${d.status ? `<div>Overall: ${badge(d.status)}</div>` : ''}
-            ${d.startedAt ? `<div>Started: ${fmt(d.startedAt).split(',')[0]}</div>` : ''}
-          `;
-
-          const focusCsv = siteIds.join(',');
-          openMapBtn.href = focusCsv
-            ? `AssignedParks.html?focus=${encodeURIComponent(focusCsv)}&task=${encodeURIComponent(snap.id)}`
-            : '#';
-
-          const permNotes = await loadParkNotes(siteIds);
-
-          // Render rows
-          sitesBox.innerHTML = '';
-          const rows = []; // NEW: cache rows for PDF
-          siteIds.forEach(id => {
-            const s = (perSite[id]?.status || 'assigned').toLowerCase();
-            const opNote = (perSite[id]?.note || '').trim();
-            const completedAt = perSite[id]?.completedAt || null;
-            const perm = (permNotes[id] || '').trim();
-
-            const row = document.createElement('div');
-            row.className = 'site-row';
-
-            const left = document.createElement('div');
-            left.innerHTML = `<strong>${id}</strong><div class="sub">${badge(s)}</div>`;
-
-            const mid = document.createElement('div');
-            let notesHtml = '';
-            if (opNote) notesHtml += `<div class="note" style="border-left-color:#2563eb">Operator: ${escapeHtml(opNote)}</div>`;
-            if (perm)   notesHtml += `<div class="note">Permanent: ${escapeHtml(perm)}</div>`;
-            if (!notesHtml) notesHtml = `<div class="sub">No notes</div>`;
-            mid.innerHTML = notesHtml;
-
-            const right = document.createElement('div');
-            right.className = 'right sub';
-            right.textContent = completedAt ? `Completed: ${fmt(completedAt).split(',')[0]}` : '';
-
-            row.appendChild(left);
-            row.appendChild(mid);
-            row.appendChild(right);
-            sitesBox.appendChild(row);
-
-            // NEW: push to rows cache
-            rows.push({
-              id,
-              status: s,
-              opNote,
-              permNote: perm,
-              completedAt: completedAt ? fmt(completedAt).split(',')[0] : ''
-            });
-          });
-
-          // NEW: keep snapshot needed for report
-          lastRenderCache = {
-            assignmentId: snap.id,
-            userName: d.userName || 'Operator',
-            zone: d.zone || 'Task',
-            due: d.dueDate ? fmt(d.dueDate).split(',')[0] : '',
-            started: d.startedAt ? fmt(d.startedAt).split(',')[0] : '',
-            overall: d.status || 'assigned',
-            completed, total,
-            rows
-          };
-
-          showModal();
-        };
-
-        unsubscribeDetails = db.collection('assignments').doc(assignmentId)
-          .onSnapshot(render, err => alert('Failed to load details: ' + (err.message||err)));
-      }
-
-      // Basic HTML escaper
-      function escapeHtml(s){
-        return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-      }
-
-      /* ---------- NEW: simple PDF export of the current modal ---------- */
-      reportBtn.addEventListener('click', () => {
-        if (!lastRenderCache) { alert('Open an assignment first.'); return; }
-        if (!window.jspdf)    { alert('PDF library not loaded.');  return; }
-
-        const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ unit:'pt', format:'a4' });
+        const marginL = 56, startY = 64, lineH = 18;
 
-        const padX = 40;
-        let y = 48;
+        doc.setFont('helvetica','bold'); doc.setFontSize(18);
+        doc.text(`${d.userName || 'Operator'} — ${d.zone || 'Task'}`, marginL, startY);
+        doc.setFont('helvetica','normal'); doc.setFontSize(12);
+        const total = siteIds.length;
+        const completed = siteIds.filter(id => (perSite[id]?.status || '').toLowerCase() === 'completed').length;
+        doc.text(`Overall: ${(d.status||'in_progress')}   •   Completed: ${completed}/${total}   •   Started: ${d.startedAt ? fmt(d.startedAt).split(',')[0] : '-'}`, marginL, startY + 22);
+
+        let y = startY + 48;
+        const header = ['Site','Status','Completed','Operator note'];
+        const widths = [100,110,100,280];
 
         doc.setFont('helvetica','bold');
-        doc.setFontSize(16);
-        doc.text(`${lastRenderCache.userName} — ${lastRenderCache.zone}`, padX, y);
+        header.forEach((h,i)=> doc.text(h, marginL + widths.slice(0,i).reduce((a,b)=>a+b,0), y));
+        doc.setLineWidth(0.6); doc.line(marginL, y+6, marginL + widths.reduce((a,b)=>a+b,0), y+6);
         y += 20;
 
         doc.setFont('helvetica','normal');
-        doc.setFontSize(11);
-        const meta = [
-          `Overall: ${lastRenderCache.overall}`,
-          `Completed: ${lastRenderCache.completed}/${lastRenderCache.total}`,
-          lastRenderCache.started ? `Started: ${lastRenderCache.started}` : '',
-          lastRenderCache.due ? `Due: ${lastRenderCache.due}` : ''
-        ].filter(Boolean).join('   •   ');
-        doc.text(meta, padX, y);
-        y += 24;
+        for(const id of siteIds){
+          const ps = perSite[id] || {};
+          const status = (ps.status || 'assigned').toLowerCase();
+          const completedAt = ps.completedAt ? fmt(ps.completedAt).split(',')[0] : '-';
+          const note = (ps.note || '').trim() || '-';
 
-        // Header line
-        doc.setLineWidth(0.5);
-        doc.line(padX, y, 555, y);
-        y += 14;
+          const cols = [id, status, completedAt, note];
+          cols.forEach((val,i) => {
+            const x = marginL + widths.slice(0,i).reduce((a,b)=>a+b,0);
+            doc.text(String(val), x, y, { maxWidth: widths[i]-6 });
+          });
+          y += lineH;
+          if (y > 780) { doc.addPage(); y = 56; }
+        }
 
-        // Table headers
-        doc.setFont('helvetica','bold');
-        doc.text('Site', padX, y);
-        doc.text('Status', padX+90, y);
-        doc.text('Completed', padX+170, y);
-        doc.text('Operator note', padX+260, y);
-        y += 10;
-        doc.setLineWidth(0.2);
-        doc.line(padX, y, 555, y);
-        y += 12;
-
-        doc.setFont('helvetica','normal');
-
-        const lineHeight = 14;
-        const wrapWidth  = 555 - (padX+260);
-
-        const addRow = (r) => {
-          // page break if needed
-          if (y > 770) { doc.addPage(); y = 48; }
-
-          doc.text(r.id, padX, y);
-          doc.text(r.status.replace('_',' '), padX+90, y);
-          doc.text(r.completedAt || '-', padX+170, y);
-
-          // wrap operator note
-          const note = r.opNote || '';
-          const wrapped = doc.splitTextToSize(note, wrapWidth);
-          doc.text(wrapped.length ? wrapped : ['—'], padX+260, y);
-
-          // advance by the number of wrapped lines
-          y += Math.max(lineHeight, wrapped.length * lineHeight) + 6;
-
-          // permanent note (if any) as a faint line beneath
-          if (r.permNote) {
-            const permWrapped = doc.splitTextToSize(`Permanent: ${r.permNote}`, wrapWidth);
-            doc.setTextColor(90);
-            doc.text(permWrapped, padX+260, y);
-            doc.setTextColor(0);
-            y += permWrapped.length * lineHeight + 6;
-          }
-
-          // row divider
-          doc.setLineWidth(0.2);
-          doc.setDrawColor(220);
-          doc.line(padX, y, 555, y);
-          y += 10;
-        };
-
-        lastRenderCache.rows.forEach(addRow);
-
-        const filename = `${lastRenderCache.userName.replace(/\s+/g,'_')}-${lastRenderCache.zone.replace(/\s+/g,'_')}.pdf`;
+        const filename = `${(d.userName || 'operator').toLowerCase().replace(/\s+/g,'-')}-${(d.zone||'task').toLowerCase().replace(/\s+/g,'-')}.pdf`;
         doc.save(filename);
-      });
-      /* ---------- end PDF export ---------- */
-
-    })();
-<script>
-  // jsPDF handle for UMD build you’re loading
-  const _jsPDF = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : (window.jsPDF || null);
-
-  async function downloadReport(assignmentId) {
-    if (!_jsPDF) { alert('PDF library not loaded'); return; }
-
-    // 1) Load the latest assignment doc
-    const snap = await firebase.firestore().collection('assignments').doc(assignmentId).get();
-    if (!snap.exists) { alert('Assignment not found'); return; }
-    const d = snap.data() || {};
-
-    const ids = (d.siteIds || []).map(s => String(s).toUpperCase());
-    const perSite = d.perSite || {};
-
-    // 2) Prepare header values
-    const overall = (d.status || 'assigned').replace('_',' ');
-    const completedCount = ids.filter(id => (perSite[id]?.status || '').toLowerCase() === 'completed').length;
-    const startedStr = d.startedAt?.toDate ? d.startedAt.toDate().toLocaleDateString() : '—';
-
-    // 3) Build PDF
-    const pdf = new _jsPDF({ unit: 'pt', format: 'a4' });
-    const left = 60; let y = 70; const right = 535;
-
-    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(18);
-    pdf.text(`${d.userName || 'Operator'} — ${d.zone || 'Task'}`, left, y); y += 22;
-
-    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(11);
-    pdf.text(`Overall: ${overall}   •   Completed: ${completedCount}/${ids.length}   •   Started: ${startedStr}`, left, y); y += 12;
-
-    y += 12; pdf.setLineWidth(1); pdf.line(left, y, right, y); y += 16;
-
-    // Header row
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Site',          left,        y);
-    pdf.text('Status',        left + 120,  y);
-    pdf.text('Completed',     left + 220,  y);
-    pdf.text('Operator note', left + 320,  y);
-    y += 6; pdf.setLineWidth(0.5); pdf.line(left, y, right, y); y += 12;
-    pdf.setFont('helvetica', 'normal');
-
-    // Helper for paging
-    function newPageIfNeeded(rowHeight = 16) {
-      if (y + rowHeight > 792 - 40) { // bottom of A4 minus margin
-        pdf.addPage(); y = 60;
+      }catch(e){
+        alert('Failed to generate report: ' + (e.message||e));
       }
     }
 
-    // 4) Rows (read from perSite for each id)
-    ids.forEach(id => {
-      const status = (perSite[id]?.status || 'assigned').replace('_', ' ');
-      const completedAt = perSite[id]?.completedAt?.toDate?.();
-      const completedStr = completedAt ? completedAt.toLocaleDateString() : '-';
-      const note = (perSite[id]?.note || '').trim() || '-';
-
-      const wrapped = pdf.splitTextToSize(note, 200);
-      const rowHeight = Math.max(14, wrapped.length * 12);
-
-      newPageIfNeeded(rowHeight + 10);
-
-      pdf.text(id,            left,        y);
-      pdf.text(status,        left + 120,  y);
-      pdf.text(completedStr,  left + 220,  y);
-      wrapped.forEach((ln, i) => pdf.text(ln, left + 320, y + i * 12));
-
-      y += rowHeight;
-      pdf.setDrawColor(240); pdf.line(left, y + 4, right, y + 4); y += 10;
-    });
-
-    const fname = `${(d.userName || 'assignment')}_${(d.zone || 'report')}.pdf`;
-    pdf.save(fname);
-  }
-
-  // Wire the button when opening the modal
-  (function hookDownloadButton(){
-    const btn = document.getElementById('downloadPdfBtn') || document.getElementById('downloadReportBtn');
-    if (!btn) return;
-    // expose a function you call inside openDetails
-    window._setDownloadHandler = (assignmentId) => {
-      btn.onclick = () => downloadReport(assignmentId);
-    };
   })();
-</script>
-
+  </script>
 </body>
 </html>
-
