@@ -98,6 +98,17 @@
     }
     .sub{ color:#64748b; font-size:12px }
   </style>
+
+  <!-- Tiny pills for the modal (matches previous guidance) -->
+  <style>
+    .assign-site-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:10px;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:8px;background:#fff}
+    .assign-site-row .sid{font-weight:800}
+    .assign-site-row .note{font-size:13px;color:#64748b;margin-top:4px}
+    .pill.assigned{background:#fee2e2;border:1px solid #fecaca;color:#7f1d1d}
+    .pill.in_progress{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412}
+    .pill.completed{background:#ecfdf5;border:1px solid #bbf7d0;color:#065f46}
+  </style>
+
 </head>
 <body>
 
@@ -255,7 +266,7 @@
         listEl.innerHTML = `<div class="card"><div class="muted" style="color:#b91c1c">Failed to load assignments: ${err.message||err}</div></div>`;
       });
 
-      /* ---------------- Modal: per-park details ---------------- */
+      /* ---------------- Modal: per-park details (LIVE) ---------------- */
 
       const backdrop = document.getElementById('detailsBackdrop');
       const closeBtn = document.getElementById('closeModalBtn');
@@ -264,65 +275,89 @@
       const sitesBox = document.getElementById('sitesList');
       const openMapBtn = document.getElementById('openMapBtn');
 
+      let currentUnsub = null;
+
       function showModal(){ backdrop.classList.add('show'); backdrop.setAttribute('aria-hidden','false'); }
-      function hideModal(){ backdrop.classList.remove('show'); backdrop.setAttribute('aria-hidden','true'); }
+      function hideModal(){
+        backdrop.classList.remove('show'); backdrop.setAttribute('aria-hidden','true');
+        if (typeof currentUnsub === 'function') { currentUnsub(); currentUnsub = null; }
+      }
       closeBtn.addEventListener('click', hideModal);
       backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) hideModal(); });
 
+      // Open details and keep them synced via onSnapshot
       async function openDetails(assignmentId){
         try{
-          const doc = await db.collection('assignments').doc(assignmentId).get();
-          if(!doc.exists){ alert('Assignment not found'); return; }
-          const d = doc.data() || {};
-          const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
-          const perSite = d.perSite || {};
+          if (typeof currentUnsub === 'function') { currentUnsub(); currentUnsub = null; }
 
-          modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
-          metaBox.innerHTML = `
-            ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
-            ${d.status ? `<div>Overall: ${badge(d.status)}</div>` : ''}
-            ${d.startedAt ? `<div>Started: ${fmt(d.startedAt).split(',')[0]}</div>` : ''}
-          `;
+          const docRef = db.collection('assignments').doc(assignmentId);
+          currentUnsub = docRef.onSnapshot(async (doc) => {
+            if(!doc.exists){ return; }
+            const d = doc.data() || {};
+            const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
+            // numeric-ish order: M0123 < M0343
+            siteIds.sort((x,y)=>x.localeCompare(y, undefined, {numeric:true, sensitivity:'base'}));
+            const perSite = d.perSite || {};
 
-          // Open in map for these IDs
-          const focusCsv = siteIds.join(',');
-          openMapBtn.href = focusCsv ? `AssignedParks.html?focus=${encodeURIComponent(focusCsv)}` : '#';
+            modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
 
-          // Load permanent notes for these sites
-          const permNotes = await loadParkNotes(siteIds);
+            const total = siteIds.length;
+            const completed = siteIds.reduce((acc,id)=>acc + ((perSite[id]?.status||'').toLowerCase()==='completed' ? 1 : 0), 0);
 
-          // Build rows
-          sitesBox.innerHTML = '';
-          siteIds.forEach(id => {
-            const s = (perSite[id]?.status || 'assigned').toLowerCase();
-            const opNote = (perSite[id]?.note || '').trim();
-            const completedAt = perSite[id]?.completedAt || null;
-            const perm = (permNotes[id] || '').trim();
+            metaBox.innerHTML = `
+              <div><strong>${completed}/${total}</strong> completed</div>
+              ${d.status ? `<div>Overall: ${badge(d.status)}</div>` : ''}
+              ${d.startedAt ? `<div>Started: ${fmt(d.startedAt).split(',')[0]}</div>` : ''}
+              ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
+            `;
 
-            const row = document.createElement('div');
-            row.className = 'site-row';
+            // Open in map for these IDs and keep linkage to this assignment
+            const focusCsv = siteIds.join(',');
+            openMapBtn.href = focusCsv
+              ? `AssignedParks.html?focus=${encodeURIComponent(focusCsv)}&task=${encodeURIComponent(doc.id)}`
+              : '#';
 
-            const left = document.createElement('div');
-            left.innerHTML = `<strong>${id}</strong><div class="sub">${badge(s)}</div>`;
+            // Permanent notes (one fetch; OK if it re-runs on updates)
+            const permNotes = await loadParkNotes(siteIds);
 
-            const mid = document.createElement('div');
-            let notesHtml = '';
-            if (opNote) notesHtml += `<div class="note" style="border-left-color:#2563eb">Operator: ${escapeHtml(opNote)}</div>`;
-            if (perm)   notesHtml += `<div class="note">Permanent: ${escapeHtml(perm)}</div>`;
-            if (!notesHtml) notesHtml = `<div class="sub">No notes</div>`;
-            mid.innerHTML = notesHtml;
+            // Build rows
+            sitesBox.innerHTML = '';
+            siteIds.forEach(id => {
+              const ps = perSite[id] || {};
+              const s = (ps.status || 'assigned').toLowerCase();
+              const opNote = (ps.note || '').trim();
+              const perm = (permNotes[id] || '').trim();
+              const completedAt = ps.completedAt || null;
 
-            const right = document.createElement('div');
-            right.className = 'right sub';
-            right.textContent = completedAt ? `Completed: ${fmt(completedAt).split(',')[0]}` : '';
+              const row = document.createElement('div');
+              row.className = 'site-row';
 
-            row.appendChild(left);
-            row.appendChild(mid);
-            row.appendChild(right);
-            sitesBox.appendChild(row);
+              const left = document.createElement('div');
+              left.innerHTML = `<strong>${id}</strong><div class="sub">${badge(s)}</div>`;
+
+              const mid = document.createElement('div');
+              let notesHtml = '';
+              if (opNote) notesHtml += `<div class="note" style="border-left-color:#2563eb">Operator: ${escapeHtml(opNote)}</div>`;
+              if (perm)   notesHtml += `<div class="note">Permanent: ${escapeHtml(perm)}</div>`;
+              if (!notesHtml) notesHtml = `<div class="sub">No notes</div>`;
+              mid.innerHTML = notesHtml;
+
+              const right = document.createElement('div');
+              right.className = 'right sub';
+              right.textContent = completedAt ? `Completed: ${fmt(completedAt).split(',')[0]}` : '';
+
+              row.appendChild(left);
+              row.appendChild(mid);
+              row.appendChild(right);
+              sitesBox.appendChild(row);
+            });
+
+            showModal();
+          }, (err) => {
+            console.warn('modal snapshot error:', err);
+            alert('Failed to load details: ' + (err.message||err));
           });
 
-          showModal();
         }catch(e){
           alert('Failed to load details: ' + (e.message||e));
         }
