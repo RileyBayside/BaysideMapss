@@ -186,6 +186,15 @@
     const escapeHtml = (s) =>
       String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
+    
+    function getPerSiteForId(perSite, rawId){
+    if (!perSite) return undefined;
+    const idU = String(rawId).toUpperCase();       // e.g. M0123
+    const idL = idU.toLowerCase();                 // e.g. m0123
+    const noM = idU.replace(/^M/, '');             // e.g. 0123
+    return perSite[idU] ?? perSite[idL] ?? perSite[noM];
+  }
+
     async function loadParkNotes(siteIds){
       if(!siteIds || !siteIds.length) return {};
       const ids = Array.from(new Set(siteIds.map(s=>String(s).toUpperCase())));
@@ -354,57 +363,86 @@
 
     /* ---------- PDF report ---------- */
     async function downloadReport(assignmentId){
-      try{
-        const { jsPDF } = window.jspdf || {};
-        if (!jsPDF) { alert('PDF library not loaded'); return; }
+    try{
+      const { jsPDF } = window.jspdf || {};
+      if (!jsPDF) { alert('PDF library not loaded'); return; }
 
+      // Use the same data the modal already rendered, fall back to fetching once.
+      let d = latestDocData;
+      if (!d) {
         const snap = await db.collection('assignments').doc(assignmentId).get();
         if (!snap.exists) { alert('Assignment missing'); return; }
-        const d = snap.data() || {};
-        const siteIds = (d.siteIds || []).map(s => String(s).toUpperCase());
-        const perSite = d.perSite || {};
-
-        const doc = new jsPDF({ unit:'pt', format:'a4' });
-        const marginL = 56, startY = 64, lineH = 18;
-
-        doc.setFont('helvetica','bold'); doc.setFontSize(18);
-        doc.text(`${d.userName || 'Operator'} — ${d.zone || 'Task'}`, marginL, startY);
-        doc.setFont('helvetica','normal'); doc.setFontSize(12);
-        const total = siteIds.length;
-        const completed = siteIds.filter(id => (perSite[id]?.status || '').toLowerCase() === 'completed').length;
-        doc.text(`Overall: ${(d.status||'in_progress')}   •   Completed: ${completed}/${total}   •   Started: ${d.startedAt ? fmt(d.startedAt).split(',')[0] : '-'}`, marginL, startY + 22);
-
-        let y = startY + 48;
-        const header = ['Site','Status','Completed','Operator note'];
-        const widths = [100,110,100,280];
-
-        doc.setFont('helvetica','bold');
-        header.forEach((h,i)=> doc.text(h, marginL + widths.slice(0,i).reduce((a,b)=>a+b,0), y));
-        doc.setLineWidth(0.6); doc.line(marginL, y+6, marginL + widths.reduce((a,b)=>a+b,0), y+6);
-        y += 20;
-
-        doc.setFont('helvetica','normal');
-        for(const id of siteIds){
-          const ps = perSite[id] || {};
-          const status = (ps.status || 'assigned').toLowerCase();
-          const completedAt = ps.completedAt ? fmt(ps.completedAt).split(',')[0] : '-';
-          const note = (ps.note || '').trim() || '-';
-
-          const cols = [id, status, completedAt, note];
-          cols.forEach((val,i) => {
-            const x = marginL + widths.slice(0,i).reduce((a,b)=>a+b,0);
-            doc.text(String(val), x, y, { maxWidth: widths[i]-6 });
-          });
-          y += lineH;
-          if (y > 780) { doc.addPage(); y = 56; }
-        }
-
-        const filename = `${(d.userName || 'operator').toLowerCase().replace(/\s+/g,'-')}-${(d.zone||'task').toLowerCase().replace(/\s+/g,'-')}.pdf`;
-        doc.save(filename);
-      }catch(e){
-        alert('Failed to generate report: ' + (e.message||e));
+        d = snap.data() || {};
       }
+
+      const siteIds = (d.siteIds || []).map(s => String(s).toUpperCase());
+      const perSite = d.perSite || {};
+
+      // Debug — this will help us confirm what keys we actually have
+      console.log('[PDF] siteIds:', siteIds);
+      console.log('[PDF] perSite keys:', Object.keys(perSite || {}));
+
+      const doc = new jsPDF({ unit:'pt', format:'a4' });
+      const marginL = 56, startY = 64, lineH = 18;
+
+      const fmt = (ts) => {
+        if(!ts) return '';
+        const dt = ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+        return dt ? dt.toLocaleString() : '';
+      };
+
+      const total = siteIds.length;
+      const completed = siteIds.filter(id => {
+        const ps = getPerSiteForId(perSite, id) || {};
+        return (ps.status || '').toLowerCase() === 'completed';
+      }).length;
+
+      // Header
+      doc.setFont('helvetica','bold'); doc.setFontSize(18);
+      doc.text(`${d.userName || 'Operator'} — ${d.zone || 'Task'}`, marginL, startY);
+      doc.setFont('helvetica','normal'); doc.setFontSize(12);
+      doc.text(
+        `Overall: ${(d.status||'in_progress')}   •   Completed: ${completed}/${total}   •   Started: ${d.startedAt ? fmt(d.startedAt).split(',')[0] : '-'}`,
+        marginL, startY + 22
+      );
+
+      // Table header
+      let y = startY + 48;
+      const header = ['Site','Status','Completed','Operator note'];
+      const widths = [100,110,100,280];
+
+      doc.setFont('helvetica','bold');
+      header.forEach((h,i)=> doc.text(h, marginL + widths.slice(0,i).reduce((a,b)=>a+b,0), y));
+      doc.setLineWidth(0.6); doc.line(marginL, y+6, marginL + widths.reduce((a,b)=>a+b,0), y+6);
+      y += 20;
+
+      // Rows
+      doc.setFont('helvetica','normal');
+      for (const id of siteIds){
+        const ps = getPerSiteForId(perSite, id) || {};
+        const status      = (ps.status || 'assigned').toLowerCase();
+        const completedAt = ps.completedAt ? fmt(ps.completedAt).split(',')[0] : '-';
+        const note        = (ps.note || '').trim() || '-';
+
+        // Debug each row we render
+        console.log('[PDF] row', id, { status, completedAt, noteFromPerSite: ps.note });
+
+        const cols = [id, status, completedAt, note];
+        cols.forEach((val,i) => {
+          const x = marginL + widths.slice(0,i).reduce((a,b)=>a+b,0);
+          doc.text(String(val), x, y, { maxWidth: widths[i]-6 });
+        });
+        y += lineH;
+        if (y > 780) { doc.addPage(); y = 56; }
+      }
+
+      const filename = `${(d.userName || 'operator').toLowerCase().replace(/\s+/g,'-')}-${(d.zone||'task').toLowerCase().replace(/\s+/g,'-')}.pdf`;
+      doc.save(filename);
+    }catch(e){
+      alert('Failed to generate report: ' + (e.message||e));
+      console.error(e);
     }
+  }
 
   })();
   </script>
