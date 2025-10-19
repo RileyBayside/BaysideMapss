@@ -44,7 +44,7 @@
     .action{ display:inline-flex; align-items:center; justify-content:center; padding:9px 12px; border-radius:10px; font-weight:800; text-decoration:none; color:#fff; background:var(--accent) }
     .action:hover{ background:var(--accent-600) }
 
-    /* Work cards (you already use these styles elsewhere) */
+    /* Work cards */
     .cards-row{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px }
     .work-card{ text-decoration:none; color:inherit; background:#fff; border:1px solid var(--muted); border-radius:16px; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 8px 26px rgba(16,24,40,.08) }
     .work-card__img img{ width:100%; height:220px; object-fit:cover; background:#e2e8f0; display:block }
@@ -129,9 +129,10 @@
         <h3>Generate reports</h3>
         <p>Build PDFs (same options as your sidebar PDF actions).</p>
         <div class="actions">
-          <a class="action" href="reports.html?type=mowing">Mowing PDF</a>
-          <a class="action" href="reports.html?type=snipping">Snipping PDF</a>
-          <a class="action" href="reports.html?type=firebreaks">Firebreaks PDF</a>
+          <!-- changed: these now trigger Parks* pages with ?autopdf=bayside -->
+          <a class="action" href="#" role="button" onclick="openSidebarReport('bayside','mowing')">Mowing PDF</a>
+          <a class="action" href="#" role="button" onclick="openSidebarReport('bayside','snipping')">Snipping PDF</a>
+          <a class="action" href="#" role="button" onclick="openSidebarReport('bayside','firebreaks')">Firebreaks PDF</a>
           <a class="action" href="reports.html?type=daily">Daily summary</a>
         </div>
       </div>
@@ -319,6 +320,39 @@
         }
       }
     })();
+  </script>
+
+  <!-- NEW: helper to open Parks* pages and auto-run the sidebar PDF -->
+  <script>
+    /**
+     * Open the correct map page with ?autopdf=<kind> so its sidebar.js
+     * generates the PDF automatically.
+     *
+     * @param {'bayside'|'council'} kind
+     * @param {'mowing'|'snipping'|'firebreaks'} area
+     */
+    function openSidebarReport(kind = 'bayside', area = 'mowing'){
+      const byArea = {
+        mowing:    ["ParksMowing.html", "parksmowing.html"],
+        snipping:  ["ParksSnipping.html", "parkssnipping.html"],
+        firebreaks:["Firebreaks.html", "firebreaks.html"]
+      };
+      const candidates = byArea[area] || byArea.mowing;
+      const qs = `?autopdf=${encodeURIComponent(kind)}`;
+
+      (async () => {
+        for (const f of candidates){
+          try {
+            const res = await fetch(f, { method: 'HEAD' });
+            if (res.ok) {
+              window.open(`${f}${qs}`, '_blank', 'noopener');
+              return;
+            }
+          } catch (_) { /* try next */ }
+        }
+        alert("Couldn't find the target page. Check the filename/casing or adjust the helper.");
+      })();
+    }
   </script>
 </body>
 </html>
