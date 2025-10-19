@@ -188,9 +188,9 @@
 
     function getPerSiteForId(perSite, rawId){
       if (!perSite) return undefined;
-      const idU = String(rawId).toUpperCase();       // e.g. M0123
-      const idL = idU.toLowerCase();                 // e.g. m0123
-      const noM = idU.replace(/^M/, '');             // e.g. 0123
+      const idU = String(rawId).toUpperCase();
+      const idL = idU.toLowerCase();
+      const noM = idU.replace(/^M/, '');
       return perSite[idU] ?? perSite[idL] ?? perSite[noM];
     }
 
@@ -247,7 +247,74 @@
       return byId;
     }
 
-    /* ---------- chip updater (NEW) ---------- */
+    /* ---------- REAL-TIME chip listeners (NEW) ---------- */
+    const chipUnsubs = new Map(); // assignmentId -> Array<unsubscribe>
+
+    function detachAllChipListeners(){
+      chipUnsubs.forEach(arr => arr.forEach(fn => { try{ fn(); }catch(_){} }));
+      chipUnsubs.clear();
+    }
+    function detachChipListener(id){
+      const arr = chipUnsubs.get(id);
+      if (arr) { arr.forEach(fn => { try{ fn(); }catch(_){} }); chipUnsubs.delete(id); }
+    }
+
+    function attachChipListener(assignmentId, assignmentData, chipEl){
+      detachChipListener(assignmentId);
+      if (!chipEl) return;
+
+      const siteIds = (assignmentData.siteIds || []).map(s=>String(s).toUpperCase());
+      const perSite = assignmentData.perSite || {};
+      const total = siteIds.length;
+      if (!total) { chipEl.textContent = '0/0'; return; }
+
+      const latest = {};           // sid -> {status, _t}
+      const unsubs = [];
+      const chunk = 10;
+
+      function recompute(){
+        let completed = 0;
+        for (const id of siteIds){
+          const ps = getPerSiteForId(perSite, id) || {};
+          const lg = latest[id] || {};
+          const st = (ps.status || lg.status || '').toLowerCase();
+          if (st === 'completed') completed++;
+        }
+        chipEl.textContent = `${completed}/${total}`;
+      }
+
+      // initial populate using current fetch, then live updates will override progressively
+      recompute();
+
+      for (let i=0;i<siteIds.length;i+=chunk){
+        const batch = siteIds.slice(i, i+chunk);
+        let q = db.collection('work_logs').where('siteId','in',batch);
+        if (assignmentData?.userId) q = q.where('operatorUid','==', assignmentData.userId);
+        if (assignmentData?.startedAt) q = q.where('timestamp','>=', assignmentData.startedAt);
+
+        const unsub = q.onSnapshot(snap=>{
+          snap.docChanges().forEach(ch=>{
+            const w = ch.doc.data() || {};
+            const sid = String(w.siteId||'').toUpperCase();
+            if (!sid) return;
+            const t = (w.completedAt?.toMillis?.() ?? w.timestamp?.toMillis?.() ?? w.createdAt?.toMillis?.() ?? 0);
+            const prev = latest[sid];
+            if (!prev || t > prev._t){
+              latest[sid] = {
+                status: (w.status || 'completed').toLowerCase(),
+                _t: t
+              };
+            }
+          });
+          recompute();
+        }, err => console.warn('chip listener error:', err));
+
+        unsubs.push(unsub);
+      }
+      chipUnsubs.set(assignmentId, unsubs);
+    }
+
+    /* ---------- chip updater (non-live baseline) ---------- */
     async function updateCompletionChip(assignmentData, chipEl){
       try{
         if (!chipEl) return;
@@ -277,7 +344,7 @@
       if (!second) return;
       try{
         await db.collection('assignments').doc(assignmentId).delete();
-        // onSnapshot will refresh the list
+        detachChipListener(assignmentId);
       }catch(e){
         alert('Failed to delete: ' + (e.message || e.code || e));
       }
@@ -328,14 +395,18 @@
 
       el.appendChild(row);
 
-      // NEW: update the completion chip using latest work_logs
+      // Baseline fill + live listener
       const chip = meta.querySelector('.comp-chip');
       updateCompletionChip(d, chip);
+      attachChipListener(doc.id, d, chip);
 
       return el;
     }
 
     db.collection('assignments').onSnapshot(snap => {
+      // Rebuild → clear previous listeners
+      detachAllChipListeners();
+
       listEl.innerHTML = '';
       if (snap.empty){
         const c = document.createElement('div');
@@ -531,3 +602,4 @@
   </script>
 </body>
 </html>
+
