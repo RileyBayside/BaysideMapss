@@ -174,7 +174,7 @@
     /* ---------- helpers ---------- */
     const fmt = (ts) => {
       if(!ts) return '';
-      const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+      const d = ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
       return d ? d.toLocaleString() : '';
     };
     const badge = (status) => {
@@ -186,12 +186,11 @@
     const escapeHtml = (s) =>
       String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
-    // tolerant key lookup (M0123 / m0123 / 0123)
     function getPerSiteForId(perSite, rawId){
       if (!perSite) return undefined;
-      const idU = String(rawId).toUpperCase();
-      const idL = idU.toLowerCase();
-      const noM = idU.replace(/^M/, '');
+      const idU = String(rawId).toUpperCase();       // e.g. M0123
+      const idL = idU.toLowerCase();                 // e.g. m0123
+      const noM = idU.replace(/^M/, '');             // e.g. 0123
       return perSite[idU] ?? perSite[idL] ?? perSite[noM];
     }
 
@@ -210,15 +209,15 @@
       return byId;
     }
 
-    /* ---------- NEW: pull latest operator logs per site ---------- */
+    /* ---------- latest logs helper ---------- */
     async function loadLatestWorkLogs(siteIds, assignment) {
       if (!siteIds || !siteIds.length) return {};
       const ids = Array.from(new Set(siteIds.map(s => String(s).toUpperCase())));
       const byId = {};
       const chunk = 10;
 
-      const opUid = assignment?.userId || assignment?.assigneeUid || null;
-      const startedAt = assignment?.startedAt || assignment?.createdAt || null;
+      const opUid = assignment?.userId || null;
+      const startedAt = assignment?.startedAt || null;
 
       for (let i = 0; i < ids.length; i += chunk) {
         const batch = ids.slice(i, i + chunk);
@@ -251,12 +250,27 @@
     /* ---------- list (admin) ---------- */
     const listEl = document.getElementById('assignments');
 
+    // NEW: delete helper (admin-only per your security rules)
+    async function deleteAssignment(assignmentId, labelText){
+      const label = labelText || 'this task';
+      const first = confirm(`Delete assignment: ${label}?\n\nThis will remove the task and its per-site progress from Firestore.`);
+      if (!first) return;
+      const second = confirm('Are you sure? This action cannot be undone here.');
+      if (!second) return;
+      try{
+        await db.collection('assignments').doc(assignmentId).delete();
+        // onSnapshot will auto-refresh the list
+      }catch(e){
+        alert('Failed to delete: ' + (e.message || e.code || e));
+      }
+    }
+
     function renderAssignmentCard(doc){
       const d = doc.data() || {};
       const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
       const perSite = d.perSite || {};
       const total = siteIds.length;
-      const completed = siteIds.filter(id => (getPerSiteForId(perSite,id)?.status||'').toLowerCase()==='completed').length;
+      const completed = siteIds.filter(id => (perSite[id]?.status||'').toLowerCase()==='completed').length;
 
       const el = document.createElement('div');
       el.className = 'card';
@@ -287,6 +301,13 @@
       openBtn.textContent = 'View details';
       openBtn.addEventListener('click', () => openDetails(doc.id));
       row.appendChild(openBtn);
+
+      // NEW: Delete task button
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn';
+      delBtn.textContent = 'Delete task';
+      delBtn.addEventListener('click', () => deleteAssignment(doc.id, title.textContent));
+      row.appendChild(delBtn);
 
       el.appendChild(row);
       return el;
@@ -329,7 +350,6 @@
 
     let unsubscribeDetails = null;
     let latestDocData = null; // keep for PDF
-    let latestLogsCache = null;
 
     async function openDetails(assignmentId){
       if (unsubscribeDetails) { try { unsubscribeDetails(); } catch(_) {} unsubscribeDetails = null; }
@@ -342,15 +362,15 @@
         const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
         const perSite = d.perSite || {};
 
-        // Load latest operator logs per site (once per snapshot)
-        latestLogsCache = await loadLatestWorkLogs(siteIds, d);
+        // also load latest operator logs
+        const latestLogs = await loadLatestWorkLogs(siteIds, d);
 
         modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
 
         // Completed count using merged status
         const mergedCompleted = siteIds.filter(id => {
           const ps = getPerSiteForId(perSite, id) || {};
-          const lg = latestLogsCache[id] || {};
+          const lg = latestLogs[id] || {};
           return ((ps.status || lg.status || '').toLowerCase() === 'completed');
         }).length;
         const total = siteIds.length;
@@ -372,7 +392,7 @@
         sitesBox.innerHTML = '';
         siteIds.forEach(id => {
           const ps = getPerSiteForId(perSite, id) || {};
-          const lg = latestLogsCache[id] || {};
+          const lg = latestLogs[id] || {};
 
           const status = (ps.status || lg.status || 'assigned').toLowerCase();
           const opNote = (ps.note ?? lg.note ?? '').trim();
@@ -411,13 +431,13 @@
       downloadBtn.onclick = () => downloadReport(assignmentId);
     }
 
-    /* ---------- PDF report (merged perSite + work_logs) ---------- */
+    /* ---------- PDF report (merge) ---------- */
     async function downloadReport(assignmentId){
       try{
         const { jsPDF } = window.jspdf || {};
         if (!jsPDF) { alert('PDF library not loaded'); return; }
 
-        // Use cached doc if possible
+        // Use already-cached doc if possible
         let d = latestDocData;
         if (!d) {
           const snap = await db.collection('assignments').doc(assignmentId).get();
@@ -428,15 +448,15 @@
         const siteIds = (d.siteIds || []).map(s => String(s).toUpperCase());
         const perSite = d.perSite || {};
 
-        // Use cached latest logs if available; otherwise load
-        const latestLogs = latestLogsCache || await loadLatestWorkLogs(siteIds, d);
+        // fetch latest logs to merge for the PDF too
+        const latestLogs = await loadLatestWorkLogs(siteIds, d);
 
         const doc = new jsPDF({ unit:'pt', format:'a4' });
         const marginL = 56, startY = 64, lineH = 18;
 
         const _fmt = (ts) => {
           if(!ts) return '';
-          const dt = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+          const dt = ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
           return dt ? dt.toLocaleString() : '';
         };
 
