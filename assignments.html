@@ -247,68 +247,65 @@
       return byId;
     }
 
-    /* ---------- live completion pill (simple, by assignmentId) ---------- */
-    const liveCounters = {}; // assignmentId -> unsubscribe
+    /* ---------- live completion pill (no assignmentId needed) ---------- */
+    const liveCounters = {}; // assignmentId -> teardown
 
-// Live counter that does NOT require assignmentId on logs
-const liveCounters = {}; // assignmentId -> teardown function
+    // Live counter that listens by siteId in chunks and merges newest status per site
+    function attachLiveCompletionCounter(assignmentId, assignmentData, chipEl){
+      if (!chipEl) return;
 
-function attachLiveCompletionCounter(assignmentId, assignmentData, chipEl){
-  if (!chipEl) return;
+      // tear down any existing listener(s) for this card
+      if (liveCounters[assignmentId]) { try{ liveCounters[assignmentId](); }catch(_){} }
 
-  // Tear down any previous listeners for this card
-  if (liveCounters[assignmentId]) { try{ liveCounters[assignmentId](); }catch(_){} }
+      const siteIds = (assignmentData.siteIds || []).map(s=>String(s).toUpperCase());
+      const perSite = assignmentData.perSite || {};
 
-  const siteIds = (assignmentData.siteIds || []).map(s=>String(s).toUpperCase());
-  const perSite = assignmentData.perSite || {};
-  const total   = siteIds.length;
+      // newest status seen per site
+      const latest = {}; // { [sid]: {status, _t} }
 
-  // Keep newest status we’ve seen per site
-  const latest = {}; // { [sid]: {status, _t} }
-
-  // Helper to recompute the displayed number
-  function recompute(){
-    let done = 0;
-    for (const sid of siteIds){
-      const ps = (perSite[sid] || perSite[sid?.toLowerCase?.()] || perSite[sid?.replace?.(/^M/,'')]) || {};
-      const st = (latest[sid]?.status || ps.status || '').toLowerCase();
-      if (st === 'completed') done++;
-    }
-    chipEl.textContent = String(done);
-  }
-
-  // Show baseline from perSite while listeners spin up
-  recompute();
-
-  // Build live listeners in chunks of 10 siteIds
-  const unsubs = [];
-  const chunk = 10;
-
-  for (let i = 0; i < siteIds.length; i += chunk){
-    const batch = siteIds.slice(i, i+chunk);
-    let q = firebase.firestore().collection('work_logs').where('siteId','in', batch);
-    if (assignmentData?.userId)   q = q.where('operatorUid','==', assignmentData.userId);
-    if (assignmentData?.startedAt) q = q.where('timestamp','>=', assignmentData.startedAt);
-
-    const unsub = q.onSnapshot(snap => {
-      snap.docChanges().forEach(ch => {
-        const w   = ch.doc.data() || {};
-        const sid = String(w.siteId || '').toUpperCase();
-        if (!sid) return;
-        const t = (w.completedAt?.toMillis?.() ?? w.timestamp?.toMillis?.() ?? w.createdAt?.toMillis?.() ?? 0);
-        if (!latest[sid] || t > latest[sid]._t){
-          latest[sid] = { status: (w.status || 'completed').toLowerCase(), _t: t };
+      // recompute the displayed "done" number
+      function recompute(){
+        let done = 0;
+        for (const sid of siteIds){
+          const ps = (getPerSiteForId(perSite, sid) || {});
+          const st = (latest[sid]?.status || ps.status || '').toLowerCase();
+          if (st === 'completed') done++;
         }
-      });
+        chipEl.textContent = String(done);
+      }
+
+      // show baseline while listeners spin up
       recompute();
-    }, err => console.warn('live counter error:', err));
 
-    unsubs.push(unsub);
-  }
+      // build listeners in chunks of 10 siteIds
+      const unsubs = [];
+      const chunk = 10;
 
-  // One teardown that closes every batch listener
-  liveCounters[assignmentId] = () => { unsubs.forEach(fn => { try{ fn(); }catch(_){} }); };
-}
+      for (let i = 0; i < siteIds.length; i += chunk){
+        const batch = siteIds.slice(i, i+chunk);
+        let q = db.collection('work_logs').where('siteId','in', batch);
+        if (assignmentData?.userId)    q = q.where('operatorUid','==', assignmentData.userId);
+        if (assignmentData?.startedAt) q = q.where('timestamp','>=', assignmentData.startedAt);
+
+        const unsub = q.onSnapshot(snap => {
+          snap.docChanges().forEach(ch => {
+            const w   = ch.doc.data() || {};
+            const sid = String(w.siteId || '').toUpperCase();
+            if (!sid) return;
+            const t = (w.completedAt?.toMillis?.() ?? w.timestamp?.toMillis?.() ?? w.createdAt?.toMillis?.() ?? 0);
+            if (!latest[sid] || t > latest[sid]._t){
+              latest[sid] = { status: (w.status || 'completed').toLowerCase(), _t: t };
+            }
+          });
+          recompute();
+        }, err => console.warn('live counter error:', err));
+
+        unsubs.push(unsub);
+      }
+
+      // single teardown that closes every batch listener
+      liveCounters[assignmentId] = () => { unsubs.forEach(fn => { try{ fn(); }catch(_){} }); };
+    }
 
     /* ---------- list (admin) ---------- */
     const listEl = document.getElementById('assignments');
@@ -372,9 +369,9 @@ function attachLiveCompletionCounter(assignmentId, assignmentData, chipEl){
 
       el.appendChild(row);
 
-      // Live updates for the "done" part of the chip
+      // Live updates for the "done" part of the chip (pass assignment data too)
       const chipDone = meta.querySelector('.js-done');
-      attachLiveCompletionCounter(doc.id, chipDone);
+      attachLiveCompletionCounter(doc.id, d, chipDone);
 
       return el;
     }
@@ -418,8 +415,25 @@ function attachLiveCompletionCounter(assignmentId, assignmentData, chipEl){
     const openMapBtn = document.getElementById('openMapBtn');
     const downloadBtn= document.getElementById('downloadBtn');
 
-    function showModal(){ backdrop.classList.add('show'); backdrop.setAttribute('aria-hidden','false'); }
-    function hideModal(){ backdrop.classList.remove('show'); backdrop.setAttribute('aria-hidden','true'); }
+    // focus-handling to avoid aria-hidden warning
+    let lastFocusEl = null;
+
+    function showModal(){
+      lastFocusEl = document.activeElement;     // remember the trigger
+      backdrop.classList.add('show');
+      backdrop.setAttribute('aria-hidden','false');
+      // move focus into the dialog for accessibility
+      closeBtn?.focus();
+    }
+    function hideModal(){
+      // move focus back BEFORE hiding (prevents aria-hidden warning)
+      if (lastFocusEl && typeof lastFocusEl.focus === 'function') {
+        lastFocusEl.focus();
+      }
+      backdrop.classList.remove('show');
+      backdrop.setAttribute('aria-hidden','true');
+    }
+
     closeBtn.addEventListener('click', hideModal);
     backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) hideModal(); });
 
