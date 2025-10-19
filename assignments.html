@@ -250,22 +250,65 @@
     /* ---------- live completion pill (simple, by assignmentId) ---------- */
     const liveCounters = {}; // assignmentId -> unsubscribe
 
-    function attachLiveCompletionCounter(assignmentId, chipEl){
-      if (!chipEl) return;
-      if (liveCounters[assignmentId]) { try{ liveCounters[assignmentId](); }catch(_){} }
+// Live counter that does NOT require assignmentId on logs
+const liveCounters = {}; // assignmentId -> teardown function
 
-      liveCounters[assignmentId] = db.collection('work_logs')
-        .where('assignmentId','==', assignmentId)
-        .onSnapshot(snap => {
-          let done = 0;
-          snap.forEach(d => {
-            const s = (d.data()?.status || '').toLowerCase();
-            if (s === 'completed') done++;
-          });
-          // chipEl holds only the "done" number; total is rendered next to it
-          chipEl.textContent = String(done);
-        }, err => console.warn('live counter error:', err));
+function attachLiveCompletionCounter(assignmentId, assignmentData, chipEl){
+  if (!chipEl) return;
+
+  // Tear down any previous listeners for this card
+  if (liveCounters[assignmentId]) { try{ liveCounters[assignmentId](); }catch(_){} }
+
+  const siteIds = (assignmentData.siteIds || []).map(s=>String(s).toUpperCase());
+  const perSite = assignmentData.perSite || {};
+  const total   = siteIds.length;
+
+  // Keep newest status we’ve seen per site
+  const latest = {}; // { [sid]: {status, _t} }
+
+  // Helper to recompute the displayed number
+  function recompute(){
+    let done = 0;
+    for (const sid of siteIds){
+      const ps = (perSite[sid] || perSite[sid?.toLowerCase?.()] || perSite[sid?.replace?.(/^M/,'')]) || {};
+      const st = (latest[sid]?.status || ps.status || '').toLowerCase();
+      if (st === 'completed') done++;
     }
+    chipEl.textContent = String(done);
+  }
+
+  // Show baseline from perSite while listeners spin up
+  recompute();
+
+  // Build live listeners in chunks of 10 siteIds
+  const unsubs = [];
+  const chunk = 10;
+
+  for (let i = 0; i < siteIds.length; i += chunk){
+    const batch = siteIds.slice(i, i+chunk);
+    let q = firebase.firestore().collection('work_logs').where('siteId','in', batch);
+    if (assignmentData?.userId)   q = q.where('operatorUid','==', assignmentData.userId);
+    if (assignmentData?.startedAt) q = q.where('timestamp','>=', assignmentData.startedAt);
+
+    const unsub = q.onSnapshot(snap => {
+      snap.docChanges().forEach(ch => {
+        const w   = ch.doc.data() || {};
+        const sid = String(w.siteId || '').toUpperCase();
+        if (!sid) return;
+        const t = (w.completedAt?.toMillis?.() ?? w.timestamp?.toMillis?.() ?? w.createdAt?.toMillis?.() ?? 0);
+        if (!latest[sid] || t > latest[sid]._t){
+          latest[sid] = { status: (w.status || 'completed').toLowerCase(), _t: t };
+        }
+      });
+      recompute();
+    }, err => console.warn('live counter error:', err));
+
+    unsubs.push(unsub);
+  }
+
+  // One teardown that closes every batch listener
+  liveCounters[assignmentId] = () => { unsubs.forEach(fn => { try{ fn(); }catch(_){} }); };
+}
 
     /* ---------- list (admin) ---------- */
     const listEl = document.getElementById('assignments');
