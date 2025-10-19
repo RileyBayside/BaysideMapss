@@ -209,7 +209,7 @@
       return byId;
     }
 
-    /* ---------- latest logs helper ---------- */
+    /* ---------- latest logs helper (for details/PDF) ---------- */
     async function loadLatestWorkLogs(siteIds, assignment) {
       if (!siteIds || !siteIds.length) return {};
       const ids = Array.from(new Set(siteIds.map(s => String(s).toUpperCase())));
@@ -247,90 +247,24 @@
       return byId;
     }
 
-    /* ---------- REAL-TIME chip listeners (NEW) ---------- */
-    const chipUnsubs = new Map(); // assignmentId -> Array<unsubscribe>
+    /* ---------- live completion pill (simple, by assignmentId) ---------- */
+    const liveCounters = {}; // assignmentId -> unsubscribe
 
-    function detachAllChipListeners(){
-      chipUnsubs.forEach(arr => arr.forEach(fn => { try{ fn(); }catch(_){} }));
-      chipUnsubs.clear();
-    }
-    function detachChipListener(id){
-      const arr = chipUnsubs.get(id);
-      if (arr) { arr.forEach(fn => { try{ fn(); }catch(_){} }); chipUnsubs.delete(id); }
-    }
-
-    function attachChipListener(assignmentId, assignmentData, chipEl){
-      detachChipListener(assignmentId);
+    function attachLiveCompletionCounter(assignmentId, chipEl){
       if (!chipEl) return;
+      if (liveCounters[assignmentId]) { try{ liveCounters[assignmentId](); }catch(_){} }
 
-      const siteIds = (assignmentData.siteIds || []).map(s=>String(s).toUpperCase());
-      const perSite = assignmentData.perSite || {};
-      const total = siteIds.length;
-      if (!total) { chipEl.textContent = '0/0'; return; }
-
-      const latest = {};           // sid -> {status, _t}
-      const unsubs = [];
-      const chunk = 10;
-
-      function recompute(){
-        let completed = 0;
-        for (const id of siteIds){
-          const ps = getPerSiteForId(perSite, id) || {};
-          const lg = latest[id] || {};
-          const st = (ps.status || lg.status || '').toLowerCase();
-          if (st === 'completed') completed++;
-        }
-        chipEl.textContent = `${completed}/${total}`;
-      }
-
-      // initial populate using current fetch, then live updates will override progressively
-      recompute();
-
-      for (let i=0;i<siteIds.length;i+=chunk){
-        const batch = siteIds.slice(i, i+chunk);
-        let q = db.collection('work_logs').where('siteId','in',batch);
-        if (assignmentData?.userId) q = q.where('operatorUid','==', assignmentData.userId);
-        if (assignmentData?.startedAt) q = q.where('timestamp','>=', assignmentData.startedAt);
-
-        const unsub = q.onSnapshot(snap=>{
-          snap.docChanges().forEach(ch=>{
-            const w = ch.doc.data() || {};
-            const sid = String(w.siteId||'').toUpperCase();
-            if (!sid) return;
-            const t = (w.completedAt?.toMillis?.() ?? w.timestamp?.toMillis?.() ?? w.createdAt?.toMillis?.() ?? 0);
-            const prev = latest[sid];
-            if (!prev || t > prev._t){
-              latest[sid] = {
-                status: (w.status || 'completed').toLowerCase(),
-                _t: t
-              };
-            }
+      liveCounters[assignmentId] = db.collection('work_logs')
+        .where('assignmentId','==', assignmentId)
+        .onSnapshot(snap => {
+          let done = 0;
+          snap.forEach(d => {
+            const s = (d.data()?.status || '').toLowerCase();
+            if (s === 'completed') done++;
           });
-          recompute();
-        }, err => console.warn('chip listener error:', err));
-
-        unsubs.push(unsub);
-      }
-      chipUnsubs.set(assignmentId, unsubs);
-    }
-
-    /* ---------- chip updater (non-live baseline) ---------- */
-    async function updateCompletionChip(assignmentData, chipEl){
-      try{
-        if (!chipEl) return;
-        const siteIds = (assignmentData.siteIds || []).map(s => String(s).toUpperCase());
-        const total = siteIds.length;
-        const perSite = assignmentData.perSite || {};
-        const latestLogs = await loadLatestWorkLogs(siteIds, assignmentData);
-        const mergedCompleted = siteIds.filter(id => {
-          const ps = getPerSiteForId(perSite, id) || {};
-          const lg = latestLogs[id] || {};
-          return ((ps.status || lg.status || '').toLowerCase() === 'completed');
-        }).length;
-        chipEl.textContent = `${mergedCompleted}/${total}`;
-      }catch(e){
-        console.warn('updateCompletionChip:', e);
-      }
+          // chipEl holds only the "done" number; total is rendered next to it
+          chipEl.textContent = String(done);
+        }, err => console.warn('live counter error:', err));
     }
 
     /* ---------- list (admin) ---------- */
@@ -344,7 +278,7 @@
       if (!second) return;
       try{
         await db.collection('assignments').doc(assignmentId).delete();
-        detachChipListener(assignmentId);
+        if (liveCounters[assignmentId]) { try{ liveCounters[assignmentId](); }catch(_){} delete liveCounters[assignmentId]; }
       }catch(e){
         alert('Failed to delete: ' + (e.message || e.code || e));
       }
@@ -355,7 +289,7 @@
       const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
       const perSite = d.perSite || {};
       const total = siteIds.length;
-      const completed = siteIds.filter(id => (perSite[id]?.status||'').toLowerCase()==='completed').length;
+      const baselineDone = siteIds.filter(id => (perSite[id]?.status||'').toLowerCase()==='completed').length;
 
       const el = document.createElement('div');
       el.className = 'card';
@@ -367,7 +301,7 @@
       const meta = document.createElement('div');
       meta.className = 'kvs';
       meta.innerHTML = `
-        <div><strong><span class="comp-chip">${completed}/${total}</span></strong> completed</div>
+        <div><strong><span class="js-done">${baselineDone}</span>/${total}</strong> completed</div>
         ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
         ${d.status ? `<div>Status: ${badge(d.status)}</div>` : ''}
       `;
@@ -395,34 +329,39 @@
 
       el.appendChild(row);
 
-      // Baseline fill + live listener
-      const chip = meta.querySelector('.comp-chip');
-      updateCompletionChip(d, chip);
-      attachChipListener(doc.id, d, chip);
+      // Live updates for the "done" part of the chip
+      const chipDone = meta.querySelector('.js-done');
+      attachLiveCompletionCounter(doc.id, chipDone);
 
       return el;
     }
 
     db.collection('assignments').onSnapshot(snap => {
-      // Rebuild → clear previous listeners
-      detachAllChipListeners();
-
       listEl.innerHTML = '';
       if (snap.empty){
         const c = document.createElement('div');
         c.className = 'card';
         c.innerHTML = '<div class="muted">No assignments yet.</div>';
         listEl.appendChild(c);
+        // tear down any orphan listeners
+        Object.keys(liveCounters).forEach(id => { try{ liveCounters[id](); }catch(_){} delete liveCounters[id]; });
         return;
       }
       const docs = [];
-      snap.forEach(doc => docs.push(doc));
+      const presentIds = new Set();
+      snap.forEach(doc => { docs.push(doc); presentIds.add(doc.id); });
+
       docs.sort((a,b)=>{
         const ad = a.data().dueDate?.toDate?.() ?? 0;
         const bd = b.data().dueDate?.toDate?.() ?? 0;
         return ad - bd;
       });
       docs.forEach(doc => listEl.appendChild(renderAssignmentCard(doc)));
+
+      // remove listeners for tasks that disappeared
+      Object.keys(liveCounters).forEach(id => {
+        if (!presentIds.has(id)) { try{ liveCounters[id](); }catch(_){} delete liveCounters[id]; }
+      });
     }, err => {
       listEl.innerHTML = `<div class="card"><div class="muted" style="color:#b91c1c">Failed to load assignments: ${err.message||err}</div></div>`;
     });
@@ -522,7 +461,7 @@
       downloadBtn.onclick = () => downloadReport(assignmentId);
     }
 
-    /* ---------- PDF report (merge) ---------- */
+    /* ---------- PDF report ---------- */
     async function downloadReport(assignmentId){
       try{
         const { jsPDF } = window.jspdf || {};
@@ -602,4 +541,3 @@
   </script>
 </body>
 </html>
-
