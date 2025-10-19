@@ -322,37 +322,59 @@
     })();
   </script>
 
-  <!-- NEW: helper to open Parks* pages and auto-run the sidebar PDF -->
   <script>
-    /**
-     * Open the correct map page with ?autopdf=<kind> so its sidebar.js
-     * generates the PDF automatically.
-     *
-     * @param {'bayside'|'council'} kind
-     * @param {'mowing'|'snipping'|'firebreaks'} area
-     */
-    function openSidebarReport(kind = 'bayside', area = 'mowing'){
-      const byArea = {
-        mowing:    ["ParksMowing.html", "parksmowing.html"],
-        snipping:  ["ParksSnipping.html", "parkssnipping.html"],
-        firebreaks:["Firebreaks.html", "firebreaks.html"]
-      };
-      const candidates = byArea[area] || byArea.mowing;
-      const qs = `?autopdf=${encodeURIComponent(kind)}`;
+  /**
+   * Open the correct map page in a hidden <iframe> with ?autopdf=…
+   * so its sidebar.js generates the PDF without a visible tab/window.
+   */
+  function openSidebarReport(kind = 'bayside', area = 'mowing'){
+    const byArea = {
+      mowing:    ["ParksMowing.html", "parksmowing.html"],
+      snipping:  ["ParksSnipping.html", "parkssnipping.html"],
+      firebreaks:["Firebreaks.html", "firebreaks.html"]
+    };
+    const candidates = byArea[area] || byArea.mowing;
 
-      (async () => {
-        for (const f of candidates){
-          try {
-            const res = await fetch(f, { method: 'HEAD' });
-            if (res.ok) {
-              window.open(`${f}${qs}`, '_blank', 'noopener');
-              return;
-            }
-          } catch (_) { /* try next */ }
-        }
-        alert("Couldn't find the target page. Check the filename/casing or adjust the helper.");
-      })();
+    // add a flag we can leverage later if we want to auto-clean via postMessage
+    const qs = `?autopdf=${encodeURIComponent(kind)}&silent=1`;
+
+    (async () => {
+      for (const f of candidates){
+        try {
+          const res = await fetch(f, { method: 'HEAD' });
+          if (res.ok) {
+            // create a hidden iframe to trigger the download silently
+            const iframe = document.createElement('iframe');
+            iframe.src = `${f}${qs}`;
+            iframe.setAttribute('data-autopdf', 'true');
+            iframe.style.position = 'fixed';
+            iframe.style.left = '-9999px';
+            iframe.style.width = '1px';
+            iframe.style.height = '1px';
+            iframe.style.opacity = '0';
+            document.body.appendChild(iframe);
+
+            // fallback cleanup in case we don't get an explicit "done" message
+            setTimeout(() => {
+              try { iframe.remove(); } catch(_) {}
+            }, 20000);
+            return;
+          }
+        } catch (_) { /* try next candidate */ }
+      }
+      alert("Couldn't find the target page. Check the filename/casing or adjust the helper.");
+    })();
+  }
+
+  // Optional: if later you add a `window.parent.postMessage({type:'pdf-done'})`
+  // in the target page after export, this will clean up immediately.
+  window.addEventListener('message', (ev) => {
+    if (ev?.origin !== window.location.origin) return;
+    if (ev?.data && ev.data.type === 'pdf-done') {
+      document.querySelectorAll('iframe[data-autopdf="true"]').forEach(el => el.remove());
     }
-  </script>
+  });
+</script>
+
 </body>
 </html>
