@@ -52,5 +52,54 @@
   <script src="script.js"></script>
   <script src="sidebar.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <script>
+/* Auto-run the existing PDF functions based on a query param.
+   Usage:
+   - parksmowing.html?autopdf=council
+   - parksmowing.html?autopdf=bayside
+*/
+(function () {
+  const params = new URLSearchParams(location.search);
+  const mode = (params.get('autopdf') || '').toLowerCase(); // 'council' | 'bayside'
+
+  if (!mode) return;
+
+  // small helpers
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  // Wait for auth, then wait until the export functions exist, then run
+  firebase.auth().onAuthStateChanged(async (user) => {
+    if (!user) {
+      // if your login flow supports redirect back, keep it; otherwise just push to login
+      location.href = 'login.html?redirect=' + encodeURIComponent(location.href);
+      return;
+    }
+
+    // Wait until the functions are available (script/sidebars sometimes load async)
+    let tries = 0;
+    while (!(window.exportPDFCouncil && window.exportPDFBayside) && tries < 50) {
+      await sleep(200);
+      tries++;
+    }
+
+    try {
+      // tiny extra delay so data/maps finish loading if needed
+      await sleep(500);
+      if (mode === 'council') {
+        await window.exportPDFCouncil();
+      } else if (mode === 'bayside') {
+        await window.exportPDFBayside();
+      } else {
+        console.warn('Unknown autopdf mode:', mode);
+      }
+    } catch (e) {
+      console.error('Auto PDF generation failed:', e);
+      alert('Auto PDF generation failed: ' + (e.message || e));
+    }
+  });
+})();
+</script>
+
 </body>
 </html>
