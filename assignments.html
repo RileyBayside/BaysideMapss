@@ -174,7 +174,7 @@
     /* ---------- helpers ---------- */
     const fmt = (ts) => {
       if(!ts) return '';
-      const d = ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+      const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
       return d ? d.toLocaleString() : '';
     };
     const badge = (status) => {
@@ -247,10 +247,28 @@
       return byId;
     }
 
+    /* ---------- chip updater (NEW) ---------- */
+    async function updateCompletionChip(assignmentData, chipEl){
+      try{
+        if (!chipEl) return;
+        const siteIds = (assignmentData.siteIds || []).map(s => String(s).toUpperCase());
+        const total = siteIds.length;
+        const perSite = assignmentData.perSite || {};
+        const latestLogs = await loadLatestWorkLogs(siteIds, assignmentData);
+        const mergedCompleted = siteIds.filter(id => {
+          const ps = getPerSiteForId(perSite, id) || {};
+          const lg = latestLogs[id] || {};
+          return ((ps.status || lg.status || '').toLowerCase() === 'completed');
+        }).length;
+        chipEl.textContent = `${mergedCompleted}/${total}`;
+      }catch(e){
+        console.warn('updateCompletionChip:', e);
+      }
+    }
+
     /* ---------- list (admin) ---------- */
     const listEl = document.getElementById('assignments');
 
-    // NEW: delete helper (admin-only per your security rules)
     async function deleteAssignment(assignmentId, labelText){
       const label = labelText || 'this task';
       const first = confirm(`Delete assignment: ${label}?\n\nThis will remove the task and its per-site progress from Firestore.`);
@@ -259,88 +277,49 @@
       if (!second) return;
       try{
         await db.collection('assignments').doc(assignmentId).delete();
-        // onSnapshot will auto-refresh the list
+        // onSnapshot will refresh the list
       }catch(e){
         alert('Failed to delete: ' + (e.message || e.code || e));
       }
     }
 
     function renderAssignmentCard(doc){
-  const d = doc.data() || {};
-  const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
-  const perSite = d.perSite || {};
-  const total = siteIds.length;
-  const completed = siteIds.filter(id => (perSite[id]?.status||'').toLowerCase()==='completed').length;
+      const d = doc.data() || {};
+      const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
+      const perSite = d.perSite || {};
+      const total = siteIds.length;
+      const completed = siteIds.filter(id => (perSite[id]?.status||'').toLowerCase()==='completed').length;
 
-  const el = document.createElement('div');
-  el.className = 'card';
+      const el = document.createElement('div');
+      el.className = 'card';
 
-  const title = document.createElement('h3');
-  title.textContent = (d.userName || 'Operator') + (d.zone ? ` · ${d.zone}` : '');
-  el.appendChild(title);
+      const title = document.createElement('h3');
+      title.textContent = (d.userName || 'Operator') + (d.zone ? ` · ${d.zone}` : '');
+      el.appendChild(title);
 
-  const meta = document.createElement('div');
-  meta.className = 'kvs';
-  meta.innerHTML = `
-    <div><strong><span class="comp-chip">${completed}/${total}</span></strong> completed</div>
-    ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
-    ${d.status ? `<div>Status: ${badge(d.status)}</div>` : ''}
-  `;
-  el.appendChild(meta);
+      const meta = document.createElement('div');
+      meta.className = 'kvs';
+      meta.innerHTML = `
+        <div><strong><span class="comp-chip">${completed}/${total}</span></strong> completed</div>
+        ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
+        ${d.status ? `<div>Status: ${badge(d.status)}</div>` : ''}
+      `;
+      el.appendChild(meta);
 
-  const row = document.createElement('div');
-  row.className = 'row';
+      const row = document.createElement('div');
+      row.className = 'row';
 
-  const muted = document.createElement('div');
-  muted.className = 'muted';
-  muted.textContent = siteIds.length ? siteIds.join(', ') : '—';
-  row.appendChild(muted);
+      const muted = document.createElement('div');
+      muted.className = 'muted';
+      muted.textContent = siteIds.length ? siteIds.join(', ') : '—';
+      row.appendChild(muted);
 
-  const openBtn = document.createElement('button');
-  openBtn.className = 'btn btn-red';
-  openBtn.textContent = 'View details';
-  openBtn.addEventListener('click', () => openDetails(doc.id));
-  row.appendChild(openBtn);
+      const openBtn = document.createElement('button');
+      openBtn.className = 'btn btn-red';
+      openBtn.textContent = 'View details';
+      openBtn.addEventListener('click', () => openDetails(doc.id));
+      row.appendChild(openBtn);
 
-  const delBtn = document.createElement('button');
-  delBtn.className = 'btn';
-  delBtn.textContent = 'Delete task';
-  delBtn.addEventListener('click', () => deleteAssignment(doc.id, title.textContent));
-  row.appendChild(delBtn);
-
-  el.appendChild(row);
-
-  // NEW: after the card is on the page, update the completion chip using latest work_logs
-  const chip = meta.querySelector('.comp-chip');
-  updateCompletionChip(d, chip);
-
-  return el;
-  }
-
-    async function updateCompletionChip(assignmentData, chipEl){
-  try{
-    if (!chipEl) return;
-    const siteIds = (assignmentData.siteIds || []).map(s => String(s).toUpperCase());
-    const total = siteIds.length;
-    const perSite = assignmentData.perSite || {};
-
-    // pull latest logs since task started (and by operator if available)
-    const latestLogs = await loadLatestWorkLogs(siteIds, assignmentData);
-
-    const mergedCompleted = siteIds.filter(id => {
-      const ps = getPerSiteForId(perSite, id) || {};
-      const lg = latestLogs[id] || {};
-      return ((ps.status || lg.status || '').toLowerCase() === 'completed');
-    }).length;
-
-    chipEl.textContent = `${mergedCompleted}/${total}`;
-  }catch(e){
-    // leave the chip as-is if anything fails
-    console.warn('updateCompletionChip:', e);
-  }
-}
-
-      // NEW: Delete task button
       const delBtn = document.createElement('button');
       delBtn.className = 'btn';
       delBtn.textContent = 'Delete task';
@@ -348,6 +327,11 @@
       row.appendChild(delBtn);
 
       el.appendChild(row);
+
+      // NEW: update the completion chip using latest work_logs
+      const chip = meta.querySelector('.comp-chip');
+      updateCompletionChip(d, chip);
+
       return el;
     }
 
@@ -387,7 +371,7 @@
     backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) hideModal(); });
 
     let unsubscribeDetails = null;
-    let latestDocData = null; // keep for PDF
+    let latestDocData = null;
 
     async function openDetails(assignmentId){
       if (unsubscribeDetails) { try { unsubscribeDetails(); } catch(_) {} unsubscribeDetails = null; }
@@ -400,12 +384,10 @@
         const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
         const perSite = d.perSite || {};
 
-        // also load latest operator logs
         const latestLogs = await loadLatestWorkLogs(siteIds, d);
 
         modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
 
-        // Completed count using merged status
         const mergedCompleted = siteIds.filter(id => {
           const ps = getPerSiteForId(perSite, id) || {};
           const lg = latestLogs[id] || {};
@@ -475,7 +457,6 @@
         const { jsPDF } = window.jspdf || {};
         if (!jsPDF) { alert('PDF library not loaded'); return; }
 
-        // Use already-cached doc if possible
         let d = latestDocData;
         if (!d) {
           const snap = await db.collection('assignments').doc(assignmentId).get();
@@ -485,8 +466,6 @@
 
         const siteIds = (d.siteIds || []).map(s => String(s).toUpperCase());
         const perSite = d.perSite || {};
-
-        // fetch latest logs to merge for the PDF too
         const latestLogs = await loadLatestWorkLogs(siteIds, d);
 
         const doc = new jsPDF({ unit:'pt', format:'a4' });
@@ -494,7 +473,7 @@
 
         const _fmt = (ts) => {
           if(!ts) return '';
-          const dt = ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+          const dt = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
           return dt ? dt.toLocaleString() : '';
         };
 
@@ -505,7 +484,6 @@
           return ((ps.status || lg.status || '').toLowerCase() === 'completed');
         }).length;
 
-        // Header
         doc.setFont('helvetica','bold'); doc.setFontSize(18);
         doc.text(`${d.userName || 'Operator'} — ${d.zone || 'Task'}`, marginL, startY);
         doc.setFont('helvetica','normal'); doc.setFontSize(12);
@@ -514,7 +492,6 @@
           marginL, startY + 22
         );
 
-        // Table header
         let y = startY + 48;
         const header = ['Site','Status','Completed','Operator note'];
         const widths = [100,110,100,280];
@@ -524,7 +501,6 @@
         doc.setLineWidth(0.6); doc.line(marginL, y+6, marginL + widths.reduce((a,b)=>a+b,0), y+6);
         y += 20;
 
-        // Rows
         doc.setFont('helvetica','normal');
         for (const id of siteIds){
           const ps = getPerSiteForId(perSite, id) || {};
