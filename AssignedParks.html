@@ -88,7 +88,7 @@
       white-space:nowrap;
     }
 
-    /* Operator controls on each row */
+    /* Operator controls on each row (created only if not present) */
     .site-ops{
       display:inline-flex; align-items:center; gap:8px; white-space:nowrap;
     }
@@ -155,10 +155,10 @@
     </div>
   </div>
 
-  <!-- Map container (Leaflet map is created by script.js the same way as ParksMowing) -->
+  <!-- Map container -->
   <div id="map"></div>
 
-  <!-- Core scripts (same stack as ParksMowing) -->
+  <!-- Core scripts -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="script.js"></script>
   <script src="sidebar.js"></script>
@@ -238,30 +238,105 @@
   <!-- Operator controls + Firestore writes & live reflection -->
   <script>
   (function () {
-    const db = firebase.firestore();
+    const db   = firebase.firestore();
+    const auth = firebase.auth();
     const params = new URLSearchParams(location.search);
-    const assignmentId = params.get('task'); // REQUIRED for writes
 
-    // Extract/normalize a site ID (M####) from a row
+    // --- Resolve assignmentId robustly ---
+    let assignmentId = params.get('task') || localStorage.getItem('currentTaskId') || null;
+    if (assignmentId) { try { localStorage.setItem('currentTaskId', assignmentId); } catch(_) {} }
+
+    function getFocusIds() {
+      return (params.get('focus')||'')
+        .split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+    }
+
+    async function inferAssignmentIdFromFocus() {
+      const focus = getFocusIds();
+      if (!focus.length) return null;
+
+      try{
+        // Firestore allows up to 10 values for array-contains-any
+        const batch = focus.slice(0,10);
+        const q = db.collection('assignments').where('siteIds','array-contains-any', batch);
+        const snap = await q.get();
+
+        let best = null, score = -1;
+        snap.forEach(doc=>{
+          const ids = (doc.data().siteIds||[]).map(x=>String(x).toUpperCase());
+          const sc = focus.reduce((n,id)=> n + (ids.includes(id)?1:0), 0);
+          if (sc > score) { best = doc.id; score = sc; }
+        });
+
+        if (best) {
+          assignmentId = best;
+          try { localStorage.setItem('currentTaskId', best); } catch(_) {}
+          return best;
+        }
+      }catch(e){ console.warn('inferAssignmentIdFromFocus:', e); }
+
+      return null;
+    }
+
+    async function ensureAssignmentId(){
+      if (assignmentId) return assignmentId;
+      return await inferAssignmentIdFromFocus();
+    }
+
+    // --- helpers ---
     const idRx = /\bM\d{3,5}\b/i;
     function detectId(row){
       let id = row.getAttribute('data-site-id');
       if (id) return id.toUpperCase();
-      const m = (row.textContent || '').match(idRx);
+      const txt = (row.textContent || '');
+      const m = txt.match(idRx);
       if (!m) return '';
       id = m[0].toUpperCase();
       row.setAttribute('data-site-id', id);
       return id;
     }
 
-    // Attach controls to each visible site row
+    async function recordProgress(siteId, status, note){
+      siteId = String(siteId||'').toUpperCase();
+      status = String(status||'in_progress').toLowerCase();
+      const uid = auth.currentUser?.uid || null;
+
+      const id = await ensureAssignmentId(); // may still be null
+
+      const writes = [];
+
+      // 1) Update perSite when we know the assignment
+      if (id){
+        const ps = {};
+        ps[`perSite.${siteId}.status`]      = status;
+        ps[`perSite.${siteId}.note`]        = (note||'').trim();
+        ps[`perSite.${siteId}.operatorUid`] = uid;
+        ps[`perSite.${siteId}.updatedAt`]   = firebase.firestore.FieldValue.serverTimestamp();
+        ps[`perSite.${siteId}.completedAt`] =
+          (status==='completed') ? firebase.firestore.FieldValue.serverTimestamp() : null;
+        writes.push(db.collection('assignments').doc(id).set(ps, { merge: true }));
+      }
+
+      // 2) Always append a work_logs row (assignmentId may be null)
+      writes.push(db.collection('work_logs').add({
+        assignmentId: id || null,
+        siteId, status,
+        note: (note||'').trim(),
+        operatorUid: uid,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      }));
+
+      await Promise.all(writes);
+    }
+
+    // --- Decorate rows (reuse existing checkbox/note if present; otherwise create) ---
     function decorateRow(row){
       if (row.dataset.opsDecorated === '1') return;
 
       const siteId = detectId(row);
       if (!siteId) return;
 
-      // status pill (create if missing)
+      // status pill
       let pill = row.querySelector('.mini-pill');
       if (!pill){
         pill = document.createElement('span');
@@ -270,55 +345,45 @@
         row.appendChild(pill);
       }
 
-      // operator controls
-      const ops = document.createElement('span');
-      ops.className = 'site-ops';
+      // Prefer existing checkbox in the row; otherwise create one on the right
+      let cb = row.querySelector('input[type="checkbox"]');
+      let note = row.querySelector('input[type="text"].site-note, input[type="text"][placeholder*="ote" i]');
 
-      // done checkbox
-      const cb = document.createElement('input');
-      cb.type = 'checkbox'; cb.className = 'site-done'; cb.title = 'Mark complete';
-
-      const lbl = document.createElement('label');
-      lbl.textContent = 'Done'; lbl.style.marginLeft = '4px';
-
-      // note field
-      const note = document.createElement('input');
-      note.type = 'text'; note.placeholder = 'Notes...'; note.className = 'site-note';
-
-      ops.appendChild(cb);
-      ops.appendChild(lbl);
-      ops.appendChild(note);
-      row.appendChild(ops);
-
-      // Save handlers
-      cb.addEventListener('change', async () => {
-        if (!assignmentId) { alert('Missing task id in URL'); cb.checked = !cb.checked; return; }
-        const status = cb.checked ? 'completed' : 'in_progress';
-        await db.collection('assignments').doc(assignmentId).set({
-          [`perSite.${siteId}.status`]: status,
-          [`perSite.${siteId}.operatorUid`]: firebase.auth().currentUser?.uid || null,
-          [`perSite.${siteId}.updatedAt`]: firebase.firestore.FieldValue.serverTimestamp(),
-          ...(cb.checked ? { [`perSite.${siteId}.completedAt`]: firebase.firestore.FieldValue.serverTimestamp() } : {})
-        }, { merge: true });
-      });
-
-      // Save note on blur/change
-      async function saveNote() {
-        if (!assignmentId) { alert('Missing task id in URL'); return; }
-        const val = note.value.trim();
-        await db.collection('assignments').doc(assignmentId).set({
-          [`perSite.${siteId}.note`]: val,
-          [`perSite.${siteId}.operatorUid`]: firebase.auth().currentUser?.uid || null,
-          [`perSite.${siteId}.updatedAt`]: firebase.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
+      if (!cb || !note){
+        const ops = document.createElement('span');
+        ops.className = 'site-ops';
+        if (!cb){
+          cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.className = 'site-done';
+          cb.title = 'Mark complete';
+          const lbl = document.createElement('label');
+          lbl.textContent = 'Done'; lbl.style.marginLeft = '4px';
+          ops.appendChild(cb); ops.appendChild(lbl);
+        }
+        if (!note){
+          note = document.createElement('input');
+          note.type = 'text'; note.placeholder = 'Notes...'; note.className = 'site-note';
+          ops.appendChild(note);
+        }
+        row.appendChild(ops);
       }
-      note.addEventListener('change', saveNote);
-      note.addEventListener('blur', saveNote);
+
+      // Save handlers for the controls we own
+      cb.addEventListener('change', async () => {
+        const status = cb.checked ? 'completed' : 'assigned';
+        await recordProgress(siteId, status, note?.value || '');
+      });
+      if (note){
+        const saveNote = async () => { await recordProgress(siteId, (cb.checked?'completed':'in_progress'), note.value || ''); };
+        note.addEventListener('change', saveNote);
+        note.addEventListener('blur', saveNote);
+      }
 
       row.dataset.opsDecorated = '1';
     }
 
-    // Enhance all current/future rows once the sidebar is ready
+    // Enhance current/future rows when sidebar is ready
     function whenSidebarReady(cb) {
       const root = document.getElementById('sidebar-content');
       if (!root) return;
@@ -329,11 +394,11 @@
       obs.observe(root, { childList: true, subtree: true });
       setTimeout(() => obs.disconnect(), 10000);
     }
+
     whenSidebarReady((root) => {
       const scan = () => {
         root.querySelectorAll('li, .list-item, .sidebar-row, .item').forEach(el => {
-          // ignore group headers
-          if (el.closest('summary')) return;
+          if (el.closest('summary')) return; // ignore group headers
           decorateRow(el);
         });
       };
@@ -341,22 +406,42 @@
       const mo = new MutationObserver(scan);
       mo.observe(root, { childList:true, subtree:true });
       setTimeout(() => mo.disconnect(), 30000);
+
+      // ALSO: delegate to ANY checkbox in existing rows (covers native checkboxes)
+      root.addEventListener('change', async (ev)=>{
+        const target = ev.target;
+        if (!(target instanceof HTMLInputElement)) return;
+        if (target.type !== 'checkbox') return;
+
+        const row = target.closest('li, .list-item, .sidebar-row, .item');
+        if (!row) return;
+        const sid = detectId(row);
+        if (!sid) return;
+
+        const noteEl = row.querySelector('input[type="text"].site-note, input[type="text"][placeholder*="ote" i]');
+        const noteVal = noteEl ? noteEl.value : '';
+        await recordProgress(sid, target.checked ? 'completed' : 'assigned', noteVal);
+      });
     });
 
     // Live reflection from Firestore (keeps pills/checkbox/notes in sync)
-    firebase.auth().onAuthStateChanged(() => {
-      if (!assignmentId) return;
-      db.collection('assignments').doc(assignmentId).onSnapshot(snap => {
+    firebase.auth().onAuthStateChanged(async () => {
+      const id = await ensureAssignmentId();
+      if (!id) {
+        console.warn('No assignment id resolved; will still log work_logs but perSite reflection is disabled.');
+        return;
+      }
+      db.collection('assignments').doc(id).onSnapshot(snap => {
         const d = snap.data() || {};
         const perSite = d.perSite || {};
         document.querySelectorAll('#sidebar-content [data-site-id]').forEach(row => {
-          const id = String(row.getAttribute('data-site-id')).toUpperCase();
-          const info = perSite[id] || {};
+          const sid = String(row.getAttribute('data-site-id')).toUpperCase();
+          const info = perSite[sid] || {};
           const pill = row.querySelector('.mini-pill');
           if (pill) pill.textContent = (info.status || 'assigned').replace('_',' ');
-          const cb  = row.querySelector('.site-done');
+          const cb  = row.querySelector('input[type="checkbox"]');
           if (cb) cb.checked = info.status === 'completed';
-          const note = row.querySelector('.site-note');
+          const note = row.querySelector('input[type="text"].site-note, input[type="text"][placeholder*="ote" i]');
           if (note && typeof info.note === 'string' && note.value !== info.note) note.value = info.note;
         });
       });
@@ -366,3 +451,4 @@
 
 </body>
 </html>
+
