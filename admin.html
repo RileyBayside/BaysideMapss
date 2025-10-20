@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Admin — Current Assignments</title>
+  <title>Current Assignments</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="logo.png" type="image/png" />
 
@@ -116,7 +116,7 @@
   <header class="header">
     <div class="brand">
       <img src="logo.png" alt="Bayside" onerror="this.style.display='none'">
-      <div class="title">Admin · Current assignments</div>
+      <div class="title">Current assignments</div>
     </div>
     <div class="userbox">
       <div id="userEmail" class="email">—</div>
@@ -153,7 +153,7 @@
   (function(){
     const db = firebase.firestore();
 
-    /* ---------- Auth header ---------- */
+    /* ---------- header auth ---------- */
     const emailEl  = document.getElementById('userEmail');
     const logoutBtn = document.getElementById('logoutBtn');
     firebase.auth().onAuthStateChanged(u => {
@@ -165,7 +165,7 @@
       location.replace('login.html');
     });
 
-    /* ---------- Helpers ---------- */
+    /* ---------- helpers ---------- */
     const fmt = (ts) => {
       if(!ts) return '';
       const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
@@ -184,14 +184,8 @@
       const noM = idU.replace(/^M/,'');
       return perSite[idU] ?? perSite[idL] ?? perSite[noM];
     }
-    const escapeHTML = (s='') =>
-      s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-       .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
-    /* ---------- Operator name cache (uid → name) ---------- */
-    const operatorNameByUid = new Map();
-
-    /* ---------- Card live counter ---------- */
+    /* ---------- live counter (hybrid) ---------- */
     const liveCounters = {};
     function attachLiveCompletionCounter(assignmentId, assignmentData, chipEl){
       if (!chipEl) return;
@@ -241,12 +235,10 @@
         logUnsubs.forEach(fn=>{ try{fn();}catch(_){}}); };
     }
 
-    /* ---------- Assignments list ---------- */
+    /* ---------- list ---------- */
     const listEl = document.getElementById('assignments');
     function renderAssignmentCard(doc){
       const d = doc.data() || {};
-      if (d.userId && d.userName) operatorNameByUid.set(d.userId, d.userName);
-
       const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
       const perSite = d.perSite || {};
       const total = siteIds.length;
@@ -314,7 +306,7 @@
       docs.forEach(doc => listEl.appendChild(renderAssignmentCard(doc)));
     });
 
-    /* ---------- Modal (live rows: status + notes) ---------- */
+    /* ---------- modal (live) ---------- */
     const backdrop   = document.getElementById('detailsBackdrop');
     const closeBtn   = document.getElementById('closeModalBtn');
     const modalTitle = document.getElementById('modalTitle');
@@ -324,275 +316,139 @@
     const downloadBtn= document.getElementById('downloadBtn');
 
     let lastFocusEl = null;
-    function showModal(){ lastFocusEl = document.activeElement; backdrop.classList.add('show'); backdrop.setAttribute('aria-hidden','false'); closeBtn?.focus(); }
-    function hideModal(){ if (lastFocusEl?.focus) lastFocusEl.focus(); backdrop.classList.remove('show'); backdrop.setAttribute('aria-hidden','true'); stopDetailsStreams(); }
+    function showModal(){ lastFocusEl = document.activeElement; backdrop.classList.add('show'); backdrop.setAttribute('aria-hidden','false'); }
+    function hideModal(){ if (lastFocusEl?.focus) lastFocusEl.focus(); backdrop.classList.remove('show'); backdrop.setAttribute('aria-hidden','true'); }
     closeBtn.addEventListener('click', hideModal);
     backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) hideModal(); });
 
-    // Streams + caches
-    let detailsUnsubAssign = null;
-    let detailsLogUnsubs   = [];
-    let latestFromLogs     = {};   // sid -> {status, note, operatorUid, _t}
-    let currentPerSite     = {};   // snapshot from assignments doc
-    let currentSiteIds     = [];   // uppercase sids for the current task
-    let latestDocData      = null; // used by PDF
-
-    function stopDetailsStreams(){
-      if (detailsUnsubAssign){ try{ detailsUnsubAssign(); }catch(_){} detailsUnsubAssign=null; }
-      detailsLogUnsubs.forEach(u=>{ try{ u(); }catch(_){} });
-      detailsLogUnsubs = [];
-      latestFromLogs = {};
-    }
-
-    function buildRows(siteIds){
-      sitesBox.innerHTML = '';
-      const frag = document.createDocumentFragment();
-      siteIds.forEach(id => {
-        const row = document.createElement('div');
-        row.className = 'site-row';
-        row.dataset.sid = id;
-
-        const left = document.createElement('div');
-        left.innerHTML = `<strong>${id}</strong>`;
-
-        const mid = document.createElement('div');
-        mid.className = 'js-note';
-        mid.innerHTML = `<div class="sub">No notes</div>`;
-
-        const right = document.createElement('div');
-        right.className = 'right sub js-completed';
-        right.textContent = '';
-
-        row.appendChild(left);
-        row.appendChild(mid);
-        row.appendChild(right);
-        frag.appendChild(row);
-      });
-      sitesBox.appendChild(frag);
-    }
-
-    function effectiveForSite(id){
-      const ps  = getPerSiteForId(currentPerSite, id) || {};
-      const log = latestFromLogs[id];
-      let status = (ps.status || '').toLowerCase();
-      let note   = (ps.note || '').trim();
-      let completedAt = ps.completedAt || null;
-      if (log){
-        if (log.status) status = String(log.status).toLowerCase();
-        if (log.note)   note   = String(log.note).trim();
-      }
-      return { status, note, completedAt };
-    }
-
-    function updateRow(id){
-      const row = sitesBox.querySelector(`.site-row[data-sid="${id}"]`);
-      if (!row) return;
-      const { status, note, completedAt } = effectiveForSite(id);
-      const noteEl = row.querySelector('.js-note');
-      const doneEl = row.querySelector('.js-completed');
-
-      noteEl.innerHTML = note
-        ? `<div class="note" style="border-left-color:#2563eb">Operator: ${escapeHTML(note)}</div>`
-        : `<div class="sub">No notes</div>`;
-
-      if ((status||'') === 'completed'){
-        const when = completedAt ? fmt(completedAt).split(',')[0] : '';
-        doneEl.textContent = when ? `Completed: ${when}` : 'Completed';
-      } else {
-        doneEl.textContent = '';
-      }
-    }
+    let unsubscribeDetails = null;
+    let latestDocData = null;
 
     async function openDetails(assignmentId){
-      stopDetailsStreams();
+      if (unsubscribeDetails) { try { unsubscribeDetails(); } catch(_) {} unsubscribeDetails = null; }
 
-      detailsUnsubAssign = db.collection('assignments').doc(assignmentId)
-        .onSnapshot((snap) => {
-          if (!snap.exists) { alert('Assignment not found'); return; }
-          const d = snap.data() || {};
-          latestDocData  = d;
-          currentPerSite = d.perSite || {};
-          currentSiteIds = (d.siteIds || []).map(s=>String(s).toUpperCase());
+      const render = async (snap) => {
+        if (!snap.exists) { alert('Assignment not found'); return; }
+        const d = snap.data() || {};
+        latestDocData = d;
 
-          if (!sitesBox.firstChild) buildRows(currentSiteIds);
+        const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
+        const perSite = d.perSite || {};
 
-          modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
-          const focusCsv = currentSiteIds.join(',');
-          openMapBtn.href = focusCsv ? `AssignedParks.html?focus=${encodeURIComponent(focusCsv)}&task=${encodeURIComponent(snap.id)}` : '#';
-          openMapBtn.onclick = () => { try { localStorage.setItem('currentTaskId', snap.id); } catch(_) {} };
+        modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
 
-          const done = currentSiteIds.reduce((n,id)=> {
-            const st = (getPerSiteForId(currentPerSite, id)?.status || '').toLowerCase();
-            return n + (st === 'completed' ? 1 : 0);
-          }, 0);
-          metaBox.innerHTML = `
-            <div><strong>${done}/${currentSiteIds.length}</strong> completed</div>
-            ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
-            ${d.status ? `<div>Overall: ${badge(d.status)}</div>` : ''}
-            ${d.startedAt ? `<div>Started: ${fmt(d.startedAt).split(',')[0]}</div>` : ''}
-          `;
+        const completed = siteIds.filter(id => ( (perSite[id]?.status||'').toLowerCase()==='completed' )).length;
+        const total = siteIds.length;
 
-          currentSiteIds.forEach(id => updateRow(id));
+        metaBox.innerHTML = `
+          <div><strong>${completed}/${total}</strong> completed</div>
+          ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
+          ${d.status ? `<div>Overall: ${badge(d.status)}</div>` : ''}
+          ${d.startedAt ? `<div>Started: ${fmt(d.startedAt).split(',')[0]}</div>` : ''}
+        `;
 
-          if (!detailsLogUnsubs.length && currentSiteIds.length){
-            const uniq = Array.from(new Set(currentSiteIds));
-            const step = 10;
-            for (let i=0;i<uniq.length;i+=step){
-              const batch = uniq.slice(i,i+step);
-              const u = db.collection('work_logs').where('siteId','in',batch).onSnapshot(s=>{
-                s.docChanges().forEach(ch=>{
-                  const w   = ch.doc.data()||{};
-                  const sid = String(w.siteId||'').toUpperCase();
-                  const t   = (w.completedAt?.toMillis?.()??w.timestamp?.toMillis?.()??w.createdAt?.toMillis?.()??0);
-                  if (!latestFromLogs[sid] || t > latestFromLogs[sid]._t){
-                    latestFromLogs[sid] = {
-                      status:(w.status||''),
-                      note:(w.note||''),
-                      operatorUid:(w.operatorUid||null),
-                      _t:t
-                    };
-                    updateRow(sid);
-                  }
-                });
-              });
-              detailsLogUnsubs.push(u);
-            }
-          }
+        const focusCsv = siteIds.join(',');
+        openMapBtn.href = focusCsv ? `AssignedParks.html?focus=${encodeURIComponent(focusCsv)}&task=${encodeURIComponent(snap.id)}` : '#';
+        openMapBtn.addEventListener('click', ()=>{ try { localStorage.setItem('currentTaskId', snap.id); } catch(_) {} });
 
-          showModal();
-          downloadBtn.onclick = () => downloadReport(assignmentId);
-        }, err => alert('Failed to load details: ' + (err.message||err)));
+        sitesBox.innerHTML = '';
+        siteIds.forEach(id => {
+          const ps = perSite[id] || {};
+          const status = (ps.status || 'assigned').toLowerCase();
+          const opNote = (ps.note || '').trim();
+          const completedAt = ps.completedAt || null;
+
+          const row = document.createElement('div');
+          row.className = 'site-row';
+
+          const left = document.createElement('div');
+          left.innerHTML = `<strong>${id}</strong><div class="sub">${badge(status)}</div>`;
+
+          const mid = document.createElement('div');
+          let notesHtml = opNote ? `<div class="note" style="border-left-color:#2563eb">Operator: ${opNote.replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))}</div>` : `<div class="sub">No notes</div>`;
+          mid.innerHTML = notesHtml;
+
+          const right = document.createElement('div');
+          right.className = 'right sub';
+          right.textContent = completedAt ? `Completed: ${fmt(completedAt).split(',')[0]}` : '';
+
+          row.appendChild(left);
+          row.appendChild(mid);
+          row.appendChild(right);
+          sitesBox.appendChild(row);
+        });
+
+        showModal();
+      };
+
+      unsubscribeDetails = db.collection('assignments').doc(assignmentId)
+        .onSnapshot(render, err => alert('Failed to load details: ' + (err.message||err)));
+
+      downloadBtn.onclick = () => downloadReport(assignmentId);
     }
 
-    /* ---------- PDF (includes OPERATOR column) ---------- */
     async function downloadReport(assignmentId){
-      const { jsPDF } = window.jspdf || {};
-      if (!jsPDF) { alert('PDF library not loaded'); return; }
+      try{
+        const { jsPDF } = window.jspdf || {};
+        if (!jsPDF) { alert('PDF library not loaded'); return; }
 
-      const fmtDMY = (v) => {
-        if (!v) return '';
-        const d = v?.toDate ? v.toDate() : (v instanceof Date ? v : null);
-        if (!d) return '';
-        const dd = String(d.getDate()).padStart(2,'0');
-        const mm = String(d.getMonth()+1).padStart(2,'0');
-        const yy = d.getFullYear();
-        return `${dd}/${mm}/${yy}`;
-      };
-      const todayDMY = () => {
-        const d = new Date();
-        return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
-      };
-
-      let d = latestDocData;
-      if (!d) {
-        const snap = await firebase.firestore().collection('assignments').doc(assignmentId).get();
-        if (!snap.exists) { alert('Assignment missing'); return; }
-        d = snap.data() || {};
-      }
-
-      const siteIds = (Array.isArray(currentSiteIds) && currentSiteIds.length
-        ? currentSiteIds
-        : (d.siteIds || []).map(s => String(s).toUpperCase()));
-      const perSite = (currentPerSite && Object.keys(currentPerSite).length)
-        ? currentPerSite
-        : (d.perSite || {});
-
-      const rowsAll = siteIds.map(id => {
-        const ps  = (perSite[id] || perSite[id?.toLowerCase?.()] || perSite[String(id).replace(/^M/,'')]) || {};
-        const log = latestFromLogs ? latestFromLogs[id] : null;
-
-        let status      = String(ps.status || '').toLowerCase();
-        let note        = (ps.note || '').trim();
-        let completedAt = ps.completedAt || null;
-        let operatorUid = ps.operatorUid || (log ? log.operatorUid : null);
-
-        if (log){
-          if (log.status) status = String(log.status).toLowerCase();
-          if (log.note)   note   = String(log.note).trim();
-          if (!completedAt && status === 'completed' && log._t) completedAt = new Date(log._t);
+        let d = latestDocData;
+        if (!d) {
+          const snap = await db.collection('assignments').doc(assignmentId).get();
+          if (!snap.exists) { alert('Assignment missing'); return; }
+          d = snap.data() || {};
         }
 
-        const operatorName =
-          (ps.operatorName && String(ps.operatorName).trim()) ||
-          (operatorUid ? operatorNameByUid.get(operatorUid) : '') ||
-          (d.userName || '—');
+        const siteIds = (d.siteIds || []).map(s => String(s).toUpperCase());
+        const perSite = d.perSite || {};
 
-        const whenDate = completedAt?.toDate ? completedAt.toDate()
-                        : (completedAt instanceof Date ? completedAt : null);
-        const whenStr  = whenDate ? fmtDMY(whenDate) : '';
+        const doc = new jsPDF({ unit:'pt', format:'a4' });
+        const marginL = 56, startY = 64, lineH = 18;
 
-        return { id, operatorName, when: whenDate || null, whenStr, note, status };
-      });
+        const _fmt = (ts) => {
+          if(!ts) return '';
+          const dt = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+          return dt ? dt.toLocaleString() : '';
+        };
 
-      const rowsCompleted = rowsAll.filter(r => r.status === 'completed');
-      const rows = rowsCompleted.length ? rowsCompleted : rowsAll;
+        const total = siteIds.length;
+        const completed = siteIds.filter(id => ((perSite[id]?.status||'').toLowerCase() === 'completed')).length;
 
-      rows.sort((a,b)=>{
-        const ta = a.when ? a.when.getTime() : -1;
-        const tb = b.when ? b.when.getTime() : -1;
-        if (tb !== ta) return tb - ta;
-        return a.id.localeCompare(b.id);
-      });
+        doc.setFont('helvetica','bold'); doc.setFontSize(18);
+        doc.text(`${d.userName || 'Operator'} — ${d.zone || 'Task'}`, marginL, startY);
+        doc.setFont('helvetica','normal'); doc.setFontSize(12);
+        doc.text(`Overall: ${(d.status||'in_progress')}   •   Completed: ${completed}/${total}   •   Started: ${d.startedAt ? _fmt(d.startedAt).split(',')[0] : '-'}`, marginL, startY + 22);
 
-      const doc = new jsPDF({ unit:'pt', format:'a4' });
-      const marginL = 56, marginR = 56;
-      const pageW = doc.internal.pageSize.getWidth();
-      const pageH = doc.internal.pageSize.getHeight();
-      const contentW = pageW - marginL - marginR;
+        let y = startY + 48;
+        const header = ['Site','Status','Completed','Operator note'];
+        const widths = [100,110,100,280];
 
-      let y = 72;
+        doc.setFont('helvetica','bold');
+        header.forEach((h,i)=> doc.text(h, marginL + widths.slice(0,i).reduce((a,b)=>a+b,0), y));
+        doc.setLineWidth(0.6); doc.line(marginL, y+6, marginL + widths.reduce((a,b)=>a+b,0), y+6);
+        y += 20;
 
-      // Title + subtitle
-      doc.setFont('helvetica','bold'); doc.setFontSize(18);
-      doc.text(`Mowing Report ${todayDMY()}`, marginL, y);
-      y += 20;
-      const subtitle = [d.userName || 'Operator', d.zone || ''].filter(Boolean).join(' — ');
-      if (subtitle) { doc.setFont('helvetica','normal'); doc.setFontSize(12); doc.text(subtitle, marginL, y); y += 14; }
-      y += 8;
-
-      // Columns: ID | Operator | Date | Notes
-      const colIdW   = 110;
-      const colOpW   = 140;
-      const colDateW = 120;
-      const colNoteW = contentW - colIdW - colOpW - colDateW;
-
-      doc.setFont('helvetica','bold'); doc.setFontSize(12);
-      doc.text('Park Number',   marginL,                        y);
-      doc.text('Operator',      marginL + colIdW,               y);
-      doc.text('Date Completed',marginL + colIdW + colOpW,      y);
-      doc.text('Notes',         marginL + colIdW + colOpW + colDateW, y);
-      y += 8; doc.setLineWidth(0.6); doc.line(marginL, y, marginL + contentW, y); y += 14;
-
-      doc.setFont('helvetica','normal');
-      const lineH = 16;
-
-      for (const r of rows) {
-        const wrappedNote = doc.splitTextToSize(r.note || '-', colNoteW);
-        const needH = Math.max(lineH, wrappedNote.length * lineH);
-
-        if (y + needH > pageH - 56) {
-          doc.addPage(); y = 56;
-          doc.setFont('helvetica','bold'); doc.setFontSize(12);
-          doc.text('Park Number',   marginL,                        y);
-          doc.text('Operator',      marginL + colIdW,               y);
-          doc.text('Date Completed',marginL + colIdW + colOpW,      y);
-          doc.text('Notes',         marginL + colIdW + colOpW + colDateW, y);
-          y += 8; doc.setLineWidth(0.6); doc.line(marginL, y, marginL + contentW, y); y += 14;
-          doc.setFont('helvetica','normal');
+        doc.setFont('helvetica','normal');
+        for (const id of siteIds){
+          const ps = perSite[id] || {};
+          const status      = (ps.status || 'assigned').toLowerCase();
+          const completedAt = ps.completedAt ? _fmt(ps.completedAt).split(',')[0] : '-';
+          const note        = (ps.note || '-').trim();
+          const cols = [id, status, completedAt, note];
+          cols.forEach((val,i) => {
+            const x = marginL + widths.slice(0,i).reduce((a,b)=>a+b,0);
+            doc.text(String(val), x, y, { maxWidth: widths[i]-6 });
+          });
+          y += lineH;
+          if (y > 780) { doc.addPage(); y = 56; }
         }
 
-        doc.text(r.id,                marginL,                            y);
-        doc.text(r.operatorName||'—', marginL + colIdW,                   y);
-        doc.text(r.whenStr || '',     marginL + colIdW + colOpW,          y);
-        doc.text(wrappedNote,         marginL + colIdW + colOpW + colDateW, y);
-
-        y += Math.max(lineH, wrappedNote.length * lineH);
+        const filename = `${(d.userName || 'operator').toLowerCase().replace(/\s+/g,'-')}-${(d.zone||'task').toLowerCase().replace(/\s+/g,'-')}.pdf`;
+        doc.save(filename);
+      }catch(e){
+        alert('Failed to generate report: ' + (e.message||e));
+        console.error(e);
       }
-
-      const filename =
-        `${(d.userName || 'operator').toLowerCase().replace(/\s+/g,'-')}` +
-        `-${(d.zone||'task').toLowerCase().replace(/\s+/g,'-')}-mowing-report.pdf`;
-      doc.save(filename);
     }
   })();
   </script>
