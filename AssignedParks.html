@@ -6,15 +6,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="logo.png" type="image/png" />
 
-  <!-- Core styles (same as ParksMowing) -->
+  <!-- Core styles -->
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 
-  <!-- Sidebar styles (same as ParksMowing) -->
+  <!-- Sidebar styles -->
   <link rel="stylesheet" href="sidebar.css" />
 
   <style>
-    /* Brand palette & basics */
     :root{
       --ink:#0f172a; --muted:#e5e7eb; --card:#ffffff;
       --accent:#d11e2b; --accent-600:#b71a24;
@@ -22,7 +21,6 @@
     }
     #map { height: 100vh; }
 
-    /* Sidebar compact + brand */
     #sidebar{
       width: 340px;
       max-width: 86vw;
@@ -42,7 +40,6 @@
     #sidebar .sidebar-head img{ height:24px; width:auto; display:block }
     #sidebar .sidebar-head .title{ font-size:14px; letter-spacing:.3px }
 
-    /* Buttons inside sidebar */
     #sidebar button{
       border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer;
       background: var(--accent); color:#fff;
@@ -53,10 +50,8 @@
     }
     #sidebar #toggle-all:hover{ background:var(--accent-600); }
 
-    /* Sidebar content container spacing */
     #sidebar #sidebar-content{ padding:8px 12px 16px; }
 
-    /* Groups / details look compact */
     #sidebar-content details{
       border:1px solid var(--muted); border-radius:12px; overflow:hidden;
       background:#fff; margin-bottom:8px;
@@ -69,7 +64,6 @@
     }
     #sidebar-content details[open] > summary{ background:#eef2f7; }
 
-    /* Rows/items inside groups (try to match many possible structures) */
     #sidebar-content li,
     #sidebar-content .list-item,
     #sidebar-content .sidebar-row,
@@ -80,7 +74,6 @@
     }
     #sidebar-content li:first-child{ border-top:0; }
 
-    /* Mini badges (status) */
     .mini-pill{
       display:inline-block; padding:2px 6px; border-radius:999px;
       font-size:11px; font-weight:800; color:#7f1d1d;
@@ -88,7 +81,6 @@
       white-space:nowrap;
     }
 
-    /* Operator controls on each row (created only if not present) */
     .site-ops{
       display:inline-flex; align-items:center; gap:8px; white-space:nowrap;
     }
@@ -99,7 +91,6 @@
     }
     .site-ops .site-done{ transform: translateY(1px); }
 
-    /* Sidebar toggle button style (mobile friendly) */
     #sidebar-toggle{
       position: fixed; top:12px; left:12px; z-index: 1000;
       border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer;
@@ -108,7 +99,6 @@
     }
     #sidebar-toggle:active{ transform: translateY(1px); }
 
-    /* Mobile tweaks */
     @media (max-width: 768px){
       #sidebar{ width: 100vw; max-width: none; }
       #sidebar .sidebar-head .title{ font-size:13px }
@@ -130,10 +120,8 @@
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
 
-  <!-- Sidebar toggle button -->
   <button id="sidebar-toggle">☰</button>
 
-  <!-- Sidebar container (IDs kept for your existing JS) -->
   <div id="sidebar">
     <div class="sidebar-head">
       <img src="logo.png" alt="Bayside" onerror="this.style.display='none'">
@@ -155,7 +143,6 @@
     </div>
   </div>
 
-  <!-- Map container -->
   <div id="map"></div>
 
   <!-- Core scripts -->
@@ -242,7 +229,7 @@
     const auth = firebase.auth();
     const params = new URLSearchParams(location.search);
 
-    // --- Resolve assignmentId robustly ---
+    // Resolve assignment id (URL -> localStorage -> infer from focus)
     let assignmentId = params.get('task') || localStorage.getItem('currentTaskId') || null;
     if (assignmentId) { try { localStorage.setItem('currentTaskId', assignmentId); } catch(_) {} }
 
@@ -256,8 +243,7 @@
       if (!focus.length) return null;
 
       try{
-        // Firestore allows up to 10 values for array-contains-any
-        const batch = focus.slice(0,10);
+        const batch = focus.slice(0,10); // array-contains-any limit
         const q = db.collection('assignments').where('siteIds','array-contains-any', batch);
         const snap = await q.get();
 
@@ -283,17 +269,24 @@
       return await inferAssignmentIdFromFocus();
     }
 
-    // --- helpers ---
+    // Utilities
     const idRx = /\bM\d{3,5}\b/i;
-    function detectId(row){
-      let id = row.getAttribute('data-site-id');
+    function detectId(el){
+      let id = el.getAttribute('data-site-id');
       if (id) return id.toUpperCase();
-      const txt = (row.textContent || '');
-      const m = txt.match(idRx);
-      if (!m) return '';
-      id = m[0].toUpperCase();
-      row.setAttribute('data-site-id', id);
-      return id;
+      let cur = el;
+      const root = document.getElementById('sidebar-content');
+      while (cur && cur !== root){
+        const m = (cur.textContent || '').match(idRx);
+        if (m){ id = m[0].toUpperCase(); break; }
+        cur = cur.parentElement;
+      }
+      if (!id){
+        const m2 = (el.textContent || '').match(idRx);
+        if (m2) id = m2[0].toUpperCase();
+      }
+      if (id) el.setAttribute('data-site-id', id);
+      return id || '';
     }
 
     async function recordProgress(siteId, status, note){
@@ -305,7 +298,7 @@
 
       const writes = [];
 
-      // 1) Update perSite when we know the assignment
+      // Update perSite if assignment is known
       if (id){
         const ps = {};
         ps[`perSite.${siteId}.status`]      = status;
@@ -317,7 +310,7 @@
         writes.push(db.collection('assignments').doc(id).set(ps, { merge: true }));
       }
 
-      // 2) Always append a work_logs row (assignmentId may be null)
+      // Always log a work_logs entry
       writes.push(db.collection('work_logs').add({
         assignmentId: id || null,
         siteId, status,
@@ -329,14 +322,13 @@
       await Promise.all(writes);
     }
 
-    // --- Decorate rows (reuse existing checkbox/note if present; otherwise create) ---
+    // Decorate rows (ensure pill + optional note/checkbox UI if missing)
     function decorateRow(row){
       if (row.dataset.opsDecorated === '1') return;
 
       const siteId = detectId(row);
       if (!siteId) return;
 
-      // status pill
       let pill = row.querySelector('.mini-pill');
       if (!pill){
         pill = document.createElement('span');
@@ -345,7 +337,7 @@
         row.appendChild(pill);
       }
 
-      // Prefer existing checkbox in the row; otherwise create one on the right
+      // If row lacks a checkbox and/or note, add our minimal controls
       let cb = row.querySelector('input[type="checkbox"]');
       let note = row.querySelector('input[type="text"].site-note, input[type="text"][placeholder*="ote" i]');
 
@@ -369,13 +361,12 @@
         row.appendChild(ops);
       }
 
-      // Save handlers for the controls we own
-      cb.addEventListener('change', async () => {
-        const status = cb.checked ? 'completed' : 'assigned';
-        await recordProgress(siteId, status, note?.value || '');
-      });
+      // Save note on changes (checkbox handled by delegated listener)
       if (note){
-        const saveNote = async () => { await recordProgress(siteId, (cb.checked?'completed':'in_progress'), note.value || ''); };
+        const saveNote = async () => {
+          const status = (cb && cb.checked) ? 'completed' : 'in_progress';
+          await recordProgress(siteId, status, note.value || '');
+        };
         note.addEventListener('change', saveNote);
         note.addEventListener('blur', saveNote);
       }
@@ -383,7 +374,7 @@
       row.dataset.opsDecorated = '1';
     }
 
-    // Enhance current/future rows when sidebar is ready
+    // When sidebar ready, decorate and watch for changes
     function whenSidebarReady(cb) {
       const root = document.getElementById('sidebar-content');
       if (!root) return;
@@ -407,28 +398,43 @@
       mo.observe(root, { childList:true, subtree:true });
       setTimeout(() => mo.disconnect(), 30000);
 
-      // ALSO: delegate to ANY checkbox in existing rows (covers native checkboxes)
+      // ROW-AGNOSTIC checkbox handler (works with your existing checkboxes)
+      function findRowFor(el){
+        const root = document.getElementById('sidebar-content');
+        let cur = el;
+        while (cur && cur !== root){
+          if (/\bM\d{3,5}\b/i.test(cur.textContent || '')) return cur;
+          cur = cur.parentElement;
+        }
+        return el.closest('li, .list-item, .sidebar-row, .item') || root;
+      }
+
       root.addEventListener('change', async (ev)=>{
         const target = ev.target;
         if (!(target instanceof HTMLInputElement)) return;
         if (target.type !== 'checkbox') return;
 
-        const row = target.closest('li, .list-item, .sidebar-row, .item');
-        if (!row) return;
+        const row = findRowFor(target);
         const sid = detectId(row);
-        if (!sid) return;
+        if (!sid) { console.warn('No site id in row'); return; }
 
         const noteEl = row.querySelector('input[type="text"].site-note, input[type="text"][placeholder*="ote" i]');
         const noteVal = noteEl ? noteEl.value : '';
-        await recordProgress(sid, target.checked ? 'completed' : 'assigned', noteVal);
+        try {
+          await recordProgress(sid, target.checked ? 'completed' : 'assigned', noteVal);
+          console.log('Saved progress', { sid, status: target.checked ? 'completed' : 'assigned' });
+        } catch (e) {
+          console.error('Save failed', e);
+          alert('Failed to save progress: ' + (e.message || e));
+        }
       });
     });
 
-    // Live reflection from Firestore (keeps pills/checkbox/notes in sync)
+    // Live reflection (keeps pills/checkbox/notes in sync)
     firebase.auth().onAuthStateChanged(async () => {
       const id = await ensureAssignmentId();
       if (!id) {
-        console.warn('No assignment id resolved; will still log work_logs but perSite reflection is disabled.');
+        console.warn('No assignment id resolved; will still write work_logs but perSite reflection is disabled.');
         return;
       }
       db.collection('assignments').doc(id).onSnapshot(snap => {
@@ -451,4 +457,3 @@
 
 </body>
 </html>
-
