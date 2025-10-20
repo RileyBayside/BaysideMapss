@@ -581,5 +581,61 @@
       });
     })();
   </script>
+
+  <script>
+(function(){
+  const db = firebase.firestore();
+
+  // Format YYYY-MM-DD in Australia/Brisbane for simple grouping/filters (optional but handy)
+  function dayKeyAEST(d=new Date()){
+    return new Intl.DateTimeFormat('en-CA', { timeZone:'Australia/Brisbane', year:'numeric', month:'2-digit', day:'2-digit' }).format(d);
+  }
+
+  // Call this from your Risk Assessment modal "Accept/Submit" handler.
+  // Pass your checkbox/text values (true/false or strings).
+  window.saveRiskAssessment = async function({
+    ppeOk=false, equipmentOk=false, hazards=false, traffic=false, weather=false,
+    swmsReviewed=false, fitnessOk=false, stopWork=false,
+    typedName='', notes=''
+  }){
+    const u = firebase.auth().currentUser;
+    if (!u) { alert('You must be signed in.'); return; }
+
+    // best-effort operator display
+    let display = u.displayName || (u.email ? u.email.split('@')[0] : u.uid);
+    try {
+      const us = await db.collection('users').doc(u.uid).get();
+      const ud = us.data() || {};
+      display = ud.name || ud.username || display;
+    } catch(_) {}
+
+    const now = new Date();
+
+    await db.collection('risk_assessments').add({
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(), // what we query on
+      createdAtMs: now.getTime(),                                 // fallback/debug
+      dayKeyAEST: dayKeyAEST(now),                                // optional, for ad-hoc filters
+      tz: 'Australia/Brisbane',
+
+      operatorUid: u.uid,
+      operatorEmail: u.email || '',
+      operatorDisplay: display,
+
+      ppeOk: !!ppeOk,
+      equipmentOk: !!equipmentOk,
+      hazards: !!hazards,
+      traffic: !!traffic,
+      weather: !!weather,
+      swmsReviewed: !!swmsReviewed,
+      fitnessOk: !!fitnessOk,
+      stopWork: !!stopWork,
+
+      typedName: String(typedName||'').trim(),
+      notes: String(notes||'').trim()
+    });
+  };
+})();
+</script>
+
 </body>
 </html>
