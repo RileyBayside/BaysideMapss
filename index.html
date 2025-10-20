@@ -31,6 +31,39 @@
       display:flex; align-items:center; gap:10px;
     }
     .card h3::before{
+      content:""; widt<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bayside – Dashboard</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="dashboard.css">
+
+  <!-- Page-specific styles for the Tasks card -->
+  <style>
+    :root{
+      --ink:#0f172a; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff;
+      --accent:#d11e2b; --accent-600:#b71a24;
+    }
+
+    .task-link { color: inherit; text-decoration: none; }
+    .task-link:hover { text-decoration: underline; }
+
+    /* Card (delegate.html look) */
+    .card{
+      background:var(--card);
+      border:1px solid var(--muted);
+      border-radius:16px;
+      box-shadow:0 8px 26px rgba(16,24,40,.08);
+    }
+    .card h3{
+      margin:14px 16px 10px;
+      font-size:16px; font-weight:800; color:#0f172a;
+      display:flex; align-items:center; gap:10px;
+    }
+    .card h3::before{
       content:""; width:10px; height:10px; border-radius:50%;
       background:var(--accent); display:inline-block;
     }
@@ -75,6 +108,49 @@
       border-radius:8px;
     }
   </style>
+
+  <!-- Risk Assessment modal styles -->
+  <style>
+    :root{
+      --ink:#0f172a; --muted:#e2e8f0; --bg:#ffffff; --accent:#d11e2b; --accent-600:#b71a24;
+    }
+    .ra-backdrop{
+      position:fixed; inset:0; background:rgba(15,23,42,.45);
+      display:none; align-items:center; justify-content:center; z-index:9999;
+    }
+    .ra-backdrop.show{ display:flex; }
+    .ra-modal{
+      width:min(900px,94vw); max-height:90vh; overflow:auto;
+      background:#fff; border:1px solid var(--muted); border-radius:16px;
+      box-shadow:0 16px 44px rgba(16,24,40,.35);
+    }
+    .ra-header{
+      position:sticky; top:0; background:#fff; border-bottom:1px solid #eef2f7;
+      padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px;
+    }
+    .ra-header h3{ margin:0; font-size:18px; font-weight:800; color:var(--ink); }
+    .ra-body{ padding:16px; display:grid; gap:12px; }
+    .ra-row{ display:flex; align-items:flex-start; gap:10px; }
+    .ra-row input[type="checkbox"]{ transform:translateY(3px); }
+    .ra-note{ font-size:13px; color:#334155; background:#f8fafc; border:1px solid #e2e8f0; border-left:3px solid var(--accent); border-radius:8px; padding:8px 10px; }
+    .ra-name{
+      width:100%; max-width:360px; padding:8px 10px; border:1px solid #e2e8f0; border-radius:10px; font-weight:600;
+    }
+    .ra-footer{
+      position:sticky; bottom:0; background:#fff; border-top:1px solid #eef2f7;
+      padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:10px;
+    }
+    .ra-btn{
+      border:0; border-radius:10px; padding:10px 14px; font-weight:800; cursor:pointer; color:#fff;
+      background:var(--accent);
+    }
+    .ra-btn:disabled{ opacity:.5; cursor:not-allowed; }
+    .ra-sub{ font-size:12px; color:#64748b; }
+    .ra-list{ display:grid; gap:10px; }
+    .ra-pill{ display:inline-block; padding:4px 8px; border-radius:999px; font-weight:800; font-size:12px; background:#f1f5f9; border:1px solid #e2e8f0; color:#334155; }
+    .ra-brand{ display:flex; align-items:center; gap:10px; }
+    .ra-brand img{ height:28px; }
+  </style>
 </head>
 <body>
 
@@ -84,6 +160,70 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
+
+  <!-- Risk Assessment Modal (blocks until accepted) -->
+  <div id="riskBackdrop" class="ra-backdrop" aria-modal="true" role="dialog" aria-hidden="true">
+    <div class="ra-modal">
+      <div class="ra-header">
+        <div class="ra-brand">
+          <img src="logo.png" alt="Logo" onerror="this.style.display='none'">
+          <h3>Daily Risk Assessment</h3>
+        </div>
+        <span class="ra-pill" id="raDatePill"></span>
+      </div>
+
+      <div class="ra-body">
+        <div class="ra-note">
+          Please confirm you have reviewed site risks and are fit for duty. You must complete this form to proceed.
+        </div>
+
+        <div class="ra-list">
+          <label class="ra-row">
+            <input type="checkbox" class="ra-check" data-key="ppe">
+            <span>I am wearing required PPE (hi-vis, boots, eye/ear protection).</span>
+          </label>
+          <label class="ra-row">
+            <input type="checkbox" class="ra-check" data-key="equipment">
+            <span>Equipment has been inspected and is safe to operate.</span>
+          </label>
+          <label class="ra-row">
+            <input type="checkbox" class="ra-check" data-key="hazards">
+            <span>I have checked site hazards (terrain, public, wildlife, overhead/underground services).</span>
+          </label>
+          <label class="ra-row">
+            <input type="checkbox" class="ra-check" data-key="traffic">
+            <span>Traffic/pedestrian controls are in place where required.</span>
+          </label>
+          <label class="ra-row">
+            <input type="checkbox" class="ra-check" data-key="weather">
+            <span>Weather conditions are suitable and I will stop work if they become unsafe.</span>
+          </label>
+          <label class="ra-row">
+            <input type="checkbox" class="ra-check" data-key="swms">
+            <span>I have read and will follow the relevant SWMS / SOP for this task.</span>
+          </label>
+          <label class="ra-row">
+            <input type="checkbox" class="ra-check" data-key="fitness">
+            <span>I am fit for work (not fatigued / impaired).</span>
+          </label>
+          <label class="ra-row">
+            <input type="checkbox" class="ra-check" data-key="stopwork">
+            <span>I understand I must exercise Stop-Work authority if unsafe conditions arise.</span>
+          </label>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <label for="raName"><strong>Operator name</strong></label>
+          <input id="raName" class="ra-name" type="text" placeholder="Type your full name">
+        </div>
+      </div>
+
+      <div class="ra-footer">
+        <div class="ra-sub" id="raStatus">Please tick all boxes and enter your name to continue.</div>
+        <button id="raAgreeBtn" class="ra-btn" disabled>Agree & Proceed</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Header / App Bar -->
   <header class="appbar">
@@ -329,6 +469,115 @@
 
       firebase.auth().onAuthStateChanged((u) => {
         if (u) window.startTasksListener(u.uid);
+      });
+    })();
+  </script>
+
+  <!-- Risk Assessment modal logic -->
+  <script>
+    (function(){
+      const db = (window.firebase && firebase.firestore) ? firebase.firestore() : null;
+
+      const backdrop   = document.getElementById('riskBackdrop');
+      const agreeBtn   = document.getElementById('raAgreeBtn');
+      const checks     = Array.from(document.querySelectorAll('.ra-check'));
+      const nameInput  = document.getElementById('raName');
+      const statusEl   = document.getElementById('raStatus');
+      const datePill   = document.getElementById('raDatePill');
+
+      const todayKey = () => {
+        const d = new Date();
+        const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), dd = String(d.getDate()).padStart(2,'0');
+        return `${y}-${m}-${dd}`;
+      };
+
+      const setPill = () => {
+        const d = new Date();
+        datePill.textContent = d.toLocaleDateString();
+      };
+
+      function setBlockedUI(on){
+        if (on){
+          backdrop.classList.add('show');
+          backdrop.setAttribute('aria-hidden','false');
+          document.documentElement.style.overflow = 'hidden';
+        } else {
+          backdrop.classList.remove('show');
+          backdrop.setAttribute('aria-hidden','true');
+          document.documentElement.style.overflow = '';
+        }
+      }
+
+      function allChecked(){
+        return checks.every(c => c.checked) && nameInput.value.trim().length > 1;
+      }
+
+      function updateState(){
+        agreeBtn.disabled = !allChecked();
+        statusEl.textContent = agreeBtn.disabled
+          ? 'Please tick all boxes and enter your name to continue.'
+          : 'Ready to proceed.';
+      }
+
+      checks.forEach(c => c.addEventListener('change', updateState));
+      nameInput.addEventListener('input', updateState);
+
+      function lsKey(uid){ return `riskAck:${uid}:${todayKey()}`; }
+
+      async function alreadyAcknowledged(uid){
+        try { if (localStorage.getItem(lsKey(uid)) === '1') return true; } catch(_) {}
+        if (!db) return false;
+        try{
+          const docId = `${uid}_${todayKey()}`;
+          const snap = await db.collection('risk_assessments').doc(docId).get();
+          return snap.exists;
+        }catch(_){ return false; }
+      }
+
+      async function saveAcknowledgement(uid, email, displayName){
+        const payload = {
+          userId: uid || null,
+          userEmail: email || '',
+          userName: displayName || nameInput.value.trim(),
+          dateKey: todayKey(),
+          timestamp: (firebase && firebase.firestore) ? firebase.firestore.FieldValue.serverTimestamp() : new Date(),
+          checks: checks.reduce((o,c)=> (o[c.dataset.key]=!!c.checked, o), {}),
+          typedName: nameInput.value.trim(),
+          userAgent: navigator.userAgent || ''
+        };
+
+        if (db && uid){
+          try{
+            await db.collection('risk_assessments').doc(`${uid}_${todayKey()}`).set(payload, { merge:true });
+          }catch(e){ console.warn('risk_assessments write failed:', e); }
+        }
+        try{ localStorage.setItem(lsKey(uid||'anon'), '1'); }catch(_){}
+      }
+
+      agreeBtn.addEventListener('click', async () => {
+        agreeBtn.disabled = true;
+        statusEl.textContent = 'Saving...';
+        const u = (firebase.auth && firebase.auth().currentUser) ? firebase.auth().currentUser : null;
+        await saveAcknowledgement(u?.uid || 'anon', u?.email || '', u?.displayName || '');
+        setBlockedUI(false);
+      });
+
+      // Block click-away & Esc
+      backdrop.addEventListener('click', (e)=> {
+        if (e.target === backdrop) { /* blocked */ }
+      });
+      document.addEventListener('keydown', (e)=> {
+        if (backdrop.classList.contains('show') && e.key === 'Escape') e.preventDefault();
+      });
+
+      setPill();
+      updateState();
+
+      // Show after login if not done today
+      firebase.auth().onAuthStateChanged(async (u) => {
+        if (!u) return;
+        const ok = await alreadyAcknowledged(u.uid);
+        if (!ok) setBlockedUI(true);
       });
     })();
   </script>
