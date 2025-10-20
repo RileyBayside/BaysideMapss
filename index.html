@@ -597,6 +597,8 @@
     ppeOk=false, equipmentOk=false, hazards=false, traffic=false, weather=false,
     swmsReviewed=false, fitnessOk=false, stopWork=false,
     typedName='', notes=''
+    await saveRiskAssessment({ ppeOk, equipmentOk, hazards, traffic, weather, swmsReviewed, fitnessOk, stopWork, typedName, notes });
+
   }){
     const u = firebase.auth().currentUser;
     if (!u) { alert('You must be signed in.'); return; }
