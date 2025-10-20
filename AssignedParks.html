@@ -205,168 +205,186 @@
   })();
   </script>
 
-  <!-- Single "Mark done / Undo" button under Notes; Firestore writes + live sync -->
-  <script>
-  (function () {
-    const db   = firebase.firestore();
-    const auth = firebase.auth();
-    const params = new URLSearchParams(location.search);
+ <script>
+(function () {
+  const db   = firebase.firestore();
+  const auth = firebase.auth();
+  const params = new URLSearchParams(location.search);
 
-    // Get assignmentId from URL or localStorage (Open in map passes &task=...)
-    let assignmentId = params.get('task') || localStorage.getItem('currentTaskId') || null;
-    if (assignmentId) { try { localStorage.setItem('currentTaskId', assignmentId); } catch(_) {} }
+  let assignmentId = params.get('task') || localStorage.getItem('currentTaskId') || null;
+  if (assignmentId) { try { localStorage.setItem('currentTaskId', assignmentId); } catch(_) {} }
 
-    // If we have no task id, try to infer from focus ids
-    async function ensureTaskId(){
-      if (assignmentId) return assignmentId;
-      const q = (params.get('focus')||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
-      if (!q.length) return null;
-      try{
-        const batch = q.slice(0,10);
-        const snap = await db.collection('assignments').where('siteIds','array-contains-any',batch).get();
-        let best=null,score=-1;
-        snap.forEach(doc=>{
-          const arr=(doc.data().siteIds||[]).map(x=>String(x).toUpperCase());
-          const sc=q.reduce((n,id)=>n+(arr.includes(id)?1:0),0);
-          if(sc>score){best=doc.id;score=sc;}
-        });
-        if(best){ assignmentId=best; try{localStorage.setItem('currentTaskId',best);}catch(_){} }
-      }catch(e){ console.warn('infer task failed', e); }
-      return assignmentId;
-    }
+  async function ensureTaskId(){
+    if (assignmentId) return assignmentId;
+    const q = (params.get('focus')||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+    if (!q.length) return null;
+    try{
+      const batch = q.slice(0,10);
+      const snap = await db.collection('assignments').where('siteIds','array-contains-any',batch).get();
+      let best=null,score=-1;
+      snap.forEach(doc=>{
+        const arr=(doc.data().siteIds||[]).map(x=>String(x).toUpperCase());
+        const sc=q.reduce((n,id)=>n+(arr.includes(id)?1:0),0);
+        if(sc>score){best=doc.id;score=sc;}
+      });
+      if(best){ assignmentId=best; try{localStorage.setItem('currentTaskId',best);}catch(_){} }
+    }catch(e){ console.warn('infer task failed', e); }
+    return assignmentId;
+  }
 
-    // ---- helpers ----
-    const idRx = /\bM\d{3,5}\b/i;
+  const idRx = /\bM\d{3,5}\b/i;
+  function rootEl(){ return document.getElementById('sidebar-content') || document; }
 
-    function rootEl(){
-      return document.getElementById('sidebar-content') || document;
-    }
-
-    // Find the nearest *previous* element in the DOM that contains an M#### id
-    function findSiteIdForNotes(input){
-      let row = input.closest('li, .list-item, .sidebar-row, .item, div') || input.parentElement;
-      for (let up=0; up<6 && row; up++, row=row.parentElement) {
-        let p = row.previousElementSibling;
-        while (p){
-          const m = (p.textContent||'').match(idRx);
-          if (m) return m[0].toUpperCase();
-          const deep = (p.querySelector && p.querySelector('*')) ? p.querySelector('*') : null;
-          if (deep){
-            const md = (p.textContent||'').match(idRx);
-            if (md) return md[0].toUpperCase();
-          }
-          p = p.previousElementSibling;
+  function findSiteIdForNotes(input){
+    let row = input.closest('li, .list-item, .sidebar-row, .item, div') || input.parentElement;
+    for (let up=0; up<6 && row; up++, row=row.parentElement) {
+      let p = row.previousElementSibling;
+      while (p){
+        const m = (p.textContent||'').match(idRx);
+        if (m) return m[0].toUpperCase();
+        const deep = (p.querySelector && p.querySelector('*')) ? p.querySelector('*') : null;
+        if (deep){
+          const md = (p.textContent||'').match(idRx);
+          if (md) return md[0].toUpperCase();
         }
+        p = p.previousElementSibling;
       }
-      const mSelf = (input.closest('*')?.textContent||'').match(idRx);
-      return mSelf ? mSelf[0].toUpperCase() : null;
     }
+    const mSelf = (input.closest('*')?.textContent||'').match(idRx);
+    return mSelf ? mSelf[0].toUpperCase() : null;
+  }
 
-    function hideAssignedChips(container){
-      container.querySelectorAll('.mini-pill,.badge,.tag,.status,span,div,small').forEach(n=>{
-        const t=(n.textContent||'').trim().toLowerCase();
-        if (t==='assigned' || n.classList.contains('mini-pill') || n.classList.contains('badge') ||
-            n.classList.contains('tag') || n.classList.contains('status')) n.style.display='none';
-      });
-    }
-
-    async function writeProgress(siteId, status, note){
-      const uid = auth.currentUser?.uid || null;
-      const taskId = await ensureTaskId();
-      const ops = [];
-      if (taskId){
-        const update = {};
-        update[`perSite.${siteId}.status`]      = status;
-        update[`perSite.${siteId}.note`]        = (note||'').trim();
-        update[`perSite.${siteId}.operatorUid`] = uid;
-        update[`perSite.${siteId}.updatedAt`]   = firebase.firestore.FieldValue.serverTimestamp();
-        update[`perSite.${siteId}.completedAt`] = (status==='completed') ? firebase.firestore.FieldValue.serverTimestamp() : null;
-        ops.push(db.collection('assignments').doc(taskId).set(update,{merge:true}));
-      }
-      ops.push(db.collection('work_logs').add({
-        assignmentId: taskId || null,
-        siteId, status,
-        note: (note||'').trim(),
-        operatorUid: uid,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-      }));
-      await Promise.all(ops);
-    }
-
-    // injection & sync
-    const siteButtons = new Map(); // siteId -> button
-    const siteInputs  = new Map(); // siteId -> notes input
-    let perSiteCache  = {};        // latest snapshot
-
-    function injectButtons(){
-      const root = rootEl();
-      // find all Notes inputs / textareas (support variations)
-      const notes = root.querySelectorAll('input[placeholder^="Notes"], input[placeholder="Notes..."], textarea[placeholder^="Notes"]');
-      notes.forEach(input=>{
-        const sid = findSiteIdForNotes(input);
-        if (!sid) return;
-
-        siteInputs.set(sid, input);
-
-        let btn = siteButtons.get(sid);
-        if (!btn || btn.previousSibling !== input){
-          if (btn && btn.parentElement) btn.parentElement.removeChild(btn);
-          btn = document.createElement('button');
-          btn.type='button';
-          btn.className='bs-done-btn';
-          btn.textContent='Mark done';
-          input.insertAdjacentElement('afterend', btn);
-          siteButtons.set(sid, btn);
-
-          btn.addEventListener('click', async (e)=>{
-            e.preventDefault(); e.stopPropagation();
-            const willBeDone = !btn.classList.contains('done');
-            btn.classList.toggle('done', willBeDone);
-            btn.textContent = willBeDone ? 'Undo' : 'Mark done';
-            try{
-              await writeProgress(sid, willBeDone ? 'completed' : 'in_progress', input.value||'');
-            }catch(err){
-              btn.classList.toggle('done', !willBeDone);
-              btn.textContent = !willBeDone ? 'Undo' : 'Mark done';
-              console.error('Save failed:', err);
-            }
-          });
-
-          const saveNote = async () => {
-            const status = btn.classList.contains('done') ? 'completed' : 'in_progress';
-            try{ await writeProgress(sid, status, input.value||''); }catch(e){ console.error(e); }
-          };
-          input.addEventListener('change', saveNote);
-          input.addEventListener('blur',   saveNote);
-        }
-
-        // reflect current cache → UI
-        const info = perSiteCache[sid] || {};
-        const isDone = (info.status||'').toLowerCase() === 'completed';
-        btn.classList.toggle('done', isDone);
-        btn.textContent = isDone ? 'Undo' : 'Mark done';
-        if (typeof info.note === 'string' && input.value !== info.note) input.value = info.note;
-
-        hideAssignedChips(input.closest('li, .list-item, .sidebar-row, .item, div') || root);
-      });
-    }
-
-    // keep trying for 60s to survive sidebar re-renders
-    const iv = setInterval(injectButtons, 1000);
-    setTimeout(()=>clearInterval(iv), 60000);
-    setTimeout(injectButtons, 0);
-
-    // live snapshot sync
-    firebase.auth().onAuthStateChanged(async ()=>{
-      const taskId = await ensureTaskId();
-      if (!taskId) { console.warn('No assignment id; live sync disabled'); return; }
-      db.collection('assignments').doc(taskId).onSnapshot(snap=>{
-        perSiteCache = (snap.data()||{}).perSite || {};
-        injectButtons(); // update labels/notes immediately
-      });
+  function hideAssignedChips(container){
+    container.querySelectorAll('.mini-pill,.badge,.tag,.status,span,div,small').forEach(n=>{
+      const t=(n.textContent||'').trim().toLowerCase();
+      if (t==='assigned' || n.classList.contains('mini-pill') || n.classList.contains('badge') ||
+          n.classList.contains('tag') || n.classList.contains('status')) n.style.display='none';
     });
-  })();
-  </script>
+  }
+
+  async function writeProgress(siteId, status, note){
+    const uid = auth.currentUser?.uid || null;
+    const taskId = await ensureTaskId();
+    const ops = [];
+    if (taskId){
+      const update = {};
+      update[`perSite.${siteId}.status`]      = status;
+      update[`perSite.${siteId}.note`]        = (note||'').trim();
+      update[`perSite.${siteId}.operatorUid`] = uid;
+      update[`perSite.${siteId}.updatedAt`]   = firebase.firestore.FieldValue.serverTimestamp();
+      update[`perSite.${siteId}.completedAt`] = (status==='completed') ? firebase.firestore.FieldValue.serverTimestamp() : null;
+      ops.push(db.collection('assignments').doc(taskId).set(update,{merge:true}));
+    }
+    ops.push(db.collection('work_logs').add({
+      assignmentId: taskId || null,
+      siteId, status,
+      note: (note||'').trim(),
+      operatorUid: uid,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    }));
+    await Promise.all(ops);
+  }
+
+  // ---------- injection & sync ----------
+  const siteButtons = new Map(); // siteId -> button
+  const siteInputs  = new Map(); // siteId -> notes input
+  let   perSiteCache  = {};      // latest snapshot
+
+  // NEW: optimistic state so UI stays as clicked until Firestore confirms
+  const optimistic = new Map();  // siteId -> {status, t}
+  const OPT_TTL_MS = 20000;
+
+  function injectButtons(){
+    const now  = Date.now();
+    // prune stale optimistic entries
+    for (const [sid, o] of optimistic) if (now - o.t > OPT_TTL_MS) optimistic.delete(sid);
+
+    const root = rootEl();
+    const notes = root.querySelectorAll('input[placeholder^="Notes"], input[placeholder="Notes..."], textarea[placeholder^="Notes"]');
+    notes.forEach(input=>{
+      const sid = findSiteIdForNotes(input);
+      if (!sid) return;
+
+      siteInputs.set(sid, input);
+
+      let btn = siteButtons.get(sid);
+      if (!btn || btn.previousSibling !== input){
+        if (btn && btn.parentElement) btn.parentElement.removeChild(btn);
+        btn = document.createElement('button');
+        btn.type='button';
+        btn.className='bs-done-btn';
+        btn.textContent='Mark done';
+        input.insertAdjacentElement('afterend', btn);
+        siteButtons.set(sid, btn);
+
+        btn.addEventListener('click', async (e)=>{
+          e.preventDefault(); e.stopPropagation();
+          const willBeDone = !btn.classList.contains('done');
+
+          // record optimistic state first
+          optimistic.set(sid, { status: willBeDone ? 'completed' : 'in_progress', t: Date.now() });
+
+          // optimistic UI
+          btn.classList.toggle('done', willBeDone);
+          btn.textContent = willBeDone ? 'Undo' : 'Mark done';
+
+          try{
+            await writeProgress(sid, willBeDone ? 'completed' : 'in_progress', input.value||'');
+          }catch(err){
+            // revert UI + optimistic state on failure
+            optimistic.delete(sid);
+            btn.classList.toggle('done', !willBeDone);
+            btn.textContent = !willBeDone ? 'Undo' : 'Mark done';
+            console.error('Save failed:', err);
+          }
+        });
+
+        const saveNote = async () => {
+          // prefer optimistic status while pending
+          const opt = optimistic.get(sid);
+          const status = opt ? opt.status : (btn.classList.contains('done') ? 'completed' : 'in_progress');
+          try{ await writeProgress(sid, status, input.value||''); }catch(e){ console.error(e); }
+        };
+        input.addEventListener('change', saveNote);
+        input.addEventListener('blur',   saveNote);
+      }
+
+      // reflect current state -> UI (optimistic overrides Firestore while fresh)
+      const info = { ...(perSiteCache[sid] || {}) };
+      const opt  = optimistic.get(sid);
+      if (opt && (Date.now() - opt.t) < OPT_TTL_MS) info.status = opt.status;
+
+      const isDone = (info.status||'').toLowerCase() === 'completed';
+      btn.classList.toggle('done', isDone);
+      btn.textContent = isDone ? 'Undo' : 'Mark done';
+      const cachedNote = (perSiteCache[sid] || {}).note;
+      if (typeof cachedNote === 'string' && input.value !== cachedNote) input.value = cachedNote;
+
+      hideAssignedChips(input.closest('li, .list-item, .sidebar-row, .item, div') || root);
+    });
+  }
+
+  const iv = setInterval(injectButtons, 1000);
+  setTimeout(()=>clearInterval(iv), 60000);
+  setTimeout(injectButtons, 0);
+
+  firebase.auth().onAuthStateChanged(async ()=>{
+    const taskId = await ensureTaskId();
+    if (!taskId) { console.warn('No assignment id; live sync disabled'); return; }
+    db.collection('assignments').doc(taskId).onSnapshot(snap=>{
+      perSiteCache = (snap.data()||{}).perSite || {};
+
+      // clear optimistic entries that are now confirmed by Firestore
+      for (const [sid, o] of optimistic) {
+        const s = (perSiteCache[sid]?.status || '').toLowerCase();
+        if ((o.status || '').toLowerCase() === s) optimistic.delete(sid);
+      }
+
+      injectButtons();
+    });
+  });
+})();
+</script>
 
 </body>
 </html>
