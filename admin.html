@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Current Assignments</title>
+  <title>Admin — Current Assignments</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="logo.png" type="image/png" />
 
@@ -116,7 +116,7 @@
   <header class="header">
     <div class="brand">
       <img src="logo.png" alt="Bayside" onerror="this.style.display='none'">
-      <div class="title">Current assignments</div>
+      <div class="title">Admin · Current assignments</div>
     </div>
     <div class="userbox">
       <div id="userEmail" class="email">—</div>
@@ -245,7 +245,6 @@
     const listEl = document.getElementById('assignments');
     function renderAssignmentCard(doc){
       const d = doc.data() || {};
-      // Fill operator cache (uid → userName) from each assignment doc we see
       if (d.userId && d.userName) operatorNameByUid.set(d.userId, d.userName);
 
       const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
@@ -354,7 +353,7 @@
         row.dataset.sid = id;
 
         const left = document.createElement('div');
-        left.innerHTML = `<strong>${id}</strong>`; // no status pill per row
+        left.innerHTML = `<strong>${id}</strong>`;
 
         const mid = document.createElement('div');
         mid.className = 'js-note';
@@ -433,10 +432,8 @@
             ${d.startedAt ? `<div>Started: ${fmt(d.startedAt).split(',')[0]}</div>` : ''}
           `;
 
-          // reflect current snapshot
           currentSiteIds.forEach(id => updateRow(id));
 
-          // start work_logs listeners once per open
           if (!detailsLogUnsubs.length && currentSiteIds.length){
             const uniq = Array.from(new Set(currentSiteIds));
             const step = 10;
@@ -467,7 +464,7 @@
         }, err => alert('Failed to load details: ' + (err.message||err)));
     }
 
-    /* ---------- PDF: include OPERATOR column ---------- */
+    /* ---------- PDF (includes OPERATOR column) ---------- */
     async function downloadReport(assignmentId){
       const { jsPDF } = window.jspdf || {};
       if (!jsPDF) { alert('PDF library not loaded'); return; }
@@ -483,13 +480,9 @@
       };
       const todayDMY = () => {
         const d = new Date();
-        const dd = String(d.getDate()).padStart(2,'0');
-        const mm = String(d.getMonth()+1).padStart(2,'0');
-        const yy = d.getFullYear();
-        return `${dd}/${mm}/${yy}`;
+        return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
       };
 
-      // Ensure we have the assignment doc (latestDocData set by openDetails)
       let d = latestDocData;
       if (!d) {
         const snap = await firebase.firestore().collection('assignments').doc(assignmentId).get();
@@ -497,7 +490,6 @@
         d = snap.data() || {};
       }
 
-      // Prefer the live modal caches
       const siteIds = (Array.isArray(currentSiteIds) && currentSiteIds.length
         ? currentSiteIds
         : (d.siteIds || []).map(s => String(s).toUpperCase()));
@@ -505,7 +497,6 @@
         ? currentPerSite
         : (d.perSite || {});
 
-      // Build rows with operator name resolution
       const rowsAll = siteIds.map(id => {
         const ps  = (perSite[id] || perSite[id?.toLowerCase?.()] || perSite[String(id).replace(/^M/,'')]) || {};
         const log = latestFromLogs ? latestFromLogs[id] : null;
@@ -521,7 +512,6 @@
           if (!completedAt && status === 'completed' && log._t) completedAt = new Date(log._t);
         }
 
-        // Resolve operator name preference: perSite.operatorName → uid map → assignment userName
         const operatorName =
           (ps.operatorName && String(ps.operatorName).trim()) ||
           (operatorUid ? operatorNameByUid.get(operatorUid) : '') ||
@@ -534,11 +524,9 @@
         return { id, operatorName, when: whenDate || null, whenStr, note, status };
       });
 
-      // Prefer completed; if none, include all
       const rowsCompleted = rowsAll.filter(r => r.status === 'completed');
       const rows = rowsCompleted.length ? rowsCompleted : rowsAll;
 
-      // Sort newest completion first (blank dates last), then by ID
       rows.sort((a,b)=>{
         const ta = a.when ? a.when.getTime() : -1;
         const tb = b.when ? b.when.getTime() : -1;
@@ -546,7 +534,6 @@
         return a.id.localeCompare(b.id);
       });
 
-      // PDF layout
       const doc = new jsPDF({ unit:'pt', format:'a4' });
       const marginL = 56, marginR = 56;
       const pageW = doc.internal.pageSize.getWidth();
@@ -563,51 +550,41 @@
       if (subtitle) { doc.setFont('helvetica','normal'); doc.setFontSize(12); doc.text(subtitle, marginL, y); y += 14; }
       y += 8;
 
-      // Columns (add OPERATOR)
-      const colIdW   = 110;                         // Park Number
-      const colOpW   = 140;                         // Operator
-      const colDateW = 120;                         // Date Completed
-      const colNoteW = contentW - colIdW - colOpW - colDateW; // Notes
+      // Columns: ID | Operator | Date | Notes
+      const colIdW   = 110;
+      const colOpW   = 140;
+      const colDateW = 120;
+      const colNoteW = contentW - colIdW - colOpW - colDateW;
 
-      // Header row
       doc.setFont('helvetica','bold'); doc.setFontSize(12);
       doc.text('Park Number',   marginL,                        y);
       doc.text('Operator',      marginL + colIdW,               y);
       doc.text('Date Completed',marginL + colIdW + colOpW,      y);
       doc.text('Notes',         marginL + colIdW + colOpW + colDateW, y);
-      y += 8;
-      doc.setLineWidth(0.6);
-      doc.line(marginL, y, marginL + contentW, y);
-      y += 14;
+      y += 8; doc.setLineWidth(0.6); doc.line(marginL, y, marginL + contentW, y); y += 14;
 
-      // Body
       doc.setFont('helvetica','normal');
       const lineH = 16;
 
       for (const r of rows) {
-        const noteText = r.note || '-';
-        const wrappedNote = doc.splitTextToSize(noteText, colNoteW);
-
+        const wrappedNote = doc.splitTextToSize(r.note || '-', colNoteW);
         const needH = Math.max(lineH, wrappedNote.length * lineH);
-        if (y + needH > pageH - 56) {
-          doc.addPage();
-          y = 56;
 
-          // reprint headers on new page
+        if (y + needH > pageH - 56) {
+          doc.addPage(); y = 56;
           doc.setFont('helvetica','bold'); doc.setFontSize(12);
           doc.text('Park Number',   marginL,                        y);
           doc.text('Operator',      marginL + colIdW,               y);
           doc.text('Date Completed',marginL + colIdW + colOpW,      y);
           doc.text('Notes',         marginL + colIdW + colOpW + colDateW, y);
-          y += 8; doc.setLineWidth(0.6); doc.line(marginL, y, marginL + contentW, y);
-          y += 14;
+          y += 8; doc.setLineWidth(0.6); doc.line(marginL, y, marginL + contentW, y); y += 14;
           doc.setFont('helvetica','normal');
         }
 
-        doc.text(r.id,             marginL,                            y);
-        doc.text(r.operatorName||'—', marginL + colIdW,                y);
-        doc.text(r.whenStr || '',  marginL + colIdW + colOpW,         y);
-        doc.text(wrappedNote,      marginL + colIdW + colOpW + colDateW, y);
+        doc.text(r.id,                marginL,                            y);
+        doc.text(r.operatorName||'—', marginL + colIdW,                   y);
+        doc.text(r.whenStr || '',     marginL + colIdW + colOpW,          y);
+        doc.text(wrappedNote,         marginL + colIdW + colOpW + colDateW, y);
 
         y += Math.max(lineH, wrappedNote.length * lineH);
       }
