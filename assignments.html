@@ -306,86 +306,128 @@
       docs.forEach(doc => listEl.appendChild(renderAssignmentCard(doc)));
     });
 
-    /* ---------- modal (live) ---------- */
-    const backdrop   = document.getElementById('detailsBackdrop');
-    const closeBtn   = document.getElementById('closeModalBtn');
-    const modalTitle = document.getElementById('modalTitle');
-    const metaBox    = document.getElementById('assignmentMeta');
-    const sitesBox   = document.getElementById('sitesList');
-    const openMapBtn = document.getElementById('openMapBtn');
-    const downloadBtn= document.getElementById('downloadBtn');
+<script>
+/* ---------- modal (live) ---------- */
+const backdrop   = document.getElementById('detailsBackdrop');
+const closeBtn   = document.getElementById('closeModalBtn');
+const modalTitle = document.getElementById('modalTitle');
+const metaBox    = document.getElementById('assignmentMeta');
+const sitesBox   = document.getElementById('sitesList');
+const openMapBtn = document.getElementById('openMapBtn');
+const downloadBtn= document.getElementById('downloadBtn');
 
-    let lastFocusEl = null;
-    function showModal(){ lastFocusEl = document.activeElement; backdrop.classList.add('show'); backdrop.setAttribute('aria-hidden','false'); closeBtn?.focus(); }
-    function hideModal(){ if (lastFocusEl?.focus) lastFocusEl.focus(); backdrop.classList.remove('show'); backdrop.setAttribute('aria-hidden','true'); }
-    closeBtn.addEventListener('click', hideModal);
-    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) hideModal(); });
+let lastFocusEl = null;
+function showModal(){
+  lastFocusEl = document.activeElement;
+  backdrop.classList.add('show');
+  backdrop.setAttribute('aria-hidden','false');
+  closeBtn?.focus();
+}
+function hideModal(){
+  if (lastFocusEl?.focus) lastFocusEl.focus();
+  backdrop.classList.remove('show');
+  backdrop.setAttribute('aria-hidden','true');
+}
+closeBtn.addEventListener('click', hideModal);
+backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) hideModal(); });
 
-    let unsubscribeDetails = null;
-    let latestDocData = null;
+let unsubscribeDetails = null;
+let latestDocData = null;
 
-    async function openDetails(assignmentId){
-      if (unsubscribeDetails) { try { unsubscribeDetails(); } catch(_) {} unsubscribeDetails = null; }
+const escapeHTML = (s='') =>
+  s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+   .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
-      const render = async (snap) => {
-        if (!snap.exists) { alert('Assignment not found'); return; }
-        const d = snap.data() || {};
-        latestDocData = d;
+// Build static rows once; then we only update content
+function buildRows(siteIds){
+  sitesBox.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  siteIds.forEach(id => {
+    const row = document.createElement('div');
+    row.className = 'site-row';
+    row.dataset.sid = id;
 
-        const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
-        const perSite = d.perSite || {};
+    const left = document.createElement('div');
+    left.innerHTML = `<strong>${id}</strong><div class="sub js-pill">${badge('assigned')}</div>`;
 
-        modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
+    const mid = document.createElement('div');
+    mid.className = 'js-note';
+    mid.innerHTML = `<div class="sub">No notes</div>`;
 
-        const completed = siteIds.filter(id => ( (perSite[id]?.status||'').toLowerCase()==='completed' )).length;
-        const total = siteIds.length;
+    const right = document.createElement('div');
+    right.className = 'right sub js-completed';
+    right.textContent = '';
 
-        metaBox.innerHTML = `
-          <div><strong>${completed}/${total}</strong> completed</div>
-          ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
-          ${d.status ? `<div>Overall: ${badge(d.status)}</div>` : ''}
-          ${d.startedAt ? `<div>Started: ${fmt(d.startedAt).split(',')[0]}</div>` : ''}
-        `;
+    row.appendChild(left);
+    row.appendChild(mid);
+    row.appendChild(right);
+    frag.appendChild(row);
+  });
+  sitesBox.appendChild(frag);
+}
 
-        const focusCsv = siteIds.join(',');
-        openMapBtn.href = focusCsv ? `AssignedParks.html?focus=${encodeURIComponent(focusCsv)}&task=${encodeURIComponent(snap.id)}` : '#';
-        openMapBtn.addEventListener('click', ()=>{ try { localStorage.setItem('currentTaskId', snap.id); } catch(_) {} });
+function updateRowFromPerSite(id, perSite){
+  const row = sitesBox.querySelector(`.site-row[data-sid="${id}"]`);
+  if (!row) return;
 
-        sitesBox.innerHTML = '';
-        siteIds.forEach(id => {
-          const ps = perSite[id] || {};
-          const status = (ps.status || 'assigned').toLowerCase();
-          const opNote = (ps.note || '').trim();
-          const completedAt = ps.completedAt || null;
+  const pillEl = row.querySelector('.js-pill');
+  const noteEl = row.querySelector('.js-note');
+  const doneEl = row.querySelector('.js-completed');
 
-          const row = document.createElement('div');
-          row.className = 'site-row';
+  const info = getPerSiteForId(perSite, id) || {};
+  const status = (info.status || 'assigned').toLowerCase();
+  pillEl.innerHTML = badge(status);
 
-          const left = document.createElement('div');
-          left.innerHTML = `<strong>${id}</strong><div class="sub">${badge(status)}</div>`;
+  const note = (info.note || '').trim();
+  noteEl.innerHTML = note
+    ? `<div class="note" style="border-left-color:#2563eb">Operator: ${escapeHTML(note)}</div>`
+    : `<div class="sub">No notes</div>`;
 
-          const mid = document.createElement('div');
-          let notesHtml = opNote ? `<div class="note" style="border-left-color:#2563eb">Operator: ${opNote.replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))}</div>` : `<div class="sub">No notes</div>`;
-          mid.innerHTML = notesHtml;
+  const cAt = info.completedAt;
+  doneEl.textContent = cAt ? `Completed: ${fmt(cAt).split(',')[0]}` : '';
+}
 
-          const right = document.createElement('div');
-          right.className = 'right sub';
-          right.textContent = completedAt ? `Completed: ${fmt(completedAt).split(',')[0]}` : '';
+async function openDetails(assignmentId){
+  if (unsubscribeDetails) { try { unsubscribeDetails(); } catch(_) {} unsubscribeDetails = null; }
 
-          row.appendChild(left);
-          row.appendChild(mid);
-          row.appendChild(right);
-          sitesBox.appendChild(row);
-        });
+  unsubscribeDetails = db.collection('assignments').doc(assignmentId)
+    .onSnapshot((snap) => {
+      if (!snap.exists) { alert('Assignment not found'); return; }
+      const d = snap.data() || {};
+      latestDocData = d;
 
-        showModal();
-      };
+      const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
+      const perSite = d.perSite || {};
 
-      unsubscribeDetails = db.collection('assignments').doc(assignmentId)
-        .onSnapshot(render, err => alert('Failed to load details: ' + (err.message||err)));
+      // Build once (first snapshot) so we can update rows efficiently
+      if (!sitesBox.firstChild) buildRows(siteIds);
 
+      modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
+
+      // Link to the map with focus + remember this task id
+      const focusCsv = siteIds.join(',');
+      openMapBtn.href = focusCsv ? `AssignedParks.html?focus=${encodeURIComponent(focusCsv)}&task=${encodeURIComponent(snap.id)}` : '#';
+      openMapBtn.onclick = () => { try { localStorage.setItem('currentTaskId', snap.id); } catch(_) {} };
+
+      // Counter from perSite
+      const done = siteIds.reduce((n,id)=> {
+        const st = (getPerSiteForId(perSite, id)?.status || '').toLowerCase();
+        return n + (st === 'completed' ? 1 : 0);
+      }, 0);
+      metaBox.innerHTML = `
+        <div><strong>${done}/${siteIds.length}</strong> completed</div>
+        ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
+        ${d.status ? `<div>Overall: ${badge(d.status)}</div>` : ''}
+        ${d.startedAt ? `<div>Started: ${fmt(d.startedAt).split(',')[0]}</div>` : ''}
+      `;
+
+      // Update each row from current perSite snapshot
+      siteIds.forEach(id => updateRowFromPerSite(id, perSite));
+
+      showModal();
       downloadBtn.onclick = () => downloadReport(assignmentId);
-    }
+    }, err => alert('Failed to load details: ' + (err.message||err)));
+}
 
     async function downloadReport(assignmentId){
       try{
