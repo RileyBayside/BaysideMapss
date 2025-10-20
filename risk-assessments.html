@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Risk Assessments</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="logo.png" type="image/png" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --ink:#0f172a; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff; --accent:#d11e2b;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      background:var(--bg); color:var(--ink);
+    }
+    .header{
+      display:flex; align-items:center; justify-content:space-between; gap:16px;
+      padding:12px 18px; background:#fff; border-bottom:1px solid var(--muted);
+      position:sticky; top:0; z-index:5;
+    }
+    .brand{ display:flex; align-items:center; gap:10px; }
+    .brand img{ height:40px }
+    .brand .title{ font-size:20px; font-weight:800 }
+    .container{ max-width:1100px; margin:22px auto; padding:0 16px; display:grid; gap:14px }
+
+    .filters{
+      background:#fff; border:1px solid var(--muted); border-radius:14px; padding:12px;
+      display:flex; flex-wrap:wrap; gap:10px; align-items:end;
+      box-shadow:0 8px 26px rgba(16,24,40,.08);
+    }
+    .filters label{ font-size:12px; color:#475569; display:block; margin-bottom:4px }
+    .filters input{
+      border:1px solid #e2e8f0; border-radius:10px; padding:8px 10px; font-weight:600;
+    }
+    .btn{
+      border:0; border-radius:10px; padding:9px 12px; font-weight:800; cursor:pointer; color:#fff; background:#111827;
+    }
+    .btn.alt{ background:var(--accent); }
+    .card{
+      background:#fff; border:1px solid var(--muted); border-radius:16px; padding:14px;
+      box-shadow:0 8px 26px rgba(16,24,40,.08);
+    }
+    table{ width:100%; border-collapse:collapse; font-size:14px }
+    thead th{
+      text-align:left; font-weight:800; padding:10px; border-bottom:1px solid #e2e8f0; background:#f8fafc;
+      position:sticky; top:0;
+    }
+    tbody td{ padding:10px; border-bottom:1px solid #f1f5f9; vertical-align:top }
+    .muted{ color:#64748b }
+    .chip{ display:inline-block; padding:2px 8px; border:1px solid #e2e8f0; border-radius:999px; background:#f8fafc; font-weight:700; font-size:12px; }
+    .yes{ color:#065f46; background:#dcfce7; border-color:#bbf7d0 }
+    .no{ color:#7f1d1d; background:#fee2e2; border-color:#fecaca }
+    .note{
+      background:#f8fafc; border:1px solid #e2e8f0; border-left:3px solid var(--accent);
+      border-radius:8px; padding:6px 8px; color:#334155; white-space:pre-wrap;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Firebase (+ guard) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="firebase-init.js"></script>
+  <script src="auth-guard.js"></script>
+
+  <header class="header">
+    <div class="brand">
+      <img src="logo.png" alt="Bayside" onerror="this.style.display='none'">
+      <div class="title">Risk Assessments</div>
+    </div>
+    <div>
+      <a class="btn" href="index.html">Back to Dashboard</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <form id="filters" class="filters" onsubmit="return false;">
+      <div>
+        <label for="start">Start date</label>
+        <input type="date" id="start">
+      </div>
+      <div>
+        <label for="end">End date</label>
+        <input type="date" id="end">
+      </div>
+      <div>
+        <label for="search">Operator (name or email)</label>
+        <input type="text" id="search" placeholder="e.g., Alan or alan@…">
+      </div>
+      <div style="display:flex; gap:8px">
+        <button id="applyBtn" class="btn" type="button">Apply</button>
+        <button id="exportBtn" class="btn alt" type="button">Export CSV</button>
+      </div>
+    </form>
+
+    <section class="card">
+      <div class="muted" id="count">— results</div>
+      <div style="overflow:auto; max-height:70vh">
+        <table>
+          <thead>
+            <tr>
+              <th style="min-width:110px">Date</th>
+              <th style="min-width:160px">Operator</th>
+              <th>PPE</th>
+              <th>Equip</th>
+              <th>Hazards</th>
+              <th>Traffic</th>
+              <th>Weather</th>
+              <th>SWMS</th>
+              <th>Fitness</th>
+              <th>Stop-Work</th>
+              <th style="min-width:240px">Typed Name / Notes</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function(){
+      const db = firebase.firestore();
+
+      // Default range: last 7 days
+      const d = new Date();
+      const endDefault = toDateInputValue(d);
+      const startDefault = toDateInputValue(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 6));
+      document.getElementById('start').value = startDefault;
+      document.getElementById('end').value = endDefault;
+
+      document.getElementById('applyBtn').addEventListener('click', load);
+      document.getElementById('exportBtn').addEventListener('click', exportCSV);
+
+      let cache = [];
+
+      function toDateInputValue(dt){
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth()+1).padStart(2,'0');
+        const day = String(dt.getDate()).padStart(2,'0');
+        return `${y}-${m}-${day}`;
+      }
+      function keyFromInput(v){ return v; } // YYYY-MM-DD lexicographically sortable
+
+      async function load(){
+        const start = document.getElementById('start').value;
+        const end   = document.getElementById('end').value;
+        const qText = document.getElementById('search').value.trim().toLowerCase();
+
+        let q = db.collection('risk_assessments');
+        if (start) q = q.where('dateKey', '>=', keyFromInput(start));
+        if (end)   q = q.where('dateKey', '<=', keyFromInput(end));
+
+        const snap = await q.orderBy('dateKey', 'desc').limit(1000).get();
+        cache = [];
+        snap.forEach(doc => {
+          const d = doc.data() || {};
+          cache.push({ id: doc.id, ...d });
+        });
+
+        // client-side filter by operator
+        let rows = cache;
+        if (qText){
+          rows = rows.filter(r => {
+            const a = (r.userName||'').toLowerCase();
+            const b = (r.userEmail||'').toLowerCase();
+            const c = (r.typedName||'').toLowerCase();
+            return a.includes(qText) || b.includes(qText) || c.includes(qText);
+          });
+        }
+
+        render(rows);
+      }
+
+      function yesNo(v){
+        return `<span class="chip ${v ? 'yes':'no'}">${v ? 'Yes':'No'}</span>`;
+      }
+      function esc(s=''){
+        return String(s)
+          .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+          .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+      }
+      function fmt(ts){
+        if (!ts) return '';
+        const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+        return d ? d.toLocaleString() : '';
+      }
+
+      function render(rows){
+        const tbody = document.getElementById('tbody');
+        const count = document.getElementById('count');
+        tbody.innerHTML = '';
+        count.textContent = `${rows.length} result${rows.length===1?'':'s'}`;
+
+        for (const r of rows){
+          const tr = document.createElement('tr');
+          const checks = r.checks || {};
+          tr.innerHTML = `
+            <td>${esc(r.dateKey || '')}</td>
+            <td>
+              <div><strong>${esc(r.userName || r.typedName || '—')}</strong></div>
+              <div class="muted">${esc(r.userEmail || '')}</div>
+            </td>
+            <td>${yesNo(!!checks.ppe)}</td>
+            <td>${yesNo(!!checks.equipment)}</td>
+            <td>${yesNo(!!checks.hazards)}</td>
+            <td>${yesNo(!!checks.traffic)}</td>
+            <td>${yesNo(!!checks.weather)}</td>
+            <td>${yesNo(!!checks.swms)}</td>
+            <td>${yesNo(!!checks.fitness)}</td>
+            <td>${yesNo(!!checks.stopwork)}</td>
+            <td>
+              ${r.typedName ? `<div class="muted">Signed: ${esc(r.typedName)}</div>`:''}
+              ${r.note ? `<div class="note" style="margin-top:6px">${esc(r.note)}</div>`:''}
+              <div class="muted" style="margin-top:6px">${fmt(r.timestamp)}</div>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        }
+      }
+
+      function exportCSV(){
+        if (!cache.length){ alert('Nothing to export.'); return; }
+
+        const start = document.getElementById('start').value || '';
+        const end   = document.getElementById('end').value || '';
+        const qText = document.getElementById('search').value.trim().toLowerCase();
+
+        let rows = cache.slice();
+        if (qText){
+          rows = rows.filter(r => {
+            const a = (r.userName||'').toLowerCase();
+            const b = (r.userEmail||'').toLowerCase();
+            const c = (r.typedName||'').toLowerCase();
+            return a.includes(qText) || b.includes(qText) || c.includes(qText);
+          });
+        }
+
+        const header = [
+          'date','operator','email','ppe','equipment','hazards','traffic','weather','swms','fitness','stopwork','typed_name','timestamp'
+        ];
+        const lines = [header.join(',')];
+
+        const toCSV = (v) => {
+          const s = String(v ?? '');
+          if (/[",\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
+          return s;
+        };
+
+        rows.forEach(r => {
+          const c = r.checks || {};
+          const line = [
+            r.dateKey || '',
+            r.userName || r.typedName || '',
+            r.userEmail || '',
+            !!c.ppe, !!c.equipment, !!c.hazards, !!c.traffic, !!c.weather, !!c.swms, !!c.fitness, !!c.stopwork,
+            r.typedName || '',
+            r.timestamp?.toDate ? r.timestamp.toDate().toISOString() : ''
+          ].map(toCSV).join(',');
+          lines.push(line);
+        });
+
+        const blob = new Blob([lines.join('\n')], { type:'text/csv;charset=utf-8' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href = url;
+        a.download = `risk_assessments_${start || 'all'}_${end || 'all'}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+      }
+
+      // load initial
+      load();
+    })();
+  </script>
+</body>
+</html>
