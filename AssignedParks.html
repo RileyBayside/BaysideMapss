@@ -6,8 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="logo.png" type="image/png" />
 
+  <!-- Core styles (same as ParksMowing) -->
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+  <!-- Sidebar styles (same as ParksMowing) -->
   <link rel="stylesheet" href="sidebar.css" />
 
   <style>
@@ -18,62 +21,85 @@
     }
     #map { height: 100vh; }
 
+    /* Sidebar compact + brand */
     #sidebar{
-      width: 340px; max-width: 86vw; background:#fff;
-      border-right:1px solid var(--muted); box-shadow:0 8px 26px rgba(16,24,40,.08); overflow:auto;
+      width: 340px;
+      max-width: 86vw;
+      background:#fff;
+      border-right:1px solid var(--muted);
+      box-shadow:0 8px 26px rgba(16,24,40,.08);
+      overflow:auto;
     }
     #sidebar .sidebar-head{
-      position: sticky; top:0; z-index: 5; display:flex; align-items:center; gap:10px;
-      padding:10px 12px; color:#fff; font-weight:800;
+      position: sticky; top:0; z-index: 5;
+      display:flex; align-items:center; gap:10px;
+      padding:10px 12px;
+      color:#fff; font-weight:800;
       background: linear-gradient(90deg, var(--accent), #eb4550);
       border-bottom:1px solid rgba(255,255,255,.15);
     }
-    #sidebar .sidebar-head img{ height:24px }
+    #sidebar .sidebar-head img{ height:24px; width:auto; display:block }
     #sidebar .sidebar-head .title{ font-size:14px; letter-spacing:.3px }
 
-    #sidebar button{ border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer; background: var(--accent); color:#fff; }
-    #sidebar #toggle-all{ display:block; width:calc(100% - 24px); margin:10px 12px 8px; }
+    #sidebar button{
+      border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer;
+      background: var(--accent); color:#fff;
+    }
+    #sidebar #toggle-all{ display:block; width:calc(100% - 24px); margin:10px 12px 8px; background:var(--accent); }
     #sidebar #toggle-all:hover{ background:var(--accent-600); }
+
     #sidebar #sidebar-content{ padding:8px 12px 16px; }
 
-    #sidebar-content details{ border:1px solid var(--muted); border-radius:12px; overflow:hidden; background:#fff; margin-bottom:8px; }
+    #sidebar-content details{
+      border:1px solid var(--muted); border-radius:12px; overflow:hidden;
+      background:#fff; margin-bottom:8px;
+    }
     #sidebar-content details > summary{
-      list-style:none; cursor:pointer; user-select:none; padding:8px 10px; background:var(--soft-2);
-      display:flex; align-items:center; justify-content:space-between; gap:10px; font-weight:700; color:#111827;
+      list-style:none; cursor:pointer; user-select:none;
+      padding:8px 10px; background:var(--soft-2);
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      font-weight:700; color:var(--ink);
     }
     #sidebar-content details[open] > summary{ background:#eef2f7; }
 
-    #sidebar-content li, #sidebar-content .list-item, #sidebar-content .sidebar-row, #sidebar-content .item{
+    #sidebar-content li,
+    #sidebar-content .list-item,
+    #sidebar-content .sidebar-row,
+    #sidebar-content .item{
       display:flex; align-items:center; justify-content:space-between; gap:10px;
-      padding:8px 10px; border-top:1px solid #eef2f7; background:#fff; font-weight:600; color:#111827;
+      padding:8px 10px; border-top:1px solid #eef2f7; background:#fff;
+      font-weight:600; color:#111827;
     }
     #sidebar-content li:first-child{ border-top:0; }
 
-    .mini-pill{ display:inline-block; padding:2px 6px; border-radius:999px; font-size:11px; font-weight:800; color:#7f1d1d; background:#fee2e2; border:1px solid #fecaca; white-space:nowrap; }
+    /* Hide the original/native left checkbox (we’ll add our own “Done”) */
+    #sidebar-content input[type="checkbox"]:not(.bs-done){ display:none !important; }
 
-    .site-ops{ display:inline-flex; align-items:center; gap:8px; white-space:nowrap; }
-    .site-ops input[type="text"]{ width:140px; max-width:48vw; padding:6px 8px; border-radius:8px; border:1px solid #e2e8f0; font-weight:600; background:#fff }
-    .site-ops .site-done{ transform: translateY(1px); }
+    /* Hide ALL status badges (our old mini-pill & any native ones) */
+    #sidebar-content .mini-pill,
+    #sidebar-content .badge,
+    #sidebar-content .tag,
+    #sidebar-content .status { display:none !important; }
 
-    #sidebar-toggle{ position: fixed; top:12px; left:12px; z-index:1000; border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer; background: var(--accent); color:#fff; box-shadow:0 6px 18px rgba(16,24,40,.18); }
+    /* Our single “Done” control (notes remain the native inputs already in the list) */
+    .bs-ops{ display:inline-flex; align-items:center; gap:8px; margin-left:8px; }
+    .bs-ops label{ font-weight:700; color:#111827; font-size:12px; display:inline-flex; align-items:center; gap:6px; }
+
+    #sidebar-toggle{
+      position: fixed; top:12px; left:12px; z-index: 1000;
+      border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer;
+      background: var(--accent); color:#fff; box-shadow:0 6px 18px rgba(16,24,40,.18);
+    }
     #sidebar-toggle:active{ transform: translateY(1px); }
 
     @media (max-width: 768px){
       #sidebar{ width: 100vw; max-width: none; }
       #sidebar .sidebar-head .title{ font-size:13px }
       #sidebar-content details > summary{ padding:8px 10px; }
-      #sidebar-content li, #sidebar-content .list-item, #sidebar-content .sidebar-row, #sidebar-content .item{ padding:8px 10px; }
-      .site-ops input[type="text"]{ width: 120px; }
+      #sidebar-content li, #sidebar-content .list-item,
+      #sidebar-content .sidebar-row, #sidebar-content .item{ padding:8px 10px; }
     }
   </style>
-
-  <style>
-  .bs-ops{ display:inline-flex; align-items:center; gap:8px; margin-left:8px; }
-  .bs-ops .bs-note{ width:140px; max-width:48vw; padding:6px 8px; border-radius:8px; border:1px solid #e2e8f0; }
-  .bs-ops label{ font-weight:700; color:#111827; font-size:12px; display:inline-flex; align-items:center; gap:6px; }
-  @media (max-width:768px){ .bs-ops .bs-note{ width:120px } }
-</style>
-
 </head>
 <body>
 
@@ -84,8 +110,10 @@
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
 
+  <!-- Sidebar toggle -->
   <button id="sidebar-toggle">☰</button>
 
+  <!-- Sidebar -->
   <div id="sidebar">
     <div class="sidebar-head">
       <img src="logo.png" alt="Bayside" onerror="this.style.display='none'">
@@ -106,14 +134,16 @@
     </div>
   </div>
 
+  <!-- Map -->
   <div id="map"></div>
 
+  <!-- Core scripts -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="script.js"></script>
   <script src="sidebar.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
-  <!-- Filter the sidebar to only show assigned IDs -->
+  <!-- Filter to only show assigned IDs -->
   <script>
   (function () {
     function getFocusFromQuery() {
@@ -184,212 +214,181 @@
   })();
   </script>
 
-<script>
-(function () {
-  const db   = firebase.firestore();
-  const auth = firebase.auth();
-  const params = new URLSearchParams(location.search);
+  <!-- One “Done” checkbox per row; use native Notes input; write to Firestore -->
+  <script>
+  (function () {
+    const db   = firebase.firestore();
+    const auth = firebase.auth();
+    const params = new URLSearchParams(location.search);
 
-  // Resolve assignment id: ?task=... -> localStorage -> try to infer from focus
-  let assignmentId = params.get('task') || localStorage.getItem('currentTaskId') || null;
-  if (assignmentId) { try { localStorage.setItem('currentTaskId', assignmentId); } catch(_) {} }
+    // Resolve assignment id: ?task=... -> localStorage -> infer from focus
+    let assignmentId = params.get('task') || localStorage.getItem('currentTaskId') || null;
+    if (assignmentId) { try { localStorage.setItem('currentTaskId', assignmentId); } catch(_) {} }
 
-  function focusIds() {
-    return (params.get('focus')||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
-  }
-  async function inferTaskIdFromFocus(){
-    const ids = focusIds();
-    if (!ids.length) return null;
-    try{
-      const batch = ids.slice(0,10);
-      const snap = await db.collection('assignments').where('siteIds','array-contains-any',batch).get();
-      let best=null, score=-1;
-      snap.forEach(doc=>{
-        const arr = (doc.data().siteIds||[]).map(x=>String(x).toUpperCase());
-        const sc = ids.reduce((n,id)=>n+(arr.includes(id)?1:0),0);
-        if(sc>score){ best=doc.id; score=sc; }
-      });
-      if(best){ assignmentId=best; try{localStorage.setItem('currentTaskId',best);}catch(_){} }
-      return best;
-    }catch(e){ console.warn('inferTaskIdFromFocus:',e); return null; }
-  }
-  async function ensureTaskId(){ return assignmentId || await inferTaskIdFromFocus(); }
-
-  // ---------- helpers
-  const idRx = /\bM\d{3,5}\b/i;
-  function findRow(node){
-    const root = document.getElementById('sidebar-content');
-    let cur = node;
-    while (cur && cur!==root){
-      // consider anything that contains an M#### as a "row"
-      if (idRx.test(cur.textContent||'')) return cur;
-      cur = cur.parentElement;
+    function focusIds() {
+      return (params.get('focus')||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
     }
-    return node;
-  }
-  function detectSiteId(node){
-    const row = findRow(node);
-    const m = (row.textContent||'').match(idRx);
-    return m ? m[0].toUpperCase() : '';
-  }
-  function nearestNoteInput(row){
-    // prefer our bs-note; otherwise grab the first text input in the row
-    return row.querySelector('input.bs-note[type="text"]') ||
-           row.querySelector('input[type="text"]');
-  }
-
-  async function writeProgress(siteId, status, note){
-    const uid = auth.currentUser?.uid || null;
-    const taskId = await ensureTaskId();
-    const writes = [];
-
-    if (taskId){
-      const update = {};
-      update[`perSite.${siteId}.status`]      = status;
-      update[`perSite.${siteId}.note`]        = (note||'').trim();
-      update[`perSite.${siteId}.operatorUid`] = uid;
-      update[`perSite.${siteId}.updatedAt`]   = firebase.firestore.FieldValue.serverTimestamp();
-      update[`perSite.${siteId}.completedAt`] = (status==='completed') ? firebase.firestore.FieldValue.serverTimestamp() : null;
-      writes.push(db.collection('assignments').doc(taskId).set(update,{merge:true}));
+    async function inferTaskIdFromFocus(){
+      const ids = focusIds();
+      if (!ids.length) return null;
+      try{
+        const batch = ids.slice(0,10);
+        const snap = await db.collection('assignments').where('siteIds','array-contains-any',batch).get();
+        let best=null, score=-1;
+        snap.forEach(doc=>{
+          const arr = (doc.data().siteIds||[]).map(x=>String(x).toUpperCase());
+          const sc = ids.reduce((n,id)=>n+(arr.includes(id)?1:0),0);
+          if(sc>score){ best=doc.id; score=sc; }
+        });
+        if(best){ assignmentId=best; try{localStorage.setItem('currentTaskId',best);}catch(_){} }
+        return best;
+      }catch(e){ console.warn('inferTaskIdFromFocus:',e); return null; }
     }
+    async function ensureTaskId(){ return assignmentId || await inferTaskIdFromFocus(); }
 
-    // history (optional)
-    writes.push(db.collection('work_logs').add({
-      assignmentId: taskId || null,
-      siteId, status,
-      note: (note||'').trim(),
-      operatorUid: uid,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    }));
-
-    await Promise.all(writes);
-  }
-
-  // ---------- mount controls + bind to existing native controls
-  function whenSidebarReady(cb){
-    const root = document.getElementById('sidebar-content');
-    if (!root) return;
-    if (root.children.length) return cb(root);
-    const mo = new MutationObserver((_,o)=>{ if(root.children.length){ o.disconnect(); cb(root); }});
-    mo.observe(root,{childList:true,subtree:true});
-    setTimeout(()=>mo.disconnect(),10000);
-  }
-
-  function ensureMiniPill(row){
-    let pill = row.querySelector('.mini-pill');
-    if (!pill){
-      pill = document.createElement('span');
-      pill.className = 'mini-pill';
-      pill.textContent = 'assigned';
-      row.appendChild(pill);
-    }
-  }
-
-  function ensureOurControls(row){
-    if (row.querySelector('.bs-ops')) return;
-    const siteId = detectSiteId(row);
-    if (!siteId) return;
-
-    ensureMiniPill(row);
-
-    const ops = document.createElement('span');
-    ops.className = 'bs-ops';
-    ops.innerHTML = `
-      <label><input type="checkbox" class="bs-done"> Done</label>
-      <input type="text" class="bs-note" placeholder="Notes…">
-    `;
-    row.appendChild(ops);
-
-    const done = ops.querySelector('.bs-done');
-    const note = ops.querySelector('.bs-note');
-
-    done.addEventListener('change', async ()=>{
-      try{ await writeProgress(siteId, done.checked ? 'completed' : 'in_progress', (note.value||'')); }
-      catch(e){ console.error(e); alert('Save failed: ' + (e.message||e)); }
-    });
-    function saveNote(){
-      const status = done.checked ? 'completed' : 'in_progress';
-      writeProgress(siteId, status, (note.value||'')).catch(console.error);
-    }
-    note.addEventListener('change', saveNote);
-    note.addEventListener('blur', saveNote);
-  }
-
-  whenSidebarReady((root)=>{
-    // 1) add our “bs-” controls (nice-to-have)
-    const scan = () => {
-      root.querySelectorAll('*').forEach(el => {
-        if (el.closest('summary')) return;      // skip group headers
-        if (!idRx.test(el.textContent||'')) return;
-        ensureOurControls(el);
-      });
-    };
-    scan();
-    const mo = new MutationObserver(scan);
-    mo.observe(root, { childList:true, subtree:true });
-    setTimeout(()=>mo.disconnect(), 30000);
-
-    // 2) ALSO listen to the EXISTING native controls and write progress
-    root.addEventListener('change', async (ev)=>{
-      const t = ev.target;
-      if (!(t instanceof HTMLInputElement)) return;
-
-      // native checkbox (not our .bs-done)
-      if (t.type === 'checkbox' && !t.classList.contains('bs-done')){
-        const row = findRow(t);
-        const siteId = detectSiteId(row);
-        if (!siteId) return;
-        const noteEl = nearestNoteInput(row);
-        const note   = noteEl ? noteEl.value : '';
-        try{
-          await writeProgress(siteId, t.checked ? 'completed' : 'in_progress', note);
-          console.log('Saved native checkbox:', siteId, t.checked ? 'completed' : 'in_progress');
-        }catch(e){ console.error('Save failed', e); }
+    // Helpers
+    const idRx = /\bM\d{3,5}\b/i;
+    function findRow(node){
+      const root = document.getElementById('sidebar-content');
+      let cur = node;
+      while (cur && cur!==root){
+        if (idRx.test(cur.textContent||'')) return cur;
+        cur = cur.parentElement;
       }
+      return node;
+    }
+    function detectSiteId(node){
+      const row = findRow(node);
+      const m = (row.textContent||'').match(idRx);
+      return m ? m[0].toUpperCase() : '';
+    }
+    function nativeNoteInput(row){
+      return row.querySelector('input[type="text"]');
+    }
 
-      // native text inputs (not our .bs-note)
-      if (t.type === 'text' && !t.classList.contains('bs-note')){
-        const row = findRow(t);
-        const siteId = detectSiteId(row);
-        if (!siteId) return;
-        // look for a checkbox in the same row to derive status
-        const done = row.querySelector('input.bs-done[type="checkbox"]') ||
-                     row.querySelector('input[type="checkbox"]');
-        const status = (done && done.checked) ? 'completed' : 'in_progress';
-        try{
-          await writeProgress(siteId, status, t.value||'');
-          console.log('Saved native note:', siteId);
-        }catch(e){ console.error('Save failed', e); }
-      }
-    });
-
-    // 3) Live reflection from Firestore (updates both native & bs- UIs)
-    firebase.auth().onAuthStateChanged(async ()=>{
+    async function writeProgress(siteId, status, note){
+      const uid = auth.currentUser?.uid || null;
       const taskId = await ensureTaskId();
-      if (!taskId) { console.warn('No assignment id; live reflection disabled.'); return; }
-      db.collection('assignments').doc(taskId).onSnapshot(snap=>{
-        const perSite = (snap.data()||{}).perSite || {};
-        root.querySelectorAll('*').forEach(row=>{
-          if (!idRx.test(row.textContent||'')) return;
-          const sid = detectSiteId(row);
-          if (!sid) return;
-          const info = perSite[sid] || {};
-          ensureMiniPill(row);
-          const pill = row.querySelector('.mini-pill');
-          if (pill) pill.textContent = (info.status || 'assigned').replace('_',' ');
 
-          // reflect into our bs- checkbox
-          const myDone = row.querySelector('input.bs-done[type="checkbox"]');
-          if (myDone) myDone.checked = info.status === 'completed';
-          // reflect into our bs- note if present, otherwise do nothing (we don’t overwrite native notes)
-          const myNote = row.querySelector('input.bs-note[type="text"]');
-          if (myNote && typeof info.note === 'string' && myNote.value !== info.note) myNote.value = info.note;
+      const writes = [];
+      if (taskId){
+        const update = {};
+        update[`perSite.${siteId}.status`]      = status;
+        update[`perSite.${siteId}.note`]        = (note||'').trim();
+        update[`perSite.${siteId}.operatorUid`] = uid;
+        update[`perSite.${siteId}.updatedAt`]   = firebase.firestore.FieldValue.serverTimestamp();
+        update[`perSite.${siteId}.completedAt`] = (status==='completed') ? firebase.firestore.FieldValue.serverTimestamp() : null;
+        writes.push(db.collection('assignments').doc(taskId).set(update,{merge:true}));
+      }
+      // Optional history
+      writes.push(db.collection('work_logs').add({
+        assignmentId: taskId || null,
+        siteId, status,
+        note: (note||'').trim(),
+        operatorUid: uid,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      }));
+      await Promise.all(writes);
+    }
+
+    function whenSidebarReady(cb){
+      const root = document.getElementById('sidebar-content');
+      if (!root) return;
+      if (root.children.length) return cb(root);
+      const mo = new MutationObserver((_,o)=>{ if(root.children.length){ o.disconnect(); cb(root); }});
+      mo.observe(root,{childList:true,subtree:true});
+      setTimeout(()=>mo.disconnect(),10000);
+    }
+
+    function removeStatusBadges(row){
+      // Hide any element whose text is exactly "assigned" (common in your list)
+      row.querySelectorAll('span,div,small,b,strong,i,em').forEach(el=>{
+        const t = (el.textContent||'').trim().toLowerCase();
+        if (t === 'assigned') el.style.display = 'none';
+      });
+      // Also hide our previous mini-pill if present
+      row.querySelectorAll('.mini-pill').forEach(el=> el.style.display='none');
+    }
+
+    function ensureDoneControl(row){
+      if (row.querySelector('.bs-done')) return; // already added
+      const siteId = detectSiteId(row);
+      if (!siteId) return;
+
+      removeStatusBadges(row);
+
+      const ops = document.createElement('span');
+      ops.className = 'bs-ops';
+      ops.innerHTML = `<label><input type="checkbox" class="bs-done"> Done</label>`;
+      row.appendChild(ops);
+
+      const done = ops.querySelector('.bs-done');
+      const noteEl = nativeNoteInput(row);
+
+      done.addEventListener('change', async ()=>{
+        try{
+          await writeProgress(siteId, done.checked ? 'completed' : 'in_progress', noteEl ? noteEl.value : '');
+        }catch(e){ console.error(e); alert('Save failed: ' + (e.message||e)); }
+      });
+    }
+
+    whenSidebarReady((root)=>{
+      // Add a single “Done” per row and keep native Notes
+      const scan = () => {
+        root.querySelectorAll('li, .list-item, .sidebar-row, .item, div').forEach(el => {
+          if (el.closest('summary')) return;
+          if (!idRx.test(el.textContent||'')) return;
+          ensureDoneControl(el);
+        });
+      };
+      scan();
+      const mo = new MutationObserver(scan);
+      mo.observe(root, { childList:true, subtree:true });
+      setTimeout(()=>mo.disconnect(), 30000);
+
+      // Save native notes on blur/change
+      const saveNote = async (t) => {
+        const row = findRow(t);
+        const siteId = detectSiteId(row);
+        if (!siteId) return;
+        const done = row.querySelector('.bs-done');
+        const status = done && done.checked ? 'completed' : 'in_progress';
+        try{ await writeProgress(siteId, status, t.value||''); }catch(e){ console.error(e); }
+      };
+      root.addEventListener('change', (ev)=>{
+        const t = ev.target;
+        if (t instanceof HTMLInputElement && t.type==='text') saveNote(t);
+      });
+      root.addEventListener('blur', (ev)=>{
+        const t = ev.target;
+        if (t instanceof HTMLInputElement && t.type==='text') saveNote(t);
+      }, true);
+
+      // Live reflection from Firestore into our single Done checkbox (and native notes)
+      firebase.auth().onAuthStateChanged(async ()=>{
+        const taskId = await ensureTaskId();
+        if (!taskId) { console.warn('No assignment id; live reflection disabled.'); return; }
+        db.collection('assignments').doc(taskId).onSnapshot(snap=>{
+          const perSite = (snap.data()||{}).perSite || {};
+          root.querySelectorAll('li, .list-item, .sidebar-row, .item, div').forEach(row=>{
+            if (!idRx.test(row.textContent||'')) return;
+            const sid = detectSiteId(row);
+            if (!sid) return;
+            const info = perSite[sid] || {};
+            // Done
+            const done = row.querySelector('.bs-done');
+            if (done) done.checked = info.status === 'completed';
+            // Native note
+            const noteEl = nativeNoteInput(row);
+            if (noteEl && typeof info.note === 'string' && noteEl.value !== info.note) noteEl.value = info.note;
+            // Make sure any leftover status chips are hidden
+            removeStatusBadges(row);
+          });
         });
       });
     });
-  });
-})();
-</script>
+  })();
+  </script>
 
 </body>
 </html>
