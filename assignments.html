@@ -21,7 +21,6 @@
       background:var(--bg); color:var(--ink);
     }
 
-    /* App bar */
     .header{
       display:flex; align-items:center; justify-content:space-between; gap:16px;
       padding:12px 18px; background:#fff; border-bottom:1px solid var(--muted);
@@ -33,7 +32,6 @@
     .userbox{ display:flex; align-items:center; gap:10px }
     .email{ font-weight:600; color:#334155; background:#f1f5f9; border:1px solid #e2e8f0; padding:6px 10px; border-radius:9px; }
 
-    /* Layout */
     .container{ max-width:1120px; margin:22px auto; padding:0 16px }
     .section-title{ font-size:18px; font-weight:800; margin: 4px 2px 14px; color:var(--ink-2) }
 
@@ -66,7 +64,6 @@
     .kvs{ display:flex; flex-wrap:wrap; gap:8px; font-size:13px; color:#475569 }
     .kvs > div{ display:inline-flex; align-items:center; gap:6px; background:#f8fafc; border:1px solid #e2e8f0; padding:6px 8px; border-radius:10px }
 
-    /* Modal */
     .modal-backdrop{
       position:fixed; inset:0; background:rgba(15,23,42,.38); display:none; align-items:center; justify-content:center; z-index:40;
     }
@@ -98,7 +95,6 @@
     .sub{ color:#64748b; font-size:12px }
   </style>
 
-  <!-- Tiny pills for the modal rows -->
   <style>
     .assign-site-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:10px;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:8px;background:#fff}
     .assign-site-row .sid{font-weight:800}
@@ -117,7 +113,6 @@
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
 
-  <!-- Header -->
   <header class="header">
     <div class="brand">
       <img src="logo.png" alt="Bayside" onerror="this.style.display='none'">
@@ -152,7 +147,6 @@
     </div>
   </div>
 
-  <!-- jsPDF -->
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
   <script>
@@ -183,167 +177,66 @@
       const txt = s.replace('_',' ');
       return `<span class="pill ${map[s]||'pill-gray'}">${txt.charAt(0).toUpperCase()+txt.slice(1)}</span>`;
     };
-    const escapeHtml = (s) =>
-      String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-
     function getPerSiteForId(perSite, rawId){
       if (!perSite) return undefined;
       const idU = String(rawId).toUpperCase();
       const idL = idU.toLowerCase();
-      const noM = idU.replace(/^M/, '');
+      const noM = idU.replace(/^M/,'');
       return perSite[idU] ?? perSite[idL] ?? perSite[noM];
     }
 
-    async function loadParkNotes(siteIds){
-      if(!siteIds || !siteIds.length) return {};
-      const ids = Array.from(new Set(siteIds.map(s=>String(s).toUpperCase())));
-      const byId = {};
-      const chunk = 10;
-      for(let i=0;i<ids.length;i+=chunk){
-        const batch = ids.slice(i, i+chunk);
-        const snap = await db.collection('parkNotes')
-          .where(firebase.firestore.FieldPath.documentId(), 'in', batch)
-          .get();
-        snap.forEach(doc => byId[doc.id.toUpperCase()] = (doc.data()||{}).note || '');
-      }
-      return byId;
-    }
-
-    /* ---------- latest logs helper (for details/PDF) ---------- */
-    async function loadLatestWorkLogs(siteIds, assignment) {
-      if (!siteIds || !siteIds.length) return {};
-      const ids = Array.from(new Set(siteIds.map(s => String(s).toUpperCase())));
-      const byId = {};
-      const chunk = 10;
-
-      const opUid = assignment?.userId || null;
-      const startedAt = assignment?.startedAt || null;
-
-      for (let i = 0; i < ids.length; i += chunk) {
-        const batch = ids.slice(i, i + chunk);
-        let q = db.collection('work_logs').where('siteId', 'in', batch);
-        if (opUid) q = q.where('operatorUid', '==', opUid);
-        if (startedAt) q = q.where('timestamp', '>=', startedAt);
-
-        const snap = await q.get();
-        snap.forEach(doc => {
-          const w = doc.data() || {};
-          const sid = String(w.siteId || '').toUpperCase();
-          if (!sid) return;
-          const t =
-            (w.completedAt?.toMillis?.() ?? w.timestamp?.toMillis?.() ??
-             w.createdAt?.toMillis?.() ?? 0);
-          const prev = byId[sid];
-          if (!prev || t > prev._t) {
-            byId[sid] = {
-              status: (w.status || 'completed').toLowerCase(),
-              note: (w.note || '').trim(),
-              completedAt: w.completedAt || w.timestamp || w.createdAt || null,
-              _t: t
-            };
-          }
-        });
-      }
-      return byId;
-    }
-
-    /* ---------- live completion pill (hybrid: logs + assignment doc) ---------- */
-    const liveCounters = {}; // assignmentId -> teardown
-
+    /* ---------- live counter (hybrid) ---------- */
+    const liveCounters = {};
     function attachLiveCompletionCounter(assignmentId, assignmentData, chipEl){
       if (!chipEl) return;
       if (liveCounters[assignmentId]) { try{ liveCounters[assignmentId](); }catch(_){} }
 
-      let siteIds = (assignmentData.siteIds || []).map(s=>String(s).toUpperCase());
+      let siteIds = (assignmentData.siteIds||[]).map(s=>String(s).toUpperCase());
       let perSite = assignmentData.perSite || {};
-
-      const latest = {}; // { [sid]: {status, _t} }
+      const latest = {};
 
       function recompute(){
         let done = 0;
         for (const sid of siteIds){
-          const ps = (getPerSiteForId(perSite, sid) || {});
+          const ps = getPerSiteForId(perSite, sid) || {};
           const st = (latest[sid]?.status || ps.status || '').toLowerCase();
           if (st === 'completed') done++;
         }
         chipEl.textContent = String(done);
       }
 
-      // assignment doc listener (perSite updates)
       const unsubAssign = db.collection('assignments').doc(assignmentId).onSnapshot(s=>{
-        const d = s.data() || {};
-        const newSiteIds = (d.siteIds || []).map(x=>String(x).toUpperCase());
-        const changed = newSiteIds.length !== siteIds.length || newSiteIds.some((v,i)=>v!==siteIds[i]);
-        siteIds = newSiteIds;
-        perSite = d.perSite || {};
-        if (changed) { startLogListeners(); }
+        const d = s.data()||{};
+        siteIds = (d.siteIds||[]).map(x=>String(x).toUpperCase());
+        perSite = d.perSite||{};
         recompute();
-      }, err => console.warn('assignment watch error:', err));
+      });
 
-      // work_logs listeners
-      const logUnsubs = [];
-      function startLogListeners(){
-        while (logUnsubs.length){ try{ logUnsubs.pop()(); }catch(_){} }
-        const uniq = Array.from(new Set(siteIds));
-        const chunk = 10;
-        for (let i=0;i<uniq.length;i+=chunk){
-          const batch = uniq.slice(i,i+chunk);
-
-          let q = db.collection('work_logs').where('siteId','in', batch);
-          if (assignmentData?.userId)    q = q.where('operatorUid','==', assignmentData.userId);
-          if (assignmentData?.startedAt) q = q.where('timestamp','>=', assignmentData.startedAt);
-
-          const attach = (query) => query.onSnapshot(snap=>{
-            snap.docChanges().forEach(ch=>{
-              const w = ch.doc.data() || {};
-              const sid = String(w.siteId || '').toUpperCase();
-              if (!sid) return;
-              const t = (w.completedAt?.toMillis?.() ?? w.timestamp?.toMillis?.() ?? w.createdAt?.toMillis?.() ?? 0);
-              if (!latest[sid] || t > latest[sid]._t){
-                latest[sid] = { status: (w.status || 'completed').toLowerCase(), _t: t };
-              }
-            });
-            recompute();
-          }, err=>{
-            console.warn('live counter error (batch):', err?.message || err);
-            if (err?.code === 'failed-precondition' || /index/i.test(err?.message||'')){
-              const fallback = db.collection('work_logs').where('siteId','in', batch);
-              const u2 = attach(fallback);
-              logUnsubs.push(u2);
+      const logUnsubs=[];
+      const chunk=10;
+      const uniq = Array.from(new Set(siteIds));
+      for(let i=0;i<uniq.length;i+=chunk){
+        const batch=uniq.slice(i,i+chunk);
+        const u = db.collection('work_logs').where('siteId','in',batch).onSnapshot(snap=>{
+          snap.docChanges().forEach(ch=>{
+            const w = ch.doc.data()||{};
+            const sid = String(w.siteId||'').toUpperCase();
+            const t = (w.completedAt?.toMillis?.()??w.timestamp?.toMillis?.()??w.createdAt?.toMillis?.()??0);
+            if (!latest[sid] || t > latest[sid]._t){
+              latest[sid] = { status:(w.status||'').toLowerCase(), _t:t };
             }
           });
-
-          const u = attach(q);
-          logUnsubs.push(u);
-        }
+          recompute();
+        });
+        logUnsubs.push(u);
       }
 
-      recompute();
-      startLogListeners();
-
-      liveCounters[assignmentId] = () => {
-        try{ unsubAssign(); }catch(_){}
-        while (logUnsubs.length){ try{ logUnsubs.pop()(); }catch(_){} }
-      };
+      liveCounters[assignmentId] = () => { try{unsubAssign();}catch(_){}
+        logUnsubs.forEach(fn=>{ try{fn();}catch(_){}}); };
     }
 
-    /* ---------- list (admin) ---------- */
+    /* ---------- list ---------- */
     const listEl = document.getElementById('assignments');
-
-    async function deleteAssignment(assignmentId, labelText){
-      const label = labelText || 'this task';
-      const first = confirm(`Delete assignment: ${label}?\n\nThis will remove the task and its per-site progress from Firestore.`);
-      if (!first) return;
-      const second = confirm('Are you sure? This action cannot be undone here.');
-      if (!second) return;
-      try{
-        await db.collection('assignments').doc(assignmentId).delete();
-        if (liveCounters[assignmentId]) { try{ liveCounters[assignmentId](); }catch(_){} delete liveCounters[assignmentId]; }
-      }catch(e){
-        alert('Failed to delete: ' + (e.message || e.code || e));
-      }
-    }
-
     function renderAssignmentCard(doc){
       const d = doc.data() || {};
       const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
@@ -384,12 +277,14 @@
       const delBtn = document.createElement('button');
       delBtn.className = 'btn';
       delBtn.textContent = 'Delete task';
-      delBtn.addEventListener('click', () => deleteAssignment(doc.id, title.textContent));
+      delBtn.addEventListener('click', async () => {
+        if (!confirm('Delete this task?')) return;
+        await firebase.firestore().collection('assignments').doc(doc.id).delete();
+      });
       row.appendChild(delBtn);
 
       el.appendChild(row);
 
-      // Live updates for the "done" part of the chip (hybrid)
       const chipDone = meta.querySelector('.js-done');
       attachLiveCompletionCounter(doc.id, d, chipDone);
 
@@ -403,25 +298,12 @@
         c.className = 'card';
         c.innerHTML = '<div class="muted">No assignments yet.</div>';
         listEl.appendChild(c);
-        Object.keys(liveCounters).forEach(id => { try{ liveCounters[id](); }catch(_){} delete liveCounters[id]; });
         return;
       }
       const docs = [];
-      const presentIds = new Set();
-      snap.forEach(doc => { docs.push(doc); presentIds.add(doc.id); });
-
-      docs.sort((a,b)=>{
-        const ad = a.data().dueDate?.toDate?.() ?? 0;
-        const bd = b.data().dueDate?.toDate?.() ?? 0;
-        return ad - bd;
-      });
+      snap.forEach(doc => docs.push(doc));
+      docs.sort((a,b)=> (a.data().dueDate?.toDate?.() ?? 0) - (b.data().dueDate?.toDate?.() ?? 0));
       docs.forEach(doc => listEl.appendChild(renderAssignmentCard(doc)));
-
-      Object.keys(liveCounters).forEach(id => {
-        if (!presentIds.has(id)) { try{ liveCounters[id](); }catch(_){} delete liveCounters[id]; }
-      });
-    }, err => {
-      listEl.innerHTML = `<div class="card"><div class="muted" style="color:#b91c1c">Failed to load assignments: ${err.message||err}</div></div>`;
     });
 
     /* ---------- modal (live) ---------- */
@@ -433,19 +315,9 @@
     const openMapBtn = document.getElementById('openMapBtn');
     const downloadBtn= document.getElementById('downloadBtn');
 
-    // focus-handling
     let lastFocusEl = null;
-    function showModal(){
-      lastFocusEl = document.activeElement;
-      backdrop.classList.add('show');
-      backdrop.setAttribute('aria-hidden','false');
-      closeBtn?.focus();
-    }
-    function hideModal(){
-      if (lastFocusEl && typeof lastFocusEl.focus === 'function') { lastFocusEl.focus(); }
-      backdrop.classList.remove('show');
-      backdrop.setAttribute('aria-hidden','true');
-    }
+    function showModal(){ lastFocusEl = document.activeElement; backdrop.classList.add('show'); backdrop.setAttribute('aria-hidden','false'); closeBtn?.focus(); }
+    function hideModal(){ if (lastFocusEl?.focus) lastFocusEl.focus(); backdrop.classList.remove('show'); backdrop.setAttribute('aria-hidden','true'); }
     closeBtn.addEventListener('click', hideModal);
     backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) hideModal(); });
 
@@ -463,44 +335,28 @@
         const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
         const perSite = d.perSite || {};
 
-        const latestLogs = await loadLatestWorkLogs(siteIds, d);
-
         modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
 
-        const mergedCompleted = siteIds.filter(id => {
-          const ps = getPerSiteForId(perSite, id) || {};
-          const lg = latestLogs[id] || {};
-          return ((ps.status || lg.status || '').toLowerCase() === 'completed');
-        }).length;
+        const completed = siteIds.filter(id => ( (perSite[id]?.status||'').toLowerCase()==='completed' )).length;
         const total = siteIds.length;
 
         metaBox.innerHTML = `
-          <div><strong>${mergedCompleted}/${total}</strong> completed</div>
+          <div><strong>${completed}/${total}</strong> completed</div>
           ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
           ${d.status ? `<div>Overall: ${badge(d.status)}</div>` : ''}
           ${d.startedAt ? `<div>Started: ${fmt(d.startedAt).split(',')[0]}</div>` : ''}
         `;
 
         const focusCsv = siteIds.join(',');
-        openMapBtn.href = focusCsv
-          ? `AssignedParks.html?focus=${encodeURIComponent(focusCsv)}&task=${encodeURIComponent(snap.id)}`
-          : '#';
-        // Persist task id for robustness
-        openMapBtn.addEventListener('click', () => {
-          try { localStorage.setItem('currentTaskId', snap.id); } catch(_) {}
-        });
-
-        const permNotes = await loadParkNotes(siteIds);
+        openMapBtn.href = focusCsv ? `AssignedParks.html?focus=${encodeURIComponent(focusCsv)}&task=${encodeURIComponent(snap.id)}` : '#';
+        openMapBtn.addEventListener('click', ()=>{ try { localStorage.setItem('currentTaskId', snap.id); } catch(_) {} });
 
         sitesBox.innerHTML = '';
         siteIds.forEach(id => {
-          const ps = getPerSiteForId(perSite, id) || {};
-          const lg = latestLogs[id] || {};
-
-          const status = (ps.status || lg.status || 'assigned').toLowerCase();
-          const opNote = (ps.note ?? lg.note ?? '').trim();
-          const completedAt = ps.completedAt || lg.completedAt || null;
-          const perm = (permNotes[id] || '').trim();
+          const ps = perSite[id] || {};
+          const status = (ps.status || 'assigned').toLowerCase();
+          const opNote = (ps.note || '').trim();
+          const completedAt = ps.completedAt || null;
 
           const row = document.createElement('div');
           row.className = 'site-row';
@@ -509,10 +365,7 @@
           left.innerHTML = `<strong>${id}</strong><div class="sub">${badge(status)}</div>`;
 
           const mid = document.createElement('div');
-          let notesHtml = '';
-          if (opNote) notesHtml += `<div class="note" style="border-left-color:#2563eb">Operator: ${escapeHtml(opNote)}</div>`;
-          if (perm)   notesHtml += `<div class="note">Permanent: ${escapeHtml(perm)}</div>`;
-          if (!notesHtml) notesHtml = `<div class="sub">No notes</div>`;
+          let notesHtml = opNote ? `<div class="note" style="border-left-color:#2563eb">Operator: ${opNote.replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))}</div>` : `<div class="sub">No notes</div>`;
           mid.innerHTML = notesHtml;
 
           const right = document.createElement('div');
@@ -534,7 +387,6 @@
       downloadBtn.onclick = () => downloadReport(assignmentId);
     }
 
-    /* ---------- PDF report ---------- */
     async function downloadReport(assignmentId){
       try{
         const { jsPDF } = window.jspdf || {};
@@ -549,7 +401,6 @@
 
         const siteIds = (d.siteIds || []).map(s => String(s).toUpperCase());
         const perSite = d.perSite || {};
-        const latestLogs = await loadLatestWorkLogs(siteIds, d);
 
         const doc = new jsPDF({ unit:'pt', format:'a4' });
         const marginL = 56, startY = 64, lineH = 18;
@@ -561,19 +412,12 @@
         };
 
         const total = siteIds.length;
-        const completed = siteIds.filter(id => {
-          const ps = getPerSiteForId(perSite, id) || {};
-          const lg = latestLogs[id] || {};
-          return ((ps.status || lg.status || '').toLowerCase() === 'completed');
-        }).length;
+        const completed = siteIds.filter(id => ((perSite[id]?.status||'').toLowerCase() === 'completed')).length;
 
         doc.setFont('helvetica','bold'); doc.setFontSize(18);
         doc.text(`${d.userName || 'Operator'} — ${d.zone || 'Task'}`, marginL, startY);
         doc.setFont('helvetica','normal'); doc.setFontSize(12);
-        doc.text(
-          `Overall: ${(d.status||'in_progress')}   •   Completed: ${completed}/${total}   •   Started: ${d.startedAt ? _fmt(d.startedAt).split(',')[0] : '-'}`,
-          marginL, startY + 22
-        );
+        doc.text(`Overall: ${(d.status||'in_progress')}   •   Completed: ${completed}/${total}   •   Started: ${d.startedAt ? _fmt(d.startedAt).split(',')[0] : '-'}`, marginL, startY + 22);
 
         let y = startY + 48;
         const header = ['Site','Status','Completed','Operator note'];
@@ -586,13 +430,10 @@
 
         doc.setFont('helvetica','normal');
         for (const id of siteIds){
-          const ps = getPerSiteForId(perSite, id) || {};
-          const lg = latestLogs[id] || {};
-
-          const status      = (ps.status || lg.status || 'assigned').toLowerCase();
-          const completedAt = (ps.completedAt || lg.completedAt) ? _fmt(ps.completedAt || lg.completedAt).split(',')[0] : '-';
-          const note        = (ps.note ?? lg.note ?? '').trim() || '-';
-
+          const ps = perSite[id] || {};
+          const status      = (ps.status || 'assigned').toLowerCase();
+          const completedAt = ps.completedAt ? _fmt(ps.completedAt).split(',')[0] : '-';
+          const note        = (ps.note || '-').trim();
           const cols = [id, status, completedAt, note];
           cols.forEach((val,i) => {
             const x = marginL + widths.slice(0,i).reduce((a,b)=>a+b,0);
@@ -609,7 +450,6 @@
         console.error(e);
       }
     }
-
   })();
   </script>
 </body>
