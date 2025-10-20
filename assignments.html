@@ -24,6 +24,32 @@
     .header{
       display:flex; align-items:center; justify-content:space-between; gap:16px;
       padding:12px 18px; background:#fff; border-bottom:1px solid var(--muted);
+      position:sticky; top:0; z-index:5;<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Current Assignments</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="logo.png" type="image/png" />
+
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --ink:#0f172a; --ink-2:#111827; --muted:#e5e7eb; --bg:#f6f7fb; --card:#ffffff;
+      --accent:#d11e2b; --accent-600:#b71a24; --soft:#f8fafc;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      background:var(--bg); color:var(--ink);
+    }
+
+    .header{
+      display:flex; align-items:center; justify-content:space-between; gap:16px;
+      padding:12px 18px; background:#fff; border-bottom:1px solid var(--muted);
       position:sticky; top:0; z-index:5;
     }
     .brand{ display:flex; align-items:center; gap:12px; min-width:0; }
@@ -149,157 +175,308 @@
 
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
- <script>
-(function () {
-  const db   = firebase.firestore();
-  const auth = firebase.auth();
-  const params = new URLSearchParams(location.search);
+  <script>
+  (function(){
+    const db = firebase.firestore();
 
-  // Resolve assignment id: ?task=... -> localStorage -> try to infer from focus
-  let assignmentId = params.get('task') || localStorage.getItem('currentTaskId') || null;
-  if (assignmentId) { try { localStorage.setItem('currentTaskId', assignmentId); } catch(_) {} }
-
-  function focusIds() {
-    return (params.get('focus')||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
-  }
-  async function inferTaskIdFromFocus(){
-    const ids = focusIds();
-    if (!ids.length) return null;
-    try{
-      const batch = ids.slice(0,10); // array-contains-any limit
-      const snap = await db.collection('assignments').where('siteIds','array-contains-any',batch).get();
-      let best=null, score=-1;
-      snap.forEach(doc=>{
-        const arr = (doc.data().siteIds||[]).map(x=>String(x).toUpperCase());
-        const sc = ids.reduce((n,id)=>n+(arr.includes(id)?1:0),0);
-        if(sc>score){ best=doc.id; score=sc; }
-      });
-      if(best){ assignmentId=best; try{localStorage.setItem('currentTaskId',best);}catch(_){} }
-      return best;
-    }catch(e){ console.warn('inferTaskIdFromFocus:',e); return null; }
-  }
-  async function ensureTaskId(){ return assignmentId || await inferTaskIdFromFocus(); }
-
-  // -------- helpers
-  const idRx = /\bM\d{3,5}\b/i;
-  function detectSiteId(node){
-    const root = document.getElementById('sidebar-content');
-    let cur = node;
-    while (cur && cur!==root){
-      const m = (cur.textContent||'').match(idRx);
-      if (m) return m[0].toUpperCase();
-      cur = cur.parentElement;
-    }
-    const m2 = (node.textContent||'').match(idRx);
-    return m2 ? m2[0].toUpperCase() : '';
-  }
-
-  async function writeProgress(siteId, status, note){
-    const uid = auth.currentUser?.uid || null;
-    const taskId = await ensureTaskId(); // may still be null; we’ll still log work_logs
-
-    const writes = [];
-
-    if (taskId){
-      const update = {};
-      update[`perSite.${siteId}.status`]      = status;
-      update[`perSite.${siteId}.note`]        = (note||'').trim();
-      update[`perSite.${siteId}.operatorUid`] = uid;
-      update[`perSite.${siteId}.updatedAt`]   = firebase.firestore.FieldValue.serverTimestamp();
-      update[`perSite.${siteId}.completedAt`] = (status==='completed')
-        ? firebase.firestore.FieldValue.serverTimestamp()
-        : null;
-      writes.push(db.collection('assignments').doc(taskId).set(update,{merge:true}));
-    }
-
-    // optional history log (kept – harmless even if you don’t use it)
-    writes.push(db.collection('work_logs').add({
-      assignmentId: taskId || null,
-      siteId, status,
-      note: (note||'').trim(),
-      operatorUid: uid,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    }));
-
-    await Promise.all(writes);
-  }
-
-  // -------- attach to the actual sidebar checkboxes & notes
-  function whenSidebarReady(cb){
-    const root = document.getElementById('sidebar-content');
-    if (!root) return;
-    if (root.children.length) return cb(root);
-    const mo = new MutationObserver((_,o)=>{ if(root.children.length){ o.disconnect(); cb(root); }});
-    mo.observe(root,{childList:true,subtree:true});
-    setTimeout(()=>mo.disconnect(),10000);
-  }
-
-  whenSidebarReady((root)=>{
-    // treat ANY checkbox as "complete"
-    root.addEventListener('change', async (ev)=>{
-      const t = ev.target;
-      if (!(t instanceof HTMLInputElement)) return;
-      if (t.type !== 'checkbox') return;
-
-      const row = t.closest('li, .list-item, .sidebar-row, .item, div') || root;
-      const siteId = detectSiteId(row);
-      if (!siteId) return;
-
-      const noteEl = row.querySelector('input[type="text"].site-note, input[type="text"][placeholder*="ote" i]');
-      const note   = noteEl ? noteEl.value : '';
-
-      try{
-        await writeProgress(siteId, t.checked ? 'completed' : 'assigned', note);
-        console.log('Saved', siteId, t.checked ? 'completed' : 'assigned');
-      }catch(e){
-        console.error('Save failed', e);
-        alert('Failed to save: ' + (e.message || e));
-      }
+    /* ---------- header auth ---------- */
+    const emailEl  = document.getElementById('userEmail');
+    const logoutBtn = document.getElementById('logoutBtn');
+    firebase.auth().onAuthStateChanged(u => {
+      if(!u){ location.href = 'login.html'; return; }
+      emailEl.textContent = u.email || 'Signed in';
+    });
+    logoutBtn.addEventListener('click', async () => {
+      try { await firebase.auth().signOut(); } catch(_) {}
+      location.replace('login.html');
     });
 
-    // save notes on blur/change if present
-    root.addEventListener('blur', handleNoteSave, true);
-    root.addEventListener('change', handleNoteSave, true);
-    async function handleNoteSave(ev){
-      const t = ev.target;
-      if (!(t instanceof HTMLInputElement)) return;
-      if (t.type !== 'text') return;
-
-      const row = t.closest('li, .list-item, .sidebar-row, .item, div') || root;
-      const siteId = detectSiteId(row);
-      if (!siteId) return;
-
-      const cb = row.querySelector('input[type="checkbox"]');
-      const status = cb && cb.checked ? 'completed' : 'in_progress';
-      try{
-        await writeProgress(siteId, status, t.value);
-        console.log('Saved note', siteId);
-      }catch(e){
-        console.error('Save failed', e);
-      }
+    /* ---------- helpers ---------- */
+    const fmt = (ts) => {
+      if(!ts) return '';
+      const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+      return d ? d.toLocaleString() : '';
+    };
+    const badge = (status) => {
+      const s = (status||'assigned').toLowerCase();
+      const map = { assigned:'pill-amber', 'in_progress':'pill-gray', completed:'pill-green' };
+      const txt = s.replace('_',' ');
+      return `<span class="pill ${map[s]||'pill-gray'}">${txt.charAt(0).toUpperCase()+txt.slice(1)}</span>`;
+    };
+    function getPerSiteForId(perSite, rawId){
+      if (!perSite) return undefined;
+      const idU = String(rawId).toUpperCase();
+      const idL = idU.toLowerCase();
+      const noM = idU.replace(/^M/,'');
+      return perSite[idU] ?? perSite[idL] ?? perSite[noM];
     }
 
-    // keep sidebar pills/checkboxes/notes in sync with perSite (if we have taskId)
-    firebase.auth().onAuthStateChanged(async ()=>{
-      const taskId = await ensureTaskId();
-      if (!taskId) { console.warn('No assignment id; live reflection disabled.'); return; }
-      db.collection('assignments').doc(taskId).onSnapshot(snap=>{
-        const perSite = (snap.data()||{}).perSite || {};
-        root.querySelectorAll('li, .list-item, .sidebar-row, .item, div').forEach(row=>{
-          const sid = detectSiteId(row);
-          if (!sid) return;
-          const info = perSite[sid] || {};
-          const pill = row.querySelector('.mini-pill');
-          if (pill) pill.textContent = (info.status || 'assigned').replace('_',' ');
-          const cb  = row.querySelector('input[type="checkbox"]');
-          if (cb) cb.checked = info.status === 'completed';
-          const note = row.querySelector('input[type="text"].site-note, input[type="text"][placeholder*="ote" i]');
-          if (note && typeof info.note==='string' && note.value!==info.note) note.value = info.note;
+    /* ---------- live counter (hybrid) ---------- */
+    const liveCounters = {};
+    function attachLiveCompletionCounter(assignmentId, assignmentData, chipEl){
+      if (!chipEl) return;
+      if (liveCounters[assignmentId]) { try{ liveCounters[assignmentId](); }catch(_){} }
+
+      let siteIds = (assignmentData.siteIds||[]).map(s=>String(s).toUpperCase());
+      let perSite = assignmentData.perSite || {};
+      const latest = {};
+
+      function recompute(){
+        let done = 0;
+        for (const sid of siteIds){
+          const ps = getPerSiteForId(perSite, sid) || {};
+          const st = (latest[sid]?.status || ps.status || '').toLowerCase();
+          if (st === 'completed') done++;
+        }
+        chipEl.textContent = String(done);
+      }
+
+      const unsubAssign = db.collection('assignments').doc(assignmentId).onSnapshot(s=>{
+        const d = s.data()||{};
+        siteIds = (d.siteIds||[]).map(x=>String(x).toUpperCase());
+        perSite = d.perSite||{};
+        recompute();
+      });
+
+      const logUnsubs=[];
+      const chunk=10;
+      const uniq = Array.from(new Set(siteIds));
+      for(let i=0;i<uniq.length;i+=chunk){
+        const batch=uniq.slice(i,i+chunk);
+        const u = db.collection('work_logs').where('siteId','in',batch).onSnapshot(snap=>{
+          snap.docChanges().forEach(ch=>{
+            const w = ch.doc.data()||{};
+            const sid = String(w.siteId||'').toUpperCase();
+            const t = (w.completedAt?.toMillis?.()??w.timestamp?.toMillis?.()??w.createdAt?.toMillis?.()??0);
+            if (!latest[sid] || t > latest[sid]._t){
+              latest[sid] = { status:(w.status||'').toLowerCase(), _t:t };
+            }
+          });
+          recompute();
         });
+        logUnsubs.push(u);
+      }
+
+      liveCounters[assignmentId] = () => { try{unsubAssign();}catch(_){}
+        logUnsubs.forEach(fn=>{ try{fn();}catch(_){}}); };
+    }
+
+    /* ---------- list ---------- */
+    const listEl = document.getElementById('assignments');
+    function renderAssignmentCard(doc){
+      const d = doc.data() || {};
+      const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
+      const perSite = d.perSite || {};
+      const total = siteIds.length;
+      const baselineDone = siteIds.filter(id => (getPerSiteForId(perSite, id)?.status||'').toLowerCase()==='completed').length;
+
+      const el = document.createElement('div');
+      el.className = 'card';
+
+      const title = document.createElement('h3');
+      title.textContent = (d.userName || 'Operator') + (d.zone ? ` · ${d.zone}` : '');
+      el.appendChild(title);
+
+      const meta = document.createElement('div');
+      meta.className = 'kvs';
+      meta.innerHTML = `
+        <div><strong><span class="js-done">${baselineDone}</span>/${total}</strong> completed</div>
+        ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
+        ${d.status ? `<div>Status: ${badge(d.status)}</div>` : ''}
+      `;
+      el.appendChild(meta);
+
+      const row = document.createElement('div');
+      row.className = 'row';
+
+      const muted = document.createElement('div');
+      muted.className = 'muted';
+      muted.textContent = siteIds.length ? siteIds.join(', ') : '—';
+      row.appendChild(muted);
+
+      const openBtn = document.createElement('button');
+      openBtn.className = 'btn btn-red';
+      openBtn.textContent = 'View details';
+      openBtn.addEventListener('click', () => openDetails(doc.id));
+      row.appendChild(openBtn);
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn';
+      delBtn.textContent = 'Delete task';
+      delBtn.addEventListener('click', async () => {
+        if (!confirm('Delete this task?')) return;
+        await firebase.firestore().collection('assignments').doc(doc.id).delete();
       });
+      row.appendChild(delBtn);
+
+      el.appendChild(row);
+
+      const chipDone = meta.querySelector('.js-done');
+      attachLiveCompletionCounter(doc.id, d, chipDone);
+
+      return el;
+    }
+
+    db.collection('assignments').onSnapshot(snap => {
+      listEl.innerHTML = '';
+      if (snap.empty){
+        const c = document.createElement('div');
+        c.className = 'card';
+        c.innerHTML = '<div class="muted">No assignments yet.</div>';
+        listEl.appendChild(c);
+        return;
+      }
+      const docs = [];
+      snap.forEach(doc => docs.push(doc));
+      docs.sort((a,b)=> (a.data().dueDate?.toDate?.() ?? 0) - (b.data().dueDate?.toDate?.() ?? 0));
+      docs.forEach(doc => listEl.appendChild(renderAssignmentCard(doc)));
     });
-  });
-})();
-</script>
+
+    /* ---------- modal (live) ---------- */
+    const backdrop   = document.getElementById('detailsBackdrop');
+    const closeBtn   = document.getElementById('closeModalBtn');
+    const modalTitle = document.getElementById('modalTitle');
+    const metaBox    = document.getElementById('assignmentMeta');
+    const sitesBox   = document.getElementById('sitesList');
+    const openMapBtn = document.getElementById('openMapBtn');
+    const downloadBtn= document.getElementById('downloadBtn');
+
+    let lastFocusEl = null;
+    function showModal(){ lastFocusEl = document.activeElement; backdrop.classList.add('show'); backdrop.setAttribute('aria-hidden','false'); closeBtn?.focus(); }
+    function hideModal(){ if (lastFocusEl?.focus) lastFocusEl.focus(); backdrop.classList.remove('show'); backdrop.setAttribute('aria-hidden','true'); }
+    closeBtn.addEventListener('click', hideModal);
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) hideModal(); });
+
+    let unsubscribeDetails = null;
+    let latestDocData = null;
+
+    async function openDetails(assignmentId){
+      if (unsubscribeDetails) { try { unsubscribeDetails(); } catch(_) {} unsubscribeDetails = null; }
+
+      const render = async (snap) => {
+        if (!snap.exists) { alert('Assignment not found'); return; }
+        const d = snap.data() || {};
+        latestDocData = d;
+
+        const siteIds = Array.isArray(d.siteIds) ? d.siteIds.map(s=>String(s).toUpperCase()) : [];
+        const perSite = d.perSite || {};
+
+        modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
+
+        const completed = siteIds.filter(id => ( (perSite[id]?.status||'').toLowerCase()==='completed' )).length;
+        const total = siteIds.length;
+
+        metaBox.innerHTML = `
+          <div><strong>${completed}/${total}</strong> completed</div>
+          ${d.dueDate ? `<div>Due: ${fmt(d.dueDate).split(',')[0]}</div>` : ''}
+          ${d.status ? `<div>Overall: ${badge(d.status)}</div>` : ''}
+          ${d.startedAt ? `<div>Started: ${fmt(d.startedAt).split(',')[0]}</div>` : ''}
+        `;
+
+        const focusCsv = siteIds.join(',');
+        openMapBtn.href = focusCsv ? `AssignedParks.html?focus=${encodeURIComponent(focusCsv)}&task=${encodeURIComponent(snap.id)}` : '#';
+        openMapBtn.addEventListener('click', ()=>{ try { localStorage.setItem('currentTaskId', snap.id); } catch(_) {} });
+
+        sitesBox.innerHTML = '';
+        siteIds.forEach(id => {
+          const ps = perSite[id] || {};
+          const status = (ps.status || 'assigned').toLowerCase();
+          const opNote = (ps.note || '').trim();
+          const completedAt = ps.completedAt || null;
+
+          const row = document.createElement('div');
+          row.className = 'site-row';
+
+          const left = document.createElement('div');
+          left.innerHTML = `<strong>${id}</strong><div class="sub">${badge(status)}</div>`;
+
+          const mid = document.createElement('div');
+          let notesHtml = opNote ? `<div class="note" style="border-left-color:#2563eb">Operator: ${opNote.replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))}</div>` : `<div class="sub">No notes</div>`;
+          mid.innerHTML = notesHtml;
+
+          const right = document.createElement('div');
+          right.className = 'right sub';
+          right.textContent = completedAt ? `Completed: ${fmt(completedAt).split(',')[0]}` : '';
+
+          row.appendChild(left);
+          row.appendChild(mid);
+          row.appendChild(right);
+          sitesBox.appendChild(row);
+        });
+
+        showModal();
+      };
+
+      unsubscribeDetails = db.collection('assignments').doc(assignmentId)
+        .onSnapshot(render, err => alert('Failed to load details: ' + (err.message||err)));
+
+      downloadBtn.onclick = () => downloadReport(assignmentId);
+    }
+
+    async function downloadReport(assignmentId){
+      try{
+        const { jsPDF } = window.jspdf || {};
+        if (!jsPDF) { alert('PDF library not loaded'); return; }
+
+        let d = latestDocData;
+        if (!d) {
+          const snap = await db.collection('assignments').doc(assignmentId).get();
+          if (!snap.exists) { alert('Assignment missing'); return; }
+          d = snap.data() || {};
+        }
+
+        const siteIds = (d.siteIds || []).map(s => String(s).toUpperCase());
+        const perSite = d.perSite || {};
+
+        const doc = new jsPDF({ unit:'pt', format:'a4' });
+        const marginL = 56, startY = 64, lineH = 18;
+
+        const _fmt = (ts) => {
+          if(!ts) return '';
+          const dt = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+          return dt ? dt.toLocaleString() : '';
+        };
+
+        const total = siteIds.length;
+        const completed = siteIds.filter(id => ((perSite[id]?.status||'').toLowerCase() === 'completed')).length;
+
+        doc.setFont('helvetica','bold'); doc.setFontSize(18);
+        doc.text(`${d.userName || 'Operator'} — ${d.zone || 'Task'}`, marginL, startY);
+        doc.setFont('helvetica','normal'); doc.setFontSize(12);
+        doc.text(`Overall: ${(d.status||'in_progress')}   •   Completed: ${completed}/${total}   •   Started: ${d.startedAt ? _fmt(d.startedAt).split(',')[0] : '-'}`, marginL, startY + 22);
+
+        let y = startY + 48;
+        const header = ['Site','Status','Completed','Operator note'];
+        const widths = [100,110,100,280];
+
+        doc.setFont('helvetica','bold');
+        header.forEach((h,i)=> doc.text(h, marginL + widths.slice(0,i).reduce((a,b)=>a+b,0), y));
+        doc.setLineWidth(0.6); doc.line(marginL, y+6, marginL + widths.reduce((a,b)=>a+b,0), y+6);
+        y += 20;
+
+        doc.setFont('helvetica','normal');
+        for (const id of siteIds){
+          const ps = perSite[id] || {};
+          const status      = (ps.status || 'assigned').toLowerCase();
+          const completedAt = ps.completedAt ? _fmt(ps.completedAt).split(',')[0] : '-';
+          const note        = (ps.note || '-').trim();
+          const cols = [id, status, completedAt, note];
+          cols.forEach((val,i) => {
+            const x = marginL + widths.slice(0,i).reduce((a,b)=>a+b,0);
+            doc.text(String(val), x, y, { maxWidth: widths[i]-6 });
+          });
+          y += lineH;
+          if (y > 780) { doc.addPage(); y = 56; }
+        }
+
+        const filename = `${(d.userName || 'operator').toLowerCase().replace(/\s+/g,'-')}-${(d.zone||'task').toLowerCase().replace(/\s+/g,'-')}.pdf`;
+        doc.save(filename);
+      }catch(e){
+        alert('Failed to generate report: ' + (e.message||e));
+        console.error(e);
+      }
+    }
+  })();
+  </script>
 </body>
 </html>
