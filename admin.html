@@ -108,11 +108,14 @@
     <h2 class="section-title">Admin tools</h2>
     <section class="tools">
       <div class="card tool">
-        <h3>Add users</h3>
+        <!-- RENAMED -->
+        <h3>Users</h3>
         <p>Create operator accounts and set display names.</p>
         <div class="actions">
           <a class="action" href="create-user.html">Create operator</a>
           <a class="action" href="admin.html#disable" id="manageUsersLink">Disable / delete</a>
+          <!-- NEW BUTTON -->
+          <a class="action" href="risk-assessments.html">Open Risk Assessments</a>
         </div>
       </div>
 
@@ -316,7 +319,7 @@
         });
 
         if (!list.length){
-          const p = document.createElement('p'); p.style.color = '#64748b'; p.textContent = 'No operators match your search.'; opList.appendChild(p);
+          const p = document.createElement('p'); p.style.color = '#64748b'; p.textContent = 'No operators match your search.'; p.style.margin = '6px 0 0'; opList.appendChild(p);
         }
       }
     })();
