@@ -456,12 +456,26 @@
         }, err => alert('Failed to load details: ' + (err.message||err)));
     }
 
-    /* ---------- PDF (parks_report-style, with Date + Notes) ---------- */
+    /* ---------- PDF (parks_report-style) with Logo + Date + Notes ---------- */
+
+    // Load logo.png as a data URL and detect PNG/JPEG for jsPDF
+    async function loadLogoDataURL() {
+      const res = await fetch('logo.png', { cache: 'no-cache' });
+      if (!res.ok) throw new Error('Logo not found');
+      const blob = await res.blob();
+      const format = /png/i.test(blob.type) ? 'PNG' : 'JPEG';
+      return await new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve({ dataUrl: fr.result, format });
+        fr.onerror = reject;
+        fr.readAsDataURL(blob);
+      });
+    }
+
     async function downloadReport(assignmentId){
       const { jsPDF } = window.jspdf || {};
       if (!jsPDF) { alert('PDF library not loaded'); return; }
 
-      // dd/mm/yyyy from Firestore Timestamp or Date
       const fmtDMY = (v) => {
         if (!v) return '';
         const d = v?.toDate ? v.toDate() : (v instanceof Date ? v : null);
@@ -471,7 +485,6 @@
         const yy = d.getFullYear();
         return `${dd}/${mm}/${yy}`;
       };
-
       const todayDMY = () => {
         const d = new Date();
         const dd = String(d.getDate()).padStart(2,'0');
@@ -489,10 +502,9 @@
       }
 
       // Prefer live caches used by the modal
-      const siteIds = (currentSiteIds && currentSiteIds.length
+      const siteIds = (Array.isArray(currentSiteIds) && currentSiteIds.length
         ? currentSiteIds
         : (d.siteIds || []).map(s => String(s).toUpperCase()));
-
       const perSite = (currentPerSite && Object.keys(currentPerSite).length)
         ? currentPerSite
         : (d.perSite || {});
@@ -504,20 +516,15 @@
 
         let status      = String(ps.status || '').toLowerCase();
         let note        = (ps.note || '').trim();
-        let completedAt = ps.completedAt || null; // Timestamp | null
-        const updatedAt = ps.updatedAt   || null; // Timestamp | null
+        let completedAt = ps.completedAt || null;
+        const updatedAt = ps.updatedAt   || null;
 
         if (log) {
           if (log.status) status = String(log.status).toLowerCase();
           if (log.note)   note   = String(log.note).trim();
-          if (!completedAt && status === 'completed' && log._t) {
-            completedAt = new Date(log._t); // derive completion date from latest log
-          }
+          if (!completedAt && status === 'completed' && log._t) completedAt = new Date(log._t);
         }
-
-        if (!completedAt && status === 'completed' && updatedAt) {
-          completedAt = updatedAt;
-        }
+        if (!completedAt && status === 'completed' && updatedAt) completedAt = updatedAt;
 
         const whenDate = completedAt?.toDate ? completedAt.toDate()
                         : (completedAt instanceof Date ? completedAt : null);
@@ -544,7 +551,19 @@
       const pageH = doc.internal.pageSize.getHeight();
       const contentW = pageW - marginL - marginR;
 
-      let y = 72;
+      let y = 56;
+
+      // Add logo if available
+      try {
+        const { dataUrl, format } = await loadLogoDataURL();
+        const logoW = 120;   // tweak if needed
+        const logoH = 40;
+        doc.addImage(dataUrl, format, marginL, y, logoW, logoH);
+        y += logoH + 12;
+      } catch (e) {
+        // no logo; just add a bit of top spacing
+        y = 72;
+      }
 
       // Title
       doc.setFont('helvetica','bold');
