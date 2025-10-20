@@ -6,11 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="logo.png" type="image/png" />
 
-  <!-- Core styles -->
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-
-  <!-- Sidebar styles -->
   <link rel="stylesheet" href="sidebar.css" />
 
   <style>
@@ -22,91 +19,50 @@
     #map { height: 100vh; }
 
     #sidebar{
-      width: 340px;
-      max-width: 86vw;
-      background:#fff;
-      border-right:1px solid var(--muted);
-      box-shadow:0 8px 26px rgba(16,24,40,.08);
-      overflow:auto;
+      width: 340px; max-width: 86vw; background:#fff;
+      border-right:1px solid var(--muted); box-shadow:0 8px 26px rgba(16,24,40,.08); overflow:auto;
     }
     #sidebar .sidebar-head{
-      position: sticky; top:0; z-index: 5;
-      display:flex; align-items:center; gap:10px;
-      padding:10px 12px;
-      color:#fff; font-weight:800;
+      position: sticky; top:0; z-index: 5; display:flex; align-items:center; gap:10px;
+      padding:10px 12px; color:#fff; font-weight:800;
       background: linear-gradient(90deg, var(--accent), #eb4550);
       border-bottom:1px solid rgba(255,255,255,.15);
     }
-    #sidebar .sidebar-head img{ height:24px; width:auto; display:block }
+    #sidebar .sidebar-head img{ height:24px }
     #sidebar .sidebar-head .title{ font-size:14px; letter-spacing:.3px }
 
-    #sidebar button{
-      border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer;
-      background: var(--accent); color:#fff;
-    }
-    #sidebar #toggle-all{
-      display:block; width:calc(100% - 24px);
-      margin:10px 12px 8px; background:var(--accent);
-    }
+    #sidebar button{ border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer; background: var(--accent); color:#fff; }
+    #sidebar #toggle-all{ display:block; width:calc(100% - 24px); margin:10px 12px 8px; }
     #sidebar #toggle-all:hover{ background:var(--accent-600); }
-
     #sidebar #sidebar-content{ padding:8px 12px 16px; }
 
-    #sidebar-content details{
-      border:1px solid var(--muted); border-radius:12px; overflow:hidden;
-      background:#fff; margin-bottom:8px;
-    }
+    #sidebar-content details{ border:1px solid var(--muted); border-radius:12px; overflow:hidden; background:#fff; margin-bottom:8px; }
     #sidebar-content details > summary{
-      list-style:none; cursor:pointer; user-select:none;
-      padding:8px 10px; background:var(--soft-2);
-      display:flex; align-items:center; justify-content:space-between; gap:10px;
-      font-weight:700; color:var(--ink);
+      list-style:none; cursor:pointer; user-select:none; padding:8px 10px; background:var(--soft-2);
+      display:flex; align-items:center; justify-content:space-between; gap:10px; font-weight:700; color:#111827;
     }
     #sidebar-content details[open] > summary{ background:#eef2f7; }
 
-    #sidebar-content li,
-    #sidebar-content .list-item,
-    #sidebar-content .sidebar-row,
-    #sidebar-content .item{
+    #sidebar-content li, #sidebar-content .list-item, #sidebar-content .sidebar-row, #sidebar-content .item{
       display:flex; align-items:center; justify-content:space-between; gap:10px;
-      padding:8px 10px; border-top:1px solid #eef2f7; background:#fff;
-      font-weight:600; color:#111827;
+      padding:8px 10px; border-top:1px solid #eef2f7; background:#fff; font-weight:600; color:#111827;
     }
     #sidebar-content li:first-child{ border-top:0; }
 
-    .mini-pill{
-      display:inline-block; padding:2px 6px; border-radius:999px;
-      font-size:11px; font-weight:800; color:#7f1d1d;
-      background:#fee2e2; border:1px solid #fecaca;
-      white-space:nowrap;
-    }
+    .mini-pill{ display:inline-block; padding:2px 6px; border-radius:999px; font-size:11px; font-weight:800; color:#7f1d1d; background:#fee2e2; border:1px solid #fecaca; white-space:nowrap; }
 
-    .site-ops{
-      display:inline-flex; align-items:center; gap:8px; white-space:nowrap;
-    }
-    .site-ops input[type="text"]{
-      width: 140px; max-width: 48vw;
-      padding:6px 8px; border-radius:8px; border:1px solid #e2e8f0; font-weight:600;
-      background:#fff;
-    }
+    .site-ops{ display:inline-flex; align-items:center; gap:8px; white-space:nowrap; }
+    .site-ops input[type="text"]{ width:140px; max-width:48vw; padding:6px 8px; border-radius:8px; border:1px solid #e2e8f0; font-weight:600; background:#fff }
     .site-ops .site-done{ transform: translateY(1px); }
 
-    #sidebar-toggle{
-      position: fixed; top:12px; left:12px; z-index: 1000;
-      border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer;
-      background: var(--accent); color:#fff;
-      box-shadow:0 6px 18px rgba(16,24,40,.18);
-    }
+    #sidebar-toggle{ position: fixed; top:12px; left:12px; z-index:1000; border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer; background: var(--accent); color:#fff; box-shadow:0 6px 18px rgba(16,24,40,.18); }
     #sidebar-toggle:active{ transform: translateY(1px); }
 
     @media (max-width: 768px){
       #sidebar{ width: 100vw; max-width: none; }
       #sidebar .sidebar-head .title{ font-size:13px }
       #sidebar-content details > summary{ padding:8px 10px; }
-      #sidebar-content li, #sidebar-content .list-item,
-      #sidebar-content .sidebar-row, #sidebar-content .item{
-        padding:8px 10px;
-      }
+      #sidebar-content li, #sidebar-content .list-item, #sidebar-content .sidebar-row, #sidebar-content .item{ padding:8px 10px; }
       .site-ops input[type="text"]{ width: 120px; }
     }
   </style>
@@ -129,7 +85,6 @@
     </div>
 
     <button id="toggle-all">Expand All</button>
-
     <div id="sidebar-content"></div>
 
     <div style="padding:10px 12px 16px">
@@ -145,7 +100,6 @@
 
   <div id="map"></div>
 
-  <!-- Core scripts -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="script.js"></script>
   <script src="sidebar.js"></script>
@@ -243,7 +197,7 @@
       if (!focus.length) return null;
 
       try{
-        const batch = focus.slice(0,10); // array-contains-any limit
+        const batch = focus.slice(0,10);
         const q = db.collection('assignments').where('siteIds','array-contains-any', batch);
         const snap = await q.get();
 
@@ -294,23 +248,20 @@
       status = String(status||'in_progress').toLowerCase();
       const uid = auth.currentUser?.uid || null;
 
-      const id = await ensureAssignmentId(); // may still be null
+      const id = await ensureAssignmentId();
 
       const writes = [];
 
-      // Update perSite if assignment is known
       if (id){
         const ps = {};
         ps[`perSite.${siteId}.status`]      = status;
         ps[`perSite.${siteId}.note`]        = (note||'').trim();
         ps[`perSite.${siteId}.operatorUid`] = uid;
         ps[`perSite.${siteId}.updatedAt`]   = firebase.firestore.FieldValue.serverTimestamp();
-        ps[`perSite.${siteId}.completedAt`] =
-          (status==='completed') ? firebase.firestore.FieldValue.serverTimestamp() : null;
+        ps[`perSite.${siteId}.completedAt`] = (status==='completed') ? firebase.firestore.FieldValue.serverTimestamp() : null;
         writes.push(db.collection('assignments').doc(id).set(ps, { merge: true }));
       }
 
-      // Always log a work_logs entry
       writes.push(db.collection('work_logs').add({
         assignmentId: id || null,
         siteId, status,
@@ -322,7 +273,7 @@
       await Promise.all(writes);
     }
 
-    // Decorate rows (ensure pill + optional note/checkbox UI if missing)
+    // Decorate rows (ensure pill + optional controls if sidebar doesn’t provide them)
     function decorateRow(row){
       if (row.dataset.opsDecorated === '1') return;
 
@@ -337,7 +288,6 @@
         row.appendChild(pill);
       }
 
-      // If row lacks a checkbox and/or note, add our minimal controls
       let cb = row.querySelector('input[type="checkbox"]');
       let note = row.querySelector('input[type="text"].site-note, input[type="text"][placeholder*="ote" i]');
 
@@ -361,7 +311,6 @@
         row.appendChild(ops);
       }
 
-      // Save note on changes (checkbox handled by delegated listener)
       if (note){
         const saveNote = async () => {
           const status = (cb && cb.checked) ? 'completed' : 'in_progress';
@@ -389,7 +338,7 @@
     whenSidebarReady((root) => {
       const scan = () => {
         root.querySelectorAll('li, .list-item, .sidebar-row, .item').forEach(el => {
-          if (el.closest('summary')) return; // ignore group headers
+          if (el.closest('summary')) return;
           decorateRow(el);
         });
       };
@@ -398,15 +347,15 @@
       mo.observe(root, { childList:true, subtree:true });
       setTimeout(() => mo.disconnect(), 30000);
 
-      // ROW-AGNOSTIC checkbox handler (works with your existing checkboxes)
+      // Row-agnostic checkbox handler (catches your native checkboxes)
       function findRowFor(el){
-        const root = document.getElementById('sidebar-content');
+        const r = document.getElementById('sidebar-content');
         let cur = el;
-        while (cur && cur !== root){
+        while (cur && cur !== r){
           if (/\bM\d{3,5}\b/i.test(cur.textContent || '')) return cur;
           cur = cur.parentElement;
         }
-        return el.closest('li, .list-item, .sidebar-row, .item') || root;
+        return el.closest('li, .list-item, .sidebar-row, .item') || r;
       }
 
       root.addEventListener('change', async (ev)=>{
@@ -416,27 +365,18 @@
 
         const row = findRowFor(target);
         const sid = detectId(row);
-        if (!sid) { console.warn('No site id in row'); return; }
+        if (!sid) return;
 
         const noteEl = row.querySelector('input[type="text"].site-note, input[type="text"][placeholder*="ote" i]');
         const noteVal = noteEl ? noteEl.value : '';
-        try {
-          await recordProgress(sid, target.checked ? 'completed' : 'assigned', noteVal);
-          console.log('Saved progress', { sid, status: target.checked ? 'completed' : 'assigned' });
-        } catch (e) {
-          console.error('Save failed', e);
-          alert('Failed to save progress: ' + (e.message || e));
-        }
+        await recordProgress(sid, target.checked ? 'completed' : 'assigned', noteVal);
       });
     });
 
-    // Live reflection (keeps pills/checkbox/notes in sync)
+    // Live reflection from Firestore (updates pill/checkbox/note in sidebar)
     firebase.auth().onAuthStateChanged(async () => {
       const id = await ensureAssignmentId();
-      if (!id) {
-        console.warn('No assignment id resolved; will still write work_logs but perSite reflection is disabled.');
-        return;
-      }
+      if (!id) { console.warn('No assignment id; per-site reflection disabled.'); return; }
       db.collection('assignments').doc(id).onSnapshot(snap => {
         const d = snap.data() || {};
         const perSite = d.perSite || {};
