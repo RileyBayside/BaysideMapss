@@ -126,243 +126,238 @@
   </main>
 
   <script>
-  (function(){
-    const db = firebase.firestore();
+(function(){
+  const db = firebase.firestore();
 
-    // --- utilities ---
-    const $ = (id) => document.getElementById(id);
-    const rowsEl = $('rows');
+  // --- dom helpers ---
+  const $ = (id) => document.getElementById(id);
+  const rowsEl = $('rows');
 
-    // Defaults helper
-    const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate()+n, 0,0,0,0);
-    function setDefaultDates(){
-      const end = new Date();
-      const start = addDays(end, -7);
-      $('startDate').valueAsDate = start;
-      $('endDate').valueAsDate = end;
-    }
+  // ===== AEST (Australia/Brisbane) helpers =====
+  const AEST_TZ = 'Australia/Brisbane'; // UTC+10, no DST
 
-    // ===== AEST logic (Australia/Brisbane) =====
-    const AEST_TZ = 'Australia/Brisbane'; // UTC+10, no DST
-    function startUtcForAestDay(dayStr){
-      const [y,m,d] = dayStr.split('-').map(Number);
-      return new Date(Date.UTC(y, m-1, d, 14, 0, 0, 0)); // AEST midnight -> 14:00 UTC prev day
-    }
-    function endUtcForAestDay(dayStr){
-      const [y,m,d] = dayStr.split('-').map(Number);
-      return new Date(Date.UTC(y, m-1, d+1, 14, 0, 0, 0)); // next AEST midnight
-    }
-    function fmtAest(ts){
-      const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
-      if (!d) return '';
-      return new Intl.DateTimeFormat('en-AU', {
-        timeZone: AEST_TZ, day:'2-digit', month:'2-digit', year:'numeric'
-      }).format(d);
-    }
-    const yesNo = (v) => (typeof v === 'boolean' ? (v ? 'Yes' : 'No') : (String(v||'').trim() || '—'));
+  // yyyy-mm-dd string for "today" in AEST (perfect for <input type="date">)
+  function aestTodayStr(){
+    return new Intl.DateTimeFormat('en-CA', { timeZone: AEST_TZ }).format(new Date());
+  }
+  // shift a yyyy-mm-dd (AEST) by N days and return a new yyyy-mm-dd (AEST)
+  function shiftAestDayStr(dayStr, delta){
+    const [y,m,d] = dayStr.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m-1, d + delta, 0,0,0,0));
+    return new Intl.DateTimeFormat('en-CA', { timeZone: AEST_TZ }).format(dt);
+  }
+  // For Firestore query bounds: convert an AEST date (yyyy-mm-dd) to the UTC instant
+  // that corresponds to AEST midnight at start/end of that day.
+  function startUtcForAestDay(dayStr){ const [y,m,d] = dayStr.split('-').map(Number);
+    return new Date(Date.UTC(y, m-1, d, 14, 0, 0, 0)); } // AEST 00:00 == 14:00 UTC prev day
+  function endUtcForAestDay(dayStr){ const [y,m,d] = dayStr.split('-').map(Number);
+    return new Date(Date.UTC(y, m-1, d+1, 14, 0, 0, 0)); }
 
-    // Flexible schema mapper
-    function flatten(rec){
-      const A = rec.answers || rec;
-      const out = {
-        ppe:        A.ppe ?? A.ppeOk ?? A.ppeChecked ?? null,
-        equipment:  A.equipment ?? A.equipmentOk ?? null,
-        hazards:    A.hazards ?? A.hazardsChecked ?? null,
-        traffic:    A.traffic ?? A.trafficMgmt ?? null,
-        weather:    A.weather ?? A.weatherOk ?? null,
-        swms:       A.swms ?? A.swmsOk ?? null,
-        fitness:    A.fitness ?? A.fitForWork ?? null,
-        stopWork:   A.stopWork ?? A.stop_work ?? null,
-        typedName:  A.typedName ?? A.nameTyped ?? '',
-        notes:      A.notes ?? A.otherNotes ?? '',
-      };
-      const operator = rec.operatorDisplay || rec.operatorName || rec.userName || rec.operator || rec.name || '';
-      const email    = rec.operatorEmail || rec.email || '';
-      return { ...out, operator, email };
-    }
+  // UI defaults: last 7 AEST days ending AEST "today"
+  function setDefaultDates(){
+    const today = aestTodayStr();
+    $('endDate').value   = today;
+    $('startDate').value = shiftAestDayStr(today, -7);
+  }
 
-    // State: dual listeners + merge cache
-    let unsubs = [];
-    const cache = new Map(); // key: "<coll>/<id>" -> { data, created: Date }
+  const yesNo = (v) => (typeof v === 'boolean' ? (v ? 'Yes' : 'No') : (String(v||'').trim() || '—'));
 
-    let lastDocs = []; // for CSV: [{created: Date, flat}]
-    function stopListeners(){
-      unsubs.forEach(fn=>{ try{fn();}catch(_){} });
-      unsubs = [];
-      cache.clear();
-      rowsEl.innerHTML = `<tr><td colspan="11" style="color:#64748b">Loading…</td></tr>`;
-    }
+  // Flexible schema mapper (supports {answers:{...}} or flat)
+  function flatten(rec){
+    const A = rec.answers || rec;
+    const out = {
+      ppe:        A.ppe ?? A.ppeOk ?? A.ppeChecked ?? null,
+      equipment:  A.equipment ?? A.equipmentOk ?? null,
+      hazards:    A.hazards ?? A.hazardsChecked ?? null,
+      traffic:    A.traffic ?? A.trafficMgmt ?? null,
+      weather:    A.weather ?? A.weatherOk ?? null,
+      swms:       A.swms ?? A.swmsOk ?? null,
+      fitness:    A.fitness ?? A.fitForWork ?? null,
+      stopWork:   A.stopWork ?? A.stop_work ?? null,
+      typedName:  A.typedName ?? A.nameTyped ?? '',
+      notes:      A.notes ?? A.otherNotes ?? '',
+    };
+    const operator = rec.operatorDisplay || rec.operatorName || rec.userName || rec.operator || rec.name || '';
+    const email    = rec.operatorEmail || rec.email || '';
+    return { ...out, operator, email };
+  }
 
-    function onSnap(prefix, snap){
-      snap.docChanges().forEach(ch=>{
-        const key = `${prefix}/${ch.doc.id}`;
-        if (ch.type === 'removed'){
-          cache.delete(key);
-        }else{
-          const d = ch.doc.data() || {};
-          const created = d.createdAt?.toDate ? d.createdAt.toDate() :
-                          (d.createdAt instanceof Date ? d.createdAt : null);
-          cache.set(key, { data: d, created });
-        }
-      });
-      renderMerged();
-    }
+  // ===== listeners & rendering =====
+  let unsubs = [];
+  let cache = new Map(); // key -> { data, created }
+  let lastDocs = [];     // for CSV: [{created, flat}]
+  let totalListeners = 0;
+  let errorCount = 0;
+  let gotAnySnapshot = false;
 
-    function renderMerged(){
-      const q = ($('opFilter').value || '').trim().toLowerCase();
+  function stopListeners(){
+    unsubs.forEach(u => { try{ u(); }catch(_){} });
+    unsubs = [];
+    cache.clear();
+    totalListeners = 0;
+    errorCount = 0;
+    gotAnySnapshot = false;
+    rowsEl.innerHTML = `<tr><td colspan="11" style="color:#64748b">Loading…</td></tr>`;
+  }
 
-      const all = Array.from(cache.values())
-        .map(({data, created}) => {
-          const flat = flatten(data);
-          return { created, flat, rec: data };
-        })
-        .filter(row => {
-          if (!q) return true;
-          const opStr = [row.flat.operator, row.flat.email].filter(Boolean).join(' · ').toLowerCase();
-          return opStr.includes(q);
-        })
-        .sort((a,b) => (b.created?.getTime()||0) - (a.created?.getTime()||0));
-
-      lastDocs = all.map(x => ({ created: x.created || null, flat: x.flat }));
-
-      if (!all.length){
-        rowsEl.innerHTML = `<tr><td colspan="11" style="color:#64748b">No results for this range.</td></tr>`;
-        return;
-      }
-
-      const frag = document.createDocumentFragment();
-      all.forEach(({created, flat})=>{
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td class="nowrap">${created ? new Intl.DateTimeFormat('en-AU',{ timeZone:AEST_TZ, day:'2-digit', month:'2-digit', year:'numeric'}).format(created) : ''}</td>
-          <td>${[flat.operator, flat.email].filter(Boolean).join(' · ') || '—'}</td>
-          <td>${yesNo(flat.ppe)}</td>
-          <td>${yesNo(flat.equipment)}</td>
-          <td>${yesNo(flat.hazards)}</td>
-          <td>${yesNo(flat.traffic)}</td>
-          <td>${yesNo(flat.weather)}</td>
-          <td>${yesNo(flat.swms)}</td>
-          <td>${yesNo(flat.fitness)}</td>
-          <td>${yesNo(flat.stopWork)}</td>
-          <td>${[flat.typedName, (flat.notes||'').trim()].filter(Boolean).join(' — ') || '—'}</td>
-        `;
-        frag.appendChild(tr);
-      });
-      rowsEl.innerHTML = '';
-      rowsEl.appendChild(frag);
-    }
-
-    async function apply(){
-      stopListeners();
-
-      const startStr = $('startDate').value || new Date().toISOString().slice(0,10);
-      const endStr   = $('endDate').value   || new Date().toISOString().slice(0,10);
-
-      const startUtc = startUtcForAestDay(startStr);
-      const endUtc   = endUtcForAestDay(endStr);
-
-      // 1) snake_case collection
-      try{
-        const u1 = db.collection('risk_assessments')
-          .where('createdAt','>=', startUtc)
-          .where('createdAt','<',  endUtc)
-          .orderBy('createdAt','desc')
-          .onSnapshot(s => onSnap('risk_assessments', s), err => {
-            console.warn('risk_assessments query failed:', err);
-          });
-        unsubs.push(u1);
-      }catch(e){ console.warn('risk_assessments listener error:', e); }
-
-      // 2) camelCase mirror
-      try{
-        const u2 = db.collection('riskAssessments')
-          .where('createdAt','>=', startUtc)
-          .where('createdAt','<',  endUtc)
-          .orderBy('createdAt','desc')
-          .onSnapshot(s => onSnap('riskAssessments', s), err => {
-            console.warn('riskAssessments query failed:', err);
-          });
-        unsubs.push(u2);
-      }catch(e){ console.warn('riskAssessments listener error:', e); }
-
-      // If both fail instantly, show a friendly message (will be replaced if either succeeds later)
-      setTimeout(()=>{
-        if (!cache.size){
-          rowsEl.innerHTML = `<tr><td colspan="11" style="color:#b91c1c;font-weight:700">Failed to load results.</td></tr>`;
-        }
-      }, 400);
-    }
-
-    // CSV (dates in AEST too)
-    function exportCSV(){
-      if (!lastDocs.length){
-        alert('Nothing to export for the current filter.');
-        return;
-      }
-      const esc = (v) => `"${String(v??'').replace(/"/g,'""')}"`;
-      const header = [
-        'Date','Operator','Email','PPE','Equipment','Hazards','Traffic','Weather','SWMS','Fitness','Stop-Work','Typed Name','Notes'
-      ];
-      const lines = [header.map(esc).join(',')];
-
-      lastDocs.forEach(({created, flat})=>{
-        const dateStr = created
-          ? new Intl.DateTimeFormat('en-AU',{ timeZone:AEST_TZ, day:'2-digit', month:'2-digit', year:'numeric'}).format(created)
-          : '';
-        const row = [
-          dateStr,
-          flat.operator || '',
-          flat.email || '',
-          yesNo(flat.ppe),
-          yesNo(flat.equipment),
-          yesNo(flat.hazards),
-          yesNo(flat.traffic),
-          yesNo(flat.weather),
-          yesNo(flat.swms),
-          yesNo(flat.fitness),
-          yesNo(flat.stopWork),
-          flat.typedName || '',
-          (flat.notes || '').replace(/\r?\n/g,' / ')
-        ];
-        lines.push(row.map(esc).join(','));
-      });
-
-      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'risk-assessments.csv';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 0);
-    }
-
-    // Wire up UI
-    $('applyBtn').addEventListener('click', apply);
-    $('exportBtn').addEventListener('click', exportCSV);
-
-    // Start AFTER role check below
-    setDefaultDates();
-
-    // Role gate: only admins/managers can see global results
-    firebase.auth().onAuthStateChanged(async (u) => {
-      if (!u) { location.href = 'login.html'; return; }
-      try {
-        const snap = await db.collection('users').doc(u.uid).get();
-        const role = snap.data()?.role || '';
-        if (!['admin','manager'].includes(role)) {
-          rowsEl.innerHTML = `<tr><td colspan="11" style="color:#b91c1c;font-weight:700">
-            You don’t have access to view risk assessments.
-          </td></tr>`;
-          return;
-        }
-        // OK to start listeners
-        apply();
-      } catch (e) {
-        console.warn('role check failed', e);
-      }
+  function onSnap(prefix, snap){
+    gotAnySnapshot = true;
+    snap.docChanges().forEach(ch=>{
+      const k = `${prefix}/${ch.doc.id}`;
+      if (ch.type === 'removed'){ cache.delete(k); return; }
+      const d = ch.doc.data() || {};
+      const created = d.createdAt?.toDate ? d.createdAt.toDate() :
+                      (d.createdAt instanceof Date ? d.createdAt : null);
+      cache.set(k, { data:d, created });
     });
-  })();
-  </script>
+    renderMerged();
+  }
+
+  function onErr(collectionName, err){
+    console.warn(`${collectionName} query failed:`, err);
+    errorCount++;
+    // If all listeners errored and nothing ever arrived, show a real failure
+    if (errorCount >= totalListeners && !gotAnySnapshot){
+      rowsEl.innerHTML = `<tr><td colspan="11" style="color:#b91c1c;font-weight:700">Failed to load results.</td></tr>`;
+    }
+  }
+
+  function renderMerged(){
+    const q = ($('opFilter').value || '').trim().toLowerCase();
+    const records = Array.from(cache.values())
+      .map(({data, created}) => ({ created, flat: flatten(data) }))
+      .filter(r => {
+        if (!q) return true;
+        const s = [r.flat.operator, r.flat.email].filter(Boolean).join(' · ').toLowerCase();
+        return s.includes(q);
+      })
+      .sort((a,b) => (b.created?.getTime()||0) - (a.created?.getTime()||0));
+
+    lastDocs = records.map(x => ({ created: x.created || null, flat: x.flat }));
+
+    if (!records.length){
+      rowsEl.innerHTML = `<tr><td colspan="11" style="color:#64748b">No results for this range.</td></tr>`;
+      return;
+    }
+
+    const frag = document.createDocumentFragment();
+    records.forEach(({created, flat})=>{
+      const dateStr = created
+        ? new Intl.DateTimeFormat('en-AU',{ timeZone:AEST_TZ, day:'2-digit', month:'2-digit', year:'numeric'}).format(created)
+        : '';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="nowrap">${dateStr}</td>
+        <td>${[flat.operator, flat.email].filter(Boolean).join(' · ') || '—'}</td>
+        <td>${yesNo(flat.ppe)}</td>
+        <td>${yesNo(flat.equipment)}</td>
+        <td>${yesNo(flat.hazards)}</td>
+        <td>${yesNo(flat.traffic)}</td>
+        <td>${yesNo(flat.weather)}</td>
+        <td>${yesNo(flat.swms)}</td>
+        <td>${yesNo(flat.fitness)}</td>
+        <td>${yesNo(flat.stopWork)}</td>
+        <td>${[flat.typedName, (flat.notes||'').trim()].filter(Boolean).join(' — ') || '—'}</td>
+      `;
+      frag.appendChild(tr);
+    });
+    rowsEl.innerHTML = '';
+    rowsEl.appendChild(frag);
+  }
+
+  async function apply(){
+    stopListeners();
+
+    // Use AEST-aligned date strings from the inputs (defaulted to AEST today/-7)
+    const startStr = $('startDate').value || aestTodayStr();
+    const endStr   = $('endDate').value   || aestTodayStr();
+    const startUtc = startUtcForAestDay(startStr);
+    const endUtc   = endUtcForAestDay(endStr);
+
+    // Start both listeners; show results as soon as either responds
+    totalListeners = 2;
+
+    try{
+      const u1 = db.collection('risk_assessments')
+        .where('createdAt','>=', startUtc)
+        .where('createdAt','<',  endUtc)
+        .orderBy('createdAt','desc')
+        .onSnapshot(s => onSnap('risk_assessments', s), e => onErr('risk_assessments', e));
+      unsubs.push(u1);
+    }catch(e){ onErr('risk_assessments', e); }
+
+    try{
+      const u2 = db.collection('riskAssessments')
+        .where('createdAt','>=', startUtc)
+        .where('createdAt','<',  endUtc)
+        .orderBy('createdAt','desc')
+        .onSnapshot(s => onSnap('riskAssessments', s), e => onErr('riskAssessments', e));
+      unsubs.push(u2);
+    }catch(e){ onErr('riskAssessments', e); }
+  }
+
+  // CSV (AEST dates)
+  function exportCSV(){
+    if (!lastDocs.length){ alert('Nothing to export for the current filter.'); return; }
+    const esc = (v) => `"${String(v??'').replace(/"/g,'""')}"`;
+    const header = ['Date','Operator','Email','PPE','Equipment','Hazards','Traffic','Weather','SWMS','Fitness','Stop-Work','Typed Name','Notes'];
+    const lines = [header.map(esc).join(',')];
+
+    lastDocs.forEach(({created, flat})=>{
+      const dateStr = created
+        ? new Intl.DateTimeFormat('en-AU',{ timeZone:AEST_TZ, day:'2-digit', month:'2-digit', year:'numeric'}).format(created)
+        : '';
+      const row = [
+        dateStr,
+        flat.operator || '',
+        flat.email || '',
+        yesNo(flat.ppe),
+        yesNo(flat.equipment),
+        yesNo(flat.hazards),
+        yesNo(flat.traffic),
+        yesNo(flat.weather),
+        yesNo(flat.swms),
+        yesNo(flat.fitness),
+        yesNo(flat.stopWork),
+        flat.typedName || '',
+        (flat.notes || '').replace(/\r?\n/g,' / ')
+      ];
+      lines.push(row.map(esc).join(','));
+    });
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'risk-assessments.csv';
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 0);
+  }
+
+  // Wire up UI
+  $('applyBtn').addEventListener('click', apply);
+  $('exportBtn').addEventListener('click', exportCSV);
+
+  // Role gate: only admins/managers can see global results; start listeners after that.
+  setDefaultDates();
+  firebase.auth().onAuthStateChanged(async (u) => {
+    if (!u) { location.href = 'login.html'; return; }
+    try {
+      const snap = await db.collection('users').doc(u.uid).get();
+      const role = snap.data()?.role || '';
+      if (!['admin','manager'].includes(role)) {
+        rowsEl.innerHTML = `<tr><td colspan="11" style="color:#b91c1c;font-weight:700">
+          You don’t have access to view risk assessments.
+        </td></tr>`;
+        return;
+      }
+      apply();
+    } catch (e) {
+      console.warn('role check failed', e);
+      // Fallback: still try to apply, errors will show properly now
+      apply();
+    }
+  });
+})();
+</script>
 </body>
 </html>
