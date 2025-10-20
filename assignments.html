@@ -409,10 +409,7 @@
           currentPerSite = d.perSite || {};
           currentSiteIds = (d.siteIds || []).map(s=>String(s).toUpperCase());
 
-          // Build initially OR if the number of sites changed while open
-          if (!sitesBox.firstChild || sitesBox.childElementCount !== currentSiteIds.length) {
-            buildRows(currentSiteIds);
-          }
+          if (!sitesBox.firstChild) buildRows(currentSiteIds);
 
           modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
           const focusCsv = currentSiteIds.join(',');
@@ -459,20 +456,22 @@
         }, err => alert('Failed to load details: ' + (err.message||err)));
     }
 
-    /* ---------- PDF (parks-report style) ---------- */
+    /* ---------- PDF (parks_report-style, with Date + Notes) ---------- */
     async function downloadReport(assignmentId){
       const { jsPDF } = window.jspdf || {};
       if (!jsPDF) { alert('PDF library not loaded'); return; }
 
-      const fmtDMY = (ts) => {
-        if (!ts) return '';
-        const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+      // dd/mm/yyyy from Firestore Timestamp or Date
+      const fmtDMY = (v) => {
+        if (!v) return '';
+        const d = v?.toDate ? v.toDate() : (v instanceof Date ? v : null);
         if (!d) return '';
         const dd = String(d.getDate()).padStart(2,'0');
         const mm = String(d.getMonth()+1).padStart(2,'0');
         const yy = d.getFullYear();
         return `${dd}/${mm}/${yy}`;
       };
+
       const todayDMY = () => {
         const d = new Date();
         const dd = String(d.getDate()).padStart(2,'0');
@@ -481,7 +480,7 @@
         return `${dd}/${mm}/${yy}`;
       };
 
-      // Load doc data if needed
+      // Ensure we have the assignment doc (latestDocData set by openDetails)
       let d = latestDocData;
       if (!d) {
         const snap = await firebase.firestore().collection('assignments').doc(assignmentId).get();
@@ -489,27 +488,48 @@
         d = snap.data() || {};
       }
 
-      const siteIds = (d.siteIds || []).map(s => String(s).toUpperCase());
-      const perSite = d.perSite || {};
+      // Prefer live caches used by the modal
+      const siteIds = (currentSiteIds && currentSiteIds.length
+        ? currentSiteIds
+        : (d.siteIds || []).map(s => String(s).toUpperCase()));
 
-      // Build rows (prefer completed; fallback to all)
+      const perSite = (currentPerSite && Object.keys(currentPerSite).length)
+        ? currentPerSite
+        : (d.perSite || {});
+
+      // Build effective rows (perSite + freshest work_logs)
       const rowsAll = siteIds.map(id => {
-        const ps = perSite[id] || {};
-        const status = String(ps.status || '').toLowerCase();
-        const completedAt = ps.completedAt || null;
-        const note = (ps.note || '').trim();
-        return {
-          id,
-          status,
-          when: completedAt ? (completedAt?.toDate ? completedAt.toDate() : null) : null,
-          whenStr: completedAt ? fmtDMY(completedAt) : '',
-          note
-        };
+        const ps  = (perSite[id] || perSite[id?.toLowerCase?.()] || perSite[String(id).replace(/^M/,'')]) || {};
+        const log = latestFromLogs ? latestFromLogs[id] : null;
+
+        let status      = String(ps.status || '').toLowerCase();
+        let note        = (ps.note || '').trim();
+        let completedAt = ps.completedAt || null; // Timestamp | null
+        const updatedAt = ps.updatedAt   || null; // Timestamp | null
+
+        if (log) {
+          if (log.status) status = String(log.status).toLowerCase();
+          if (log.note)   note   = String(log.note).trim();
+          if (!completedAt && status === 'completed' && log._t) {
+            completedAt = new Date(log._t); // derive completion date from latest log
+          }
+        }
+
+        if (!completedAt && status === 'completed' && updatedAt) {
+          completedAt = updatedAt;
+        }
+
+        const whenDate = completedAt?.toDate ? completedAt.toDate()
+                        : (completedAt instanceof Date ? completedAt : null);
+        const whenStr  = whenDate ? fmtDMY(whenDate) : '';
+
+        return { id, status, when: whenDate || null, whenStr, note };
       });
+
       const rowsCompleted = rowsAll.filter(r => r.status === 'completed');
       const rows = rowsCompleted.length ? rowsCompleted : rowsAll;
 
-      // Sort: newest date first (blank last), then ID
+      // Sort newest completion first (blank dates last), then by ID
       rows.sort((a,b)=>{
         const ta = a.when ? a.when.getTime() : -1;
         const tb = b.when ? b.when.getTime() : -1;
@@ -532,7 +552,7 @@
       doc.text(`Parks Report ${todayDMY()}`, marginL, y);
       y += 22;
 
-      // Subtitle
+      // Subtitle (operator + zone)
       const subtitle = [d.userName || 'Operator', d.zone || ''].filter(Boolean).join(' — ');
       if (subtitle) {
         doc.setFont('helvetica','normal');
@@ -542,13 +562,13 @@
       }
       y += 8;
 
-      // Column headers
-      const colIdW   = 120;                       // Park Number
-      const colDateW = 120;                       // Date Completed
+      // Columns
+      const colIdW   = 120;                          // Park Number
+      const colDateW = 120;                          // Date Completed
       const colNoteW = contentW - colIdW - colDateW; // Notes
 
-      doc.setFont('helvetica','bold');
-      doc.setFontSize(12);
+      // Header row
+      doc.setFont('helvetica','bold'); doc.setFontSize(12);
       doc.text('Park Number',   marginL,                       y);
       doc.text('Date Completed',marginL + colIdW,             y);
       doc.text('Notes',         marginL + colIdW + colDateW,  y);
@@ -557,19 +577,20 @@
       doc.line(marginL, y, marginL + contentW, y);
       y += 14;
 
-      // Rows
+      // Body
       doc.setFont('helvetica','normal');
       const lineH = 16;
 
       for (const r of rows) {
-        const wrappedNote = doc.splitTextToSize(r.note || '-', colNoteW);
+        const noteText = r.note || '-';
+        const wrappedNote = doc.splitTextToSize(noteText, colNoteW);
 
         const needH = Math.max(lineH, wrappedNote.length * lineH);
         if (y + needH > pageH - 56) {
           doc.addPage();
           y = 56;
 
-          // headers on new page
+          // reprint headers on new page
           doc.setFont('helvetica','bold'); doc.setFontSize(12);
           doc.text('Park Number',   marginL,                       y);
           doc.text('Date Completed',marginL + colIdW,             y);
@@ -579,9 +600,9 @@
           doc.setFont('helvetica','normal');
         }
 
-        doc.text(r.id,            marginL,                 y);
-        doc.text(r.whenStr || '', marginL + colIdW,       y);
-        doc.text(wrappedNote,     marginL + colIdW + colDateW, y);
+        doc.text(r.id,              marginL,                 y);
+        doc.text(r.whenStr || '',   marginL + colIdW,       y);
+        doc.text(wrappedNote,       marginL + colIdW + colDateW, y);
 
         y += Math.max(lineH, wrappedNote.length * lineH);
       }
@@ -591,7 +612,6 @@
         `-${(d.zone||'task').toLowerCase().replace(/\s+/g,'-')}-parks-report.pdf`;
       doc.save(filename);
     }
-
   })();
   </script>
 </body>
