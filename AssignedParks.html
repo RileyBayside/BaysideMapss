@@ -213,6 +213,7 @@
   const auth = firebase.auth();
   const params = new URLSearchParams(location.search);
 
+  // Resolve assignment id: ?task=... -> localStorage -> infer from focus
   let assignmentId = params.get('task') || localStorage.getItem('currentTaskId') || null;
   if (assignmentId) { try { localStorage.setItem('currentTaskId', assignmentId); } catch(_) {} }
 
@@ -238,25 +239,8 @@
   }
   async function ensureTaskId(){ return assignmentId || await inferTaskIdFromFocus(); }
 
-  // Helpers
+  // ---------- helpers ----------
   const idRx = /\bM\d{3,5}\b/i;
-  function findRow(node){
-    const root = document.getElementById('sidebar-content');
-    let cur = node;
-    while (cur && cur!==root){
-      if (idRx.test(cur.textContent||'')) return cur;
-      cur = cur.parentElement;
-    }
-    return node;
-  }
-  function detectSiteId(el){
-    const row = findRow(el);
-    const m = (row.textContent||'').match(idRx);
-    return m ? m[0].toUpperCase() : '';
-  }
-  const isHeaderRow = (row) => !row.querySelector('input[type="text"]'); // not a notes row
-
-  function noteInputFor(row){ return row.querySelector('input[type="text"]'); }
 
   function hideAssignedChips(row){
     row.querySelectorAll('.mini-pill,.badge,.tag,.status,span,div,small')
@@ -284,6 +268,7 @@
       update[`perSite.${siteId}.completedAt`] = (status==='completed') ? firebase.firestore.FieldValue.serverTimestamp() : null;
       ops.push(db.collection('assignments').doc(taskId).set(update,{merge:true}));
     }
+    // history row (used by your live counter)
     ops.push(db.collection('work_logs').add({
       assignmentId: taskId || null,
       siteId, status,
@@ -304,78 +289,96 @@
     setTimeout(()=>mo.disconnect(),10000);
   }
 
-  // Keep exactly ONE button per site id
-  const siteButtons = new Map(); // siteId -> button
+  // Keep exactly ONE button under the Notes row per site id
+  const siteButtons = new Map();   // siteId -> button element
+  const notesRows   = new Map();   // siteId -> notes row element
 
-  function ensureButtonOnHeaderRow(row){
-    if (!idRx.test(row.textContent||'')) return;
-    const siteId = detectSiteId(row);
-    if (!siteId) return;
+  function attachButtonToNotesRow(notesRow, siteId){
+    // record the mapping
+    notesRows.set(siteId, notesRow);
+    notesRow.dataset.bsSiteId = siteId;
 
-    // If this isn't the header row, remove any stray buttons and bail.
-    if (!isHeaderRow(row)){
-      row.querySelectorAll('.bs-done-btn').forEach(b => b.remove());
-      return;
-    }
+    // ensure single button for this site
+    let btn = siteButtons.get(siteId);
+    const input = notesRow.querySelector('input[type="text"]');
 
-    if (siteButtons.has(siteId)) {
-      // Already placed on a row; ensure this row has none (avoid duplicates).
-      row.querySelectorAll('.bs-done-btn').forEach(b => {
-        if (b !== siteButtons.get(siteId)) b.remove();
-      });
-      return;
-    }
-
-    // Create & attach the single button for this site
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'bs-done-btn';
-    btn.textContent = 'Mark done';
-    btn.addEventListener('click', async (e) => {
-      e.preventDefault(); e.stopPropagation();
-      const noteEl = noteInputFor(row);
-      const note   = noteEl ? noteEl.value : '';
-      const willBeDone = !btn.classList.contains('done');
-      // optimistic UI
-      btn.classList.toggle('done', willBeDone);
-      btn.textContent = willBeDone ? 'Undo' : 'Mark done';
-      try{
-        await writeProgress(siteId, willBeDone ? 'completed' : 'in_progress', note);
-      }catch(err){
-        // revert on failure
-        btn.classList.toggle('done', !willBeDone);
-        btn.textContent = !willBeDone ? 'Undo' : 'Mark done';
-        console.error('Save failed:', err);
-      }
+    // Remove any stray buttons in this row first
+    notesRow.querySelectorAll('.bs-done-btn').forEach(b=>{
+      if (!btn || b !== btn) b.remove();
     });
 
-    row.appendChild(btn);
-    siteButtons.set(siteId, btn);
-    hideAssignedChips(row);
+    if (!btn || !notesRow.contains(btn)) {
+      if (btn && btn.parentElement) btn.parentElement.removeChild(btn);
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'bs-done-btn';
+      btn.textContent = 'Mark done';
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const noteVal = input ? input.value : '';
+        const willBeDone = !btn.classList.contains('done');
+        // optimistic UI
+        btn.classList.toggle('done', willBeDone);
+        btn.textContent = willBeDone ? 'Undo' : 'Mark done';
+        try{
+          await writeProgress(siteId, willBeDone ? 'completed' : 'in_progress', noteVal);
+        }catch(err){
+          // revert on failure
+          btn.classList.toggle('done', !willBeDone);
+          btn.textContent = !willBeDone ? 'Undo' : 'Mark done';
+          console.error('Save failed:', err);
+        }
+      });
+
+      // Insert directly AFTER the Notes input
+      if (input && input.parentElement){
+        input.parentElement.insertBefore(btn, input.nextSibling);
+      }else{
+        notesRow.appendChild(btn);
+      }
+      siteButtons.set(siteId, btn);
+    }
+
+    hideAssignedChips(notesRow);
   }
 
   whenSidebarReady((root) => {
-    // Initial pass + keep rows clean as the sidebar re-renders
+    // Scan rows in DOM order; remember the last header (ID) we saw
     const scan = () => {
-      root.querySelectorAll('li, .list-item, .sidebar-row, .item, div').forEach(ensureButtonOnHeaderRow);
-      // Also remove duplicates from non-header rows, in case any slipped in
-      root.querySelectorAll('li, .list-item, .sidebar-row, .item, div').forEach(r=>{
-        if (!isHeaderRow(r)) r.querySelectorAll('.bs-done-btn').forEach(b=>b.remove());
+      let currentSiteId = null;
+      root.querySelectorAll('li, .list-item, .sidebar-row, .item, div').forEach(row=>{
+        const txt = (row.textContent||'');
+        const idm = txt.match(idRx);
+        if (idm) {
+          currentSiteId = idm[0].toUpperCase();
+          // No buttons on header rows — only on Notes rows
+          row.querySelectorAll('.bs-done-btn').forEach(b=>b.remove());
+          hideAssignedChips(row);
+          return;
+        }
+        const notesInput = row.querySelector('input[type="text"]');
+        if (notesInput && currentSiteId){
+          attachButtonToNotesRow(row, currentSiteId);
+        }else{
+          // any accidental buttons on other rows -> remove
+          row.querySelectorAll('.bs-done-btn').forEach(b=>b.remove());
+        }
       });
     };
+
     scan();
     const mo = new MutationObserver(scan);
     mo.observe(root, { childList:true, subtree:true });
     setTimeout(()=>mo.disconnect(), 30000);
 
     // Save native notes on change/blur
-    const saveNote = async (t) => {
-      const row = findRow(t);
-      const sid = detectSiteId(row);
+    const saveNote = async (inputEl) => {
+      const row = inputEl.closest('li, .list-item, .sidebar-row, .item, div');
+      const sid = row?.dataset?.bsSiteId || null;
       if (!sid) return;
       const btn = siteButtons.get(sid);
       const status = btn && btn.classList.contains('done') ? 'completed' : 'in_progress';
-      try{ await writeProgress(sid, status, t.value||''); }catch(e){ console.error(e); }
+      try{ await writeProgress(sid, status, inputEl.value||''); }catch(e){ console.error(e); }
     };
     root.addEventListener('change', (ev)=>{
       const t = ev.target;
@@ -392,6 +395,7 @@
       if (!taskId) { console.warn('No assignment id; live reflection disabled.'); return; }
       db.collection('assignments').doc(taskId).onSnapshot(snap=>{
         const perSite = (snap.data()||{}).perSite || {};
+        // Buttons
         Object.entries(perSite).forEach(([sid, info])=>{
           const btn = siteButtons.get(sid);
           if (btn){
@@ -400,14 +404,13 @@
             btn.textContent = isDone ? 'Undo' : 'Mark done';
           }
         });
-        // Keep notes in sync
-        root.querySelectorAll('li, .list-item, .sidebar-row, .item, div').forEach(row=>{
-          if (!idRx.test(row.textContent||'')) return;
-          const sid = detectSiteId(row);
-          if (!sid) return;
+        // Notes
+        notesRows.forEach((row, sid)=>{
           const info = perSite[sid] || {};
-          const noteEl = noteInputFor(row);
-          if (noteEl && typeof info.note === 'string' && noteEl.value !== info.note) noteEl.value = info.note;
+          const input = row.querySelector('input[type="text"]');
+          if (input && typeof info.note === 'string' && input.value !== info.note) {
+            input.value = info.note;
+          }
           hideAssignedChips(row);
         });
       });
@@ -415,6 +418,7 @@
   });
 })();
 </script>
+
 
 </body>
 </html>
