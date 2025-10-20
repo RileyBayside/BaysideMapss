@@ -198,7 +198,7 @@
   const auth = firebase.auth();
   const params = new URLSearchParams(location.search);
 
-  // Resolve assignment id: ?task=... -> localStorage -> infer from focus
+  // Resolve task id: ?task=... -> localStorage -> infer from focus
   let assignmentId = params.get('task') || localStorage.getItem('currentTaskId') || null;
   if (assignmentId) { try { localStorage.setItem('currentTaskId', assignmentId); } catch(_) {} }
 
@@ -210,7 +210,8 @@
     if (!ids.length) return null;
     try{
       const batch = ids.slice(0,10);
-      const snap = await db.collection('assignments').where('siteIds','array-contains-any',batch).get();
+      const snap = await db.collection('assignments')
+        .where('siteIds','array-contains-any',batch).get();
       let best=null, score=-1;
       snap.forEach(doc=>{
         const arr = (doc.data().siteIds||[]).map(x=>String(x).toUpperCase());
@@ -239,7 +240,7 @@
     const m = (row.textContent||'').match(idRx);
     return m ? m[0].toUpperCase() : '';
   }
-  function nativeNoteInput(row){
+  function noteInputFor(row){
     return row.querySelector('input[type="text"]');
   }
   function hideAssignedChips(row){
@@ -268,7 +269,6 @@
       update[`perSite.${siteId}.completedAt`] = (status==='completed') ? firebase.firestore.FieldValue.serverTimestamp() : null;
       ops.push(db.collection('assignments').doc(taskId).set(update,{merge:true}));
     }
-    // Optional history
     ops.push(db.collection('work_logs').add({
       assignmentId: taskId || null,
       siteId, status,
@@ -289,62 +289,51 @@
     setTimeout(()=>mo.disconnect(),10000);
   }
 
-  function takeOverLeftCheckbox(row){
-    // first checkbox in the row is the native left box
-    const cb = row.querySelector('input[type="checkbox"]');
-    if (!cb || cb.dataset.bsOwned === '1') return;
+  whenSidebarReady((root)=>{
+    // 1) Intercept native checkbox interactions at the CONTAINER (capture phase)
+    const intercept = async (ev) => {
+      const tgt = ev.target;
 
-    const siteId = detectSiteId(row);
-    if (!siteId) return;
+      // Is the click/change on a checkbox or on a label that contains one?
+      let cb = null;
+      if (tgt instanceof HTMLInputElement && tgt.type === 'checkbox') {
+        cb = tgt;
+      } else if (tgt instanceof HTMLElement) {
+        const label = tgt.closest('label');
+        if (label) cb = label.querySelector('input[type="checkbox"]');
+      }
+      if (!cb) return; // ignore other clicks
 
-    hideAssignedChips(row);
+      const row = findRow(cb);
+      const siteId = detectSiteId(row);
+      if (!siteId) return;
 
-    // We OWN the click (capture) so sidebar.js can't undo it
-    const onClickCapture = async (ev) => {
+      // OWN the event so sidebar.js can't re-handle & revert it
       ev.preventDefault();
       ev.stopPropagation();
       ev.stopImmediatePropagation?.();
 
+      // Optimistic toggle
       const newState = !cb.checked;
-      cb.checked = newState; // optimistic UI
+      cb.checked = newState;
 
-      const noteEl = nativeNoteInput(row);
-      const note   = noteEl ? noteEl.value : '';
+      const noteEl = noteInputFor(row);
+      const note = noteEl ? noteEl.value : '';
 
       try{
         await writeProgress(siteId, newState ? 'completed' : 'in_progress', note);
       }catch(e){
         console.error('Save failed', e);
-        cb.checked = !newState; // revert on failure
+        cb.checked = !newState; // revert if write fails
       }
     };
 
-    // Block downstream 'change' too, just in case
-    const onChangeCapture = (ev) => {
-      ev.stopPropagation();
-      ev.stopImmediatePropagation?.();
-    };
+    // Capture on pointerdown, click, and change to cover all paths
+    root.addEventListener('pointerdown', intercept, true);
+    root.addEventListener('click',       intercept, true);
+    root.addEventListener('change',      intercept, true);
 
-    cb.addEventListener('click',  onClickCapture,  true); // capture phase
-    cb.addEventListener('change', onChangeCapture, true); // capture phase
-    cb.dataset.bsOwned = '1';
-  }
-
-  whenSidebarReady((root)=>{
-    // Attach to rows and own the left checkbox
-    const scan = () => {
-      root.querySelectorAll('li, .list-item, .sidebar-row, .item, div').forEach(row=>{
-        if (!idRx.test(row.textContent||'')) return;
-        takeOverLeftCheckbox(row);
-        hideAssignedChips(row);
-      });
-    };
-    scan();
-    const mo = new MutationObserver(scan);
-    mo.observe(root, { childList:true, subtree:true });
-    setTimeout(()=>mo.disconnect(), 30000);
-
-    // Save native notes on change/blur
+    // 2) Save native notes on change/blur
     const saveNote = async (t) => {
       const row = findRow(t);
       const siteId = detectSiteId(row);
@@ -362,7 +351,18 @@
       if (t instanceof HTMLInputElement && t.type==='text') saveNote(t);
     }, true);
 
-    // Reflect Firestore -> native left checkbox + notes (keeps UI in sync)
+    // 3) Hide "assigned" chips continuously and reflect Firestore → UI
+    const scan = () => {
+      root.querySelectorAll('li, .list-item, .sidebar-row, .item, div').forEach(row=>{
+        if (!idRx.test(row.textContent||'')) return;
+        hideAssignedChips(row);
+      });
+    };
+    scan();
+    const mo = new MutationObserver(scan);
+    mo.observe(root, { childList:true, subtree:true });
+    setTimeout(()=>mo.disconnect(), 30000);
+
     firebase.auth().onAuthStateChanged(async ()=>{
       const taskId = await ensureTaskId();
       if (!taskId) { console.warn('No assignment id; live reflection disabled.'); return; }
@@ -374,10 +374,8 @@
           if (!sid) return;
           const info = perSite[sid] || {};
           const cb = row.querySelector('input[type="checkbox"]');
-          if (cb && cb.dataset.bsOwned === '1') {
-            cb.checked = info.status === 'completed';
-          }
-          const noteEl = nativeNoteInput(row);
+          if (cb) cb.checked = info.status === 'completed';
+          const noteEl = noteInputFor(row);
           if (noteEl && typeof info.note === 'string' && noteEl.value !== info.note) noteEl.value = info.note;
           hideAssignedChips(row);
         });
@@ -386,7 +384,6 @@
   });
 })();
 </script>
-
 
 </body>
 </html>
