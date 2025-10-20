@@ -165,7 +165,7 @@
       location.replace('login.html');
     });
 
-    /* ---------- Helpers (single definitions) ---------- */
+    /* ---------- Helpers ---------- */
     const fmt = (ts) => {
       if(!ts) return '';
       const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
@@ -188,7 +188,7 @@
       s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
-    /* ---------- Card live counter (assignments list) ---------- */
+    /* ---------- Card live counter ---------- */
     const liveCounters = {};
     function attachLiveCompletionCounter(assignmentId, assignmentData, chipEl){
       if (!chipEl) return;
@@ -409,7 +409,10 @@
           currentPerSite = d.perSite || {};
           currentSiteIds = (d.siteIds || []).map(s=>String(s).toUpperCase());
 
-          if (!sitesBox.firstChild) buildRows(currentSiteIds);
+          // Build initially OR if the number of sites changed while open
+          if (!sitesBox.firstChild || sitesBox.childElementCount !== currentSiteIds.length) {
+            buildRows(currentSiteIds);
+          }
 
           modalTitle.textContent = `${d.userName || 'Operator'} — ${d.zone || 'Task'}`;
           const focusCsv = currentSiteIds.join(',');
@@ -455,153 +458,141 @@
           downloadBtn.onclick = () => downloadReport(assignmentId);
         }, err => alert('Failed to load details: ' + (err.message||err)));
     }
-    
-  // REPLACE your existing downloadReport function with the one below.
-  // Assumes `latestDocData` is set by openDetails (as in your current code)
-  // and jsPDF (window.jspdf) is already loaded.
 
-  async function downloadReport(assignmentId){
-    const { jsPDF } = window.jspdf || {};
-    if (!jsPDF) { alert('PDF library not loaded'); return; }
+    /* ---------- PDF (parks-report style) ---------- */
+    async function downloadReport(assignmentId){
+      const { jsPDF } = window.jspdf || {};
+      if (!jsPDF) { alert('PDF library not loaded'); return; }
 
-    // Helper: dd/mm/yyyy from Firestore Timestamp | Date | null
-    const fmtDMY = (ts) => {
-      if (!ts) return '';
-      const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
-      if (!d) return '';
-      const dd = String(d.getDate()).padStart(2,'0');
-      const mm = String(d.getMonth()+1).padStart(2,'0');
-      const yy = d.getFullYear();
-      return `${dd}/${mm}/${yy}`;
-    };
-
-    // Helper: today dd/mm/yyyy
-    const todayDMY = () => {
-      const d = new Date();
-      const dd = String(d.getDate()).padStart(2,'0');
-      const mm = String(d.getMonth()+1).padStart(2,'0');
-      const yy = d.getFullYear();
-      return `${dd}/${mm}/${yy}`;
-    };
-
-    // Load doc data if needed
-    let d = latestDocData;
-    if (!d) {
-      const snap = await firebase.firestore().collection('assignments').doc(assignmentId).get();
-      if (!snap.exists) { alert('Assignment missing'); return; }
-      d = snap.data() || {};
-    }
-
-    const siteIds = (d.siteIds || []).map(s => String(s).toUpperCase());
-    const perSite = d.perSite || {};
-
-    // Build rows (prefer completed only; if none, include all)
-    const rowsAll = siteIds.map(id => {
-      const ps = perSite[id] || {};
-      const status = String(ps.status || '').toLowerCase();
-      const completedAt = ps.completedAt || null;
-      const note = (ps.note || '').trim();
-      return {
-        id,
-        status,
-        when: completedAt ? (completedAt?.toDate ? completedAt.toDate() : null) : null,
-        whenStr: completedAt ? fmtDMY(completedAt) : '',
-        note
+      const fmtDMY = (ts) => {
+        if (!ts) return '';
+        const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+        if (!d) return '';
+        const dd = String(d.getDate()).padStart(2,'0');
+        const mm = String(d.getMonth()+1).padStart(2,'0');
+        const yy = d.getFullYear();
+        return `${dd}/${mm}/${yy}`;
       };
-    });
+      const todayDMY = () => {
+        const d = new Date();
+        const dd = String(d.getDate()).padStart(2,'0');
+        const mm = String(d.getMonth()+1).padStart(2,'0');
+        const yy = d.getFullYear();
+        return `${dd}/${mm}/${yy}`;
+      };
 
-    const rowsCompleted = rowsAll.filter(r => r.status === 'completed');
-    const rows = rowsCompleted.length ? rowsCompleted : rowsAll;
-
-    // Sort: newest date first (blank dates last), then by ID
-    rows.sort((a,b)=>{
-      const ta = a.when ? a.when.getTime() : -1;
-      const tb = b.when ? b.when.getTime() : -1;
-      if (tb !== ta) return tb - ta;
-      return a.id.localeCompare(b.id);
-    });
-
-    // ----- PDF layout -----
-    const doc = new jsPDF({ unit:'pt', format:'a4' });
-    const marginL = 56;
-    const marginR = 56;
-    const pageW = doc.internal.pageSize.getWidth();
-    const contentW = pageW - marginL - marginR;
-
-    let y = 72;
-
-    // Title
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(18);
-    doc.text(`Parks Report ${todayDMY()}`, marginL, y);
-    y += 22;
-
-    // Subtitle (operator + zone)
-    const subtitle = [d.userName || 'Operator', d.zone || '']
-      .filter(Boolean).join(' — ');
-    if (subtitle) {
-      doc.setFont('helvetica','normal');
-      doc.setFontSize(12);
-      doc.text(subtitle, marginL, y);
-      y += 16;
-    }
-
-    y += 8;
-
-    // Column headers
-    const colIdW   = 120;                    // Park Number
-    const colDateW = 120;                    // Date Completed
-    const colNoteW = contentW - colIdW - colDateW; // Notes
-
-    doc.setFont('helvetica','bold');
-    doc.setFontSize(12);
-    doc.text('Park Number',   marginL,                                  y);
-    doc.text('Date Completed',marginL + colIdW,                         y);
-    doc.text('Notes',         marginL + colIdW + colDateW,              y);
-    y += 8;
-    doc.setLineWidth(0.6);
-    doc.line(marginL, y, marginL + contentW, y);
-    y += 14;
-
-    // Rows
-    doc.setFont('helvetica','normal');
-    const lineH = 16;
-
-    for (const r of rows) {
-      // If note is long, split to fit
-      const wrappedNote = doc.splitTextToSize(r.note || '-', colNoteW);
-
-      // Add page if needed (room for at least one row line)
-      const needH = Math.max(lineH, wrappedNote.length * lineH);
-      if (y + needH > doc.internal.pageSize.getHeight() - 56) {
-        doc.addPage();
-        y = 56;
-
-        // reprint headers on new page
-        doc.setFont('helvetica','bold'); doc.setFontSize(12);
-        doc.text('Park Number',   marginL,                                  y);
-        doc.text('Date Completed',marginL + colIdW,                         y);
-        doc.text('Notes',         marginL + colIdW + colDateW,              y);
-        y += 8; doc.setLineWidth(0.6); doc.line(marginL, y, marginL + contentW, y);
-        y += 14;
-        doc.setFont('helvetica','normal');
+      // Load doc data if needed
+      let d = latestDocData;
+      if (!d) {
+        const snap = await firebase.firestore().collection('assignments').doc(assignmentId).get();
+        if (!snap.exists) { alert('Assignment missing'); return; }
+        d = snap.data() || {};
       }
 
-      // First line (ID, Date)
-      doc.text(r.id,        marginL,                   y);
-      doc.text(r.whenStr || '', marginL + colIdW,     y);
+      const siteIds = (d.siteIds || []).map(s => String(s).toUpperCase());
+      const perSite = d.perSite || {};
 
-      // Notes (can wrap)
-      doc.text(wrappedNote, marginL + colIdW + colDateW, y);
+      // Build rows (prefer completed; fallback to all)
+      const rowsAll = siteIds.map(id => {
+        const ps = perSite[id] || {};
+        const status = String(ps.status || '').toLowerCase();
+        const completedAt = ps.completedAt || null;
+        const note = (ps.note || '').trim();
+        return {
+          id,
+          status,
+          when: completedAt ? (completedAt?.toDate ? completedAt.toDate() : null) : null,
+          whenStr: completedAt ? fmtDMY(completedAt) : '',
+          note
+        };
+      });
+      const rowsCompleted = rowsAll.filter(r => r.status === 'completed');
+      const rows = rowsCompleted.length ? rowsCompleted : rowsAll;
 
-      // Move Y by number of wrapped lines
-      y += Math.max(lineH, wrappedNote.length * lineH);
+      // Sort: newest date first (blank last), then ID
+      rows.sort((a,b)=>{
+        const ta = a.when ? a.when.getTime() : -1;
+        const tb = b.when ? b.when.getTime() : -1;
+        if (tb !== ta) return tb - ta;
+        return a.id.localeCompare(b.id);
+      });
+
+      // PDF layout
+      const doc = new jsPDF({ unit:'pt', format:'a4' });
+      const marginL = 56, marginR = 56;
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const contentW = pageW - marginL - marginR;
+
+      let y = 72;
+
+      // Title
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(18);
+      doc.text(`Parks Report ${todayDMY()}`, marginL, y);
+      y += 22;
+
+      // Subtitle
+      const subtitle = [d.userName || 'Operator', d.zone || ''].filter(Boolean).join(' — ');
+      if (subtitle) {
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(12);
+        doc.text(subtitle, marginL, y);
+        y += 16;
+      }
+      y += 8;
+
+      // Column headers
+      const colIdW   = 120;                       // Park Number
+      const colDateW = 120;                       // Date Completed
+      const colNoteW = contentW - colIdW - colDateW; // Notes
+
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(12);
+      doc.text('Park Number',   marginL,                       y);
+      doc.text('Date Completed',marginL + colIdW,             y);
+      doc.text('Notes',         marginL + colIdW + colDateW,  y);
+      y += 8;
+      doc.setLineWidth(0.6);
+      doc.line(marginL, y, marginL + contentW, y);
+      y += 14;
+
+      // Rows
+      doc.setFont('helvetica','normal');
+      const lineH = 16;
+
+      for (const r of rows) {
+        const wrappedNote = doc.splitTextToSize(r.note || '-', colNoteW);
+
+        const needH = Math.max(lineH, wrappedNote.length * lineH);
+        if (y + needH > pageH - 56) {
+          doc.addPage();
+          y = 56;
+
+          // headers on new page
+          doc.setFont('helvetica','bold'); doc.setFontSize(12);
+          doc.text('Park Number',   marginL,                       y);
+          doc.text('Date Completed',marginL + colIdW,             y);
+          doc.text('Notes',         marginL + colIdW + colDateW,  y);
+          y += 8; doc.setLineWidth(0.6); doc.line(marginL, y, marginL + contentW, y);
+          y += 14;
+          doc.setFont('helvetica','normal');
+        }
+
+        doc.text(r.id,            marginL,                 y);
+        doc.text(r.whenStr || '', marginL + colIdW,       y);
+        doc.text(wrappedNote,     marginL + colIdW + colDateW, y);
+
+        y += Math.max(lineH, wrappedNote.length * lineH);
+      }
+
+      const filename =
+        `${(d.userName || 'operator').toLowerCase().replace(/\s+/g,'-')}` +
+        `-${(d.zone||'task').toLowerCase().replace(/\s+/g,'-')}-parks-report.pdf`;
+      doc.save(filename);
     }
 
-    const filename = `${(d.userName || 'operator').toLowerCase().replace(/\s+/g,'-')}-${(d.zone||'task').toLowerCase().replace(/\s+/g,'-')}-parks-report.pdf`;
-    doc.save(filename);
-  }
-</script>
-
+  })();
+  </script>
 </body>
 </html>
