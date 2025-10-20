@@ -72,33 +72,11 @@
     }
     #sidebar-content li:first-child{ border-top:0; }
 
-    /* Hide the original/native left checkbox (we’ll add our own “Done”) */
-    #sidebar-content input[type="checkbox"]:not(.bs-done){ display:none !important; }
-
-    /* Hide ALL status badges (our old mini-pill & any native ones) */
+    /* Hide ALL status badges/chips that say "assigned" (visual only) */
     #sidebar-content .mini-pill,
     #sidebar-content .badge,
     #sidebar-content .tag,
     #sidebar-content .status { display:none !important; }
-
-    /* Our single “Done” control (notes remain the native inputs already in the list) */
-    .bs-ops{ display:inline-flex; align-items:center; gap:8px; margin-left:8px; }
-    .bs-ops label{ font-weight:700; color:#111827; font-size:12px; display:inline-flex; align-items:center; gap:6px; }
-
-    #sidebar-toggle{
-      position: fixed; top:12px; left:12px; z-index: 1000;
-      border:0; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer;
-      background: var(--accent); color:#fff; box-shadow:0 6px 18px rgba(16,24,40,.18);
-    }
-    #sidebar-toggle:active{ transform: translateY(1px); }
-
-    @media (max-width: 768px){
-      #sidebar{ width: 100vw; max-width: none; }
-      #sidebar .sidebar-head .title{ font-size:13px }
-      #sidebar-content details > summary{ padding:8px 10px; }
-      #sidebar-content li, #sidebar-content .list-item,
-      #sidebar-content .sidebar-row, #sidebar-content .item{ padding:8px 10px; }
-    }
   </style>
 </head>
 <body>
@@ -214,7 +192,7 @@
   })();
   </script>
 
-  <!-- One “Done” checkbox per row; use native Notes input; write to Firestore -->
+  <!-- Use ONLY the native left checkbox + native Notes; write to Firestore; hide "assigned" chips -->
   <script>
   (function () {
     const db   = firebase.firestore();
@@ -265,12 +243,19 @@
     function nativeNoteInput(row){
       return row.querySelector('input[type="text"]');
     }
+    function hideAssignedChips(row){
+      row.querySelectorAll('span,div,small,b,strong,i,em').forEach(el=>{
+        const t = (el.textContent||'').trim().toLowerCase();
+        if (t === 'assigned') el.style.display = 'none';
+      });
+      row.querySelectorAll('.mini-pill,.badge,.tag,.status').forEach(el => el.style.display = 'none');
+    }
 
     async function writeProgress(siteId, status, note){
       const uid = auth.currentUser?.uid || null;
       const taskId = await ensureTaskId();
-
       const writes = [];
+
       if (taskId){
         const update = {};
         update[`perSite.${siteId}.status`]      = status;
@@ -288,6 +273,7 @@
         operatorUid: uid,
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
       }));
+
       await Promise.all(writes);
     }
 
@@ -300,45 +286,43 @@
       setTimeout(()=>mo.disconnect(),10000);
     }
 
-    function removeStatusBadges(row){
-      // Hide any element whose text is exactly "assigned" (common in your list)
-      row.querySelectorAll('span,div,small,b,strong,i,em').forEach(el=>{
-        const t = (el.textContent||'').trim().toLowerCase();
-        if (t === 'assigned') el.style.display = 'none';
-      });
-      // Also hide our previous mini-pill if present
-      row.querySelectorAll('.mini-pill').forEach(el=> el.style.display='none');
-    }
-
-    function ensureDoneControl(row){
-      if (row.querySelector('.bs-done')) return; // already added
-      const siteId = detectSiteId(row);
-      if (!siteId) return;
-
-      removeStatusBadges(row);
-
-      const ops = document.createElement('span');
-      ops.className = 'bs-ops';
-      ops.innerHTML = `<label><input type="checkbox" class="bs-done"> Done</label>`;
-      row.appendChild(ops);
-
-      const done = ops.querySelector('.bs-done');
-      const noteEl = nativeNoteInput(row);
-
-      done.addEventListener('change', async ()=>{
-        try{
-          await writeProgress(siteId, done.checked ? 'completed' : 'in_progress', noteEl ? noteEl.value : '');
-        }catch(e){ console.error(e); alert('Save failed: ' + (e.message||e)); }
-      });
-    }
-
     whenSidebarReady((root)=>{
-      // Add a single “Done” per row and keep native Notes
+      // 1) Write using NATIVE left checkbox + native notes
+      root.addEventListener('change', ev=>{
+        const t = ev.target;
+        if (!(t instanceof HTMLInputElement)) return;
+        const row = findRow(t);
+        const siteId = detectSiteId(row);
+        if (!siteId) return;
+
+        if (t.type === 'checkbox'){
+          const noteEl = nativeNoteInput(row);
+          const note   = noteEl ? noteEl.value : '';
+          writeProgress(siteId, t.checked ? 'completed' : 'in_progress', note).catch(console.error);
+        }
+        if (t.type === 'text'){
+          const cb = row.querySelector('input[type="checkbox"]');
+          const status = cb && cb.checked ? 'completed' : 'in_progress';
+          writeProgress(siteId, status, t.value).catch(console.error);
+        }
+      });
+
+      root.addEventListener('blur', ev=>{
+        const t = ev.target;
+        if (!(t instanceof HTMLInputElement) || t.type!=='text') return;
+        const row = findRow(t);
+        const siteId = detectSiteId(row);
+        if (!siteId) return;
+        const cb = row.querySelector('input[type="checkbox"]');
+        const status = cb && cb.checked ? 'completed' : 'in_progress';
+        writeProgress(siteId, status, t.value).catch(console.error);
+      }, true);
+
+      // 2) Hide “assigned” chips and keep them hidden on DOM changes
       const scan = () => {
-        root.querySelectorAll('li, .list-item, .sidebar-row, .item, div').forEach(el => {
-          if (el.closest('summary')) return;
+        root.querySelectorAll('li, .list-item, .sidebar-row, .item, div').forEach(el=>{
           if (!idRx.test(el.textContent||'')) return;
-          ensureDoneControl(el);
+          hideAssignedChips(el);
         });
       };
       scan();
@@ -346,25 +330,7 @@
       mo.observe(root, { childList:true, subtree:true });
       setTimeout(()=>mo.disconnect(), 30000);
 
-      // Save native notes on blur/change
-      const saveNote = async (t) => {
-        const row = findRow(t);
-        const siteId = detectSiteId(row);
-        if (!siteId) return;
-        const done = row.querySelector('.bs-done');
-        const status = done && done.checked ? 'completed' : 'in_progress';
-        try{ await writeProgress(siteId, status, t.value||''); }catch(e){ console.error(e); }
-      };
-      root.addEventListener('change', (ev)=>{
-        const t = ev.target;
-        if (t instanceof HTMLInputElement && t.type==='text') saveNote(t);
-      });
-      root.addEventListener('blur', (ev)=>{
-        const t = ev.target;
-        if (t instanceof HTMLInputElement && t.type==='text') saveNote(t);
-      }, true);
-
-      // Live reflection from Firestore into our single Done checkbox (and native notes)
+      // 3) Reflect Firestore -> native controls live
       firebase.auth().onAuthStateChanged(async ()=>{
         const taskId = await ensureTaskId();
         if (!taskId) { console.warn('No assignment id; live reflection disabled.'); return; }
@@ -375,14 +341,11 @@
             const sid = detectSiteId(row);
             if (!sid) return;
             const info = perSite[sid] || {};
-            // Done
-            const done = row.querySelector('.bs-done');
-            if (done) done.checked = info.status === 'completed';
-            // Native note
+            const cb = row.querySelector('input[type="checkbox"]');
+            if (cb) cb.checked = info.status === 'completed';
             const noteEl = nativeNoteInput(row);
             if (noteEl && typeof info.note === 'string' && noteEl.value !== info.note) noteEl.value = info.note;
-            // Make sure any leftover status chips are hidden
-            removeStatusBadges(row);
+            hideAssignedChips(row);
           });
         });
       });
