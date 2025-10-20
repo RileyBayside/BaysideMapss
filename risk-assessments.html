@@ -317,5 +317,30 @@
     apply(); // start live listener
   })();
   </script>
+
+  <script>
+  firebase.auth().onAuthStateChanged(async (u) => {
+    if (!u) { location.href = 'login.html'; return; }
+    try {
+      const snap = await firebase.firestore().collection('users').doc(u.uid).get();
+      const role = snap.data()?.role || '';
+      if (!['admin','manager'].includes(role)) {
+        document.querySelector('tbody#rows')?.insertAdjacentHTML(
+          'beforeend',
+          `<tr><td colspan="11" style="color:#b91c1c;font-weight:700">
+             You don’t have access to view risk assessments.
+           </td></tr>`
+        );
+        // Don’t start the listener if not admin
+        return;
+      }
+      // OK: start your existing apply()/listener here if you want to gate it
+      // apply();
+    } catch (e) {
+      console.warn('role check failed', e);
+    }
+  });
+</script>
+
 </body>
 </html>
