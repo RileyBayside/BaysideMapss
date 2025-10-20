@@ -178,222 +178,157 @@
 
   <!-- Operator controls + Firestore writes & live reflection -->
   <script>
-  (function () {
-    const db   = firebase.firestore();
-    const auth = firebase.auth();
-    const params = new URLSearchParams(location.search);
+(function () {
+  const db   = firebase.firestore();
+  const auth = firebase.auth();
+  const params = new URLSearchParams(location.search);
 
-    // Resolve assignment id (URL -> localStorage -> infer from focus)
-    let assignmentId = params.get('task') || localStorage.getItem('currentTaskId') || null;
-    if (assignmentId) { try { localStorage.setItem('currentTaskId', assignmentId); } catch(_) {} }
+  // Resolve assignment id: ?task=... -> localStorage -> try to infer from focus
+  let assignmentId = params.get('task') || localStorage.getItem('currentTaskId') || null;
+  if (assignmentId) { try { localStorage.setItem('currentTaskId', assignmentId); } catch(_) {} }
 
-    function getFocusIds() {
-      return (params.get('focus')||'')
-        .split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+  function focusIds() {
+    return (params.get('focus')||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+  }
+  async function inferTaskIdFromFocus(){
+    const ids = focusIds();
+    if (!ids.length) return null;
+    try{
+      const batch = ids.slice(0,10); // array-contains-any limit
+      const snap = await db.collection('assignments').where('siteIds','array-contains-any',batch).get();
+      let best=null, score=-1;
+      snap.forEach(doc=>{
+        const arr = (doc.data().siteIds||[]).map(x=>String(x).toUpperCase());
+        const sc = ids.reduce((n,id)=>n+(arr.includes(id)?1:0),0);
+        if(sc>score){ best=doc.id; score=sc; }
+      });
+      if(best){ assignmentId=best; try{localStorage.setItem('currentTaskId',best);}catch(_){} }
+      return best;
+    }catch(e){ console.warn('inferTaskIdFromFocus:',e); return null; }
+  }
+  async function ensureTaskId(){ return assignmentId || await inferTaskIdFromFocus(); }
+
+  // -------- helpers
+  const idRx = /\bM\d{3,5}\b/i;
+  function detectSiteId(node){
+    const root = document.getElementById('sidebar-content');
+    let cur = node;
+    while (cur && cur!==root){
+      const m = (cur.textContent||'').match(idRx);
+      if (m) return m[0].toUpperCase();
+      cur = cur.parentElement;
+    }
+    const m2 = (node.textContent||'').match(idRx);
+    return m2 ? m2[0].toUpperCase() : '';
+  }
+
+  async function writeProgress(siteId, status, note){
+    const uid = auth.currentUser?.uid || null;
+    const taskId = await ensureTaskId(); // may still be null; we’ll still log work_logs
+
+    const writes = [];
+
+    if (taskId){
+      const update = {};
+      update[`perSite.${siteId}.status`]      = status;
+      update[`perSite.${siteId}.note`]        = (note||'').trim();
+      update[`perSite.${siteId}.operatorUid`] = uid;
+      update[`perSite.${siteId}.updatedAt`]   = firebase.firestore.FieldValue.serverTimestamp();
+      update[`perSite.${siteId}.completedAt`] = (status==='completed')
+        ? firebase.firestore.FieldValue.serverTimestamp()
+        : null;
+      writes.push(db.collection('assignments').doc(taskId).set(update,{merge:true}));
     }
 
-    async function inferAssignmentIdFromFocus() {
-      const focus = getFocusIds();
-      if (!focus.length) return null;
+    // optional history log (kept – harmless even if you don’t use it)
+    writes.push(db.collection('work_logs').add({
+      assignmentId: taskId || null,
+      siteId, status,
+      note: (note||'').trim(),
+      operatorUid: uid,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    }));
 
-      try{
-        const batch = focus.slice(0,10);
-        const q = db.collection('assignments').where('siteIds','array-contains-any', batch);
-        const snap = await q.get();
+    await Promise.all(writes);
+  }
 
-        let best = null, score = -1;
-        snap.forEach(doc=>{
-          const ids = (doc.data().siteIds||[]).map(x=>String(x).toUpperCase());
-          const sc = focus.reduce((n,id)=> n + (ids.includes(id)?1:0), 0);
-          if (sc > score) { best = doc.id; score = sc; }
-        });
+  // -------- attach to the actual sidebar checkboxes & notes
+  function whenSidebarReady(cb){
+    const root = document.getElementById('sidebar-content');
+    if (!root) return;
+    if (root.children.length) return cb(root);
+    const mo = new MutationObserver((_,o)=>{ if(root.children.length){ o.disconnect(); cb(root); }});
+    mo.observe(root,{childList:true,subtree:true});
+    setTimeout(()=>mo.disconnect(),10000);
+  }
 
-        if (best) {
-          assignmentId = best;
-          try { localStorage.setItem('currentTaskId', best); } catch(_) {}
-          return best;
-        }
-      }catch(e){ console.warn('inferAssignmentIdFromFocus:', e); }
+  whenSidebarReady((root)=>{
+    // treat ANY checkbox as "complete"
+    root.addEventListener('change', async (ev)=>{
+      const t = ev.target;
+      if (!(t instanceof HTMLInputElement)) return;
+      if (t.type !== 'checkbox') return;
 
-      return null;
-    }
-
-    async function ensureAssignmentId(){
-      if (assignmentId) return assignmentId;
-      return await inferAssignmentIdFromFocus();
-    }
-
-    // Utilities
-    const idRx = /\bM\d{3,5}\b/i;
-    function detectId(el){
-      let id = el.getAttribute('data-site-id');
-      if (id) return id.toUpperCase();
-      let cur = el;
-      const root = document.getElementById('sidebar-content');
-      while (cur && cur !== root){
-        const m = (cur.textContent || '').match(idRx);
-        if (m){ id = m[0].toUpperCase(); break; }
-        cur = cur.parentElement;
-      }
-      if (!id){
-        const m2 = (el.textContent || '').match(idRx);
-        if (m2) id = m2[0].toUpperCase();
-      }
-      if (id) el.setAttribute('data-site-id', id);
-      return id || '';
-    }
-
-    async function recordProgress(siteId, status, note){
-      siteId = String(siteId||'').toUpperCase();
-      status = String(status||'in_progress').toLowerCase();
-      const uid = auth.currentUser?.uid || null;
-
-      const id = await ensureAssignmentId();
-
-      const writes = [];
-
-      if (id){
-        const ps = {};
-        ps[`perSite.${siteId}.status`]      = status;
-        ps[`perSite.${siteId}.note`]        = (note||'').trim();
-        ps[`perSite.${siteId}.operatorUid`] = uid;
-        ps[`perSite.${siteId}.updatedAt`]   = firebase.firestore.FieldValue.serverTimestamp();
-        ps[`perSite.${siteId}.completedAt`] = (status==='completed') ? firebase.firestore.FieldValue.serverTimestamp() : null;
-        writes.push(db.collection('assignments').doc(id).set(ps, { merge: true }));
-      }
-
-      writes.push(db.collection('work_logs').add({
-        assignmentId: id || null,
-        siteId, status,
-        note: (note||'').trim(),
-        operatorUid: uid,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-      }));
-
-      await Promise.all(writes);
-    }
-
-    // Decorate rows (ensure pill + optional controls if sidebar doesn’t provide them)
-    function decorateRow(row){
-      if (row.dataset.opsDecorated === '1') return;
-
-      const siteId = detectId(row);
+      const row = t.closest('li, .list-item, .sidebar-row, .item, div') || root;
+      const siteId = detectSiteId(row);
       if (!siteId) return;
 
-      let pill = row.querySelector('.mini-pill');
-      if (!pill){
-        pill = document.createElement('span');
-        pill.className = 'mini-pill';
-        pill.textContent = 'assigned';
-        row.appendChild(pill);
+      const noteEl = row.querySelector('input[type="text"].site-note, input[type="text"][placeholder*="ote" i]');
+      const note   = noteEl ? noteEl.value : '';
+
+      try{
+        await writeProgress(siteId, t.checked ? 'completed' : 'assigned', note);
+        console.log('Saved', siteId, t.checked ? 'completed' : 'assigned');
+      }catch(e){
+        console.error('Save failed', e);
+        alert('Failed to save: ' + (e.message || e));
       }
-
-      let cb = row.querySelector('input[type="checkbox"]');
-      let note = row.querySelector('input[type="text"].site-note, input[type="text"][placeholder*="ote" i]');
-
-      if (!cb || !note){
-        const ops = document.createElement('span');
-        ops.className = 'site-ops';
-        if (!cb){
-          cb = document.createElement('input');
-          cb.type = 'checkbox';
-          cb.className = 'site-done';
-          cb.title = 'Mark complete';
-          const lbl = document.createElement('label');
-          lbl.textContent = 'Done'; lbl.style.marginLeft = '4px';
-          ops.appendChild(cb); ops.appendChild(lbl);
-        }
-        if (!note){
-          note = document.createElement('input');
-          note.type = 'text'; note.placeholder = 'Notes...'; note.className = 'site-note';
-          ops.appendChild(note);
-        }
-        row.appendChild(ops);
-      }
-
-      if (note){
-        const saveNote = async () => {
-          const status = (cb && cb.checked) ? 'completed' : 'in_progress';
-          await recordProgress(siteId, status, note.value || '');
-        };
-        note.addEventListener('change', saveNote);
-        note.addEventListener('blur', saveNote);
-      }
-
-      row.dataset.opsDecorated = '1';
-    }
-
-    // When sidebar ready, decorate and watch for changes
-    function whenSidebarReady(cb) {
-      const root = document.getElementById('sidebar-content');
-      if (!root) return;
-      if (root.children.length > 0) { cb(root); return; }
-      const obs = new MutationObserver((_, o) => {
-        if (root.children.length > 0) { o.disconnect(); cb(root); }
-      });
-      obs.observe(root, { childList: true, subtree: true });
-      setTimeout(() => obs.disconnect(), 10000);
-    }
-
-    whenSidebarReady((root) => {
-      const scan = () => {
-        root.querySelectorAll('li, .list-item, .sidebar-row, .item').forEach(el => {
-          if (el.closest('summary')) return;
-          decorateRow(el);
-        });
-      };
-      scan();
-      const mo = new MutationObserver(scan);
-      mo.observe(root, { childList:true, subtree:true });
-      setTimeout(() => mo.disconnect(), 30000);
-
-      // Row-agnostic checkbox handler (catches your native checkboxes)
-      function findRowFor(el){
-        const r = document.getElementById('sidebar-content');
-        let cur = el;
-        while (cur && cur !== r){
-          if (/\bM\d{3,5}\b/i.test(cur.textContent || '')) return cur;
-          cur = cur.parentElement;
-        }
-        return el.closest('li, .list-item, .sidebar-row, .item') || r;
-      }
-
-      root.addEventListener('change', async (ev)=>{
-        const target = ev.target;
-        if (!(target instanceof HTMLInputElement)) return;
-        if (target.type !== 'checkbox') return;
-
-        const row = findRowFor(target);
-        const sid = detectId(row);
-        if (!sid) return;
-
-        const noteEl = row.querySelector('input[type="text"].site-note, input[type="text"][placeholder*="ote" i]');
-        const noteVal = noteEl ? noteEl.value : '';
-        await recordProgress(sid, target.checked ? 'completed' : 'assigned', noteVal);
-      });
     });
 
-    // Live reflection from Firestore (updates pill/checkbox/note in sidebar)
-    firebase.auth().onAuthStateChanged(async () => {
-      const id = await ensureAssignmentId();
-      if (!id) { console.warn('No assignment id; per-site reflection disabled.'); return; }
-      db.collection('assignments').doc(id).onSnapshot(snap => {
-        const d = snap.data() || {};
-        const perSite = d.perSite || {};
-        document.querySelectorAll('#sidebar-content [data-site-id]').forEach(row => {
-          const sid = String(row.getAttribute('data-site-id')).toUpperCase();
+    // save notes on blur/change if present
+    root.addEventListener('blur', handleNoteSave, true);
+    root.addEventListener('change', handleNoteSave, true);
+    async function handleNoteSave(ev){
+      const t = ev.target;
+      if (!(t instanceof HTMLInputElement)) return;
+      if (t.type !== 'text') return;
+
+      const row = t.closest('li, .list-item, .sidebar-row, .item, div') || root;
+      const siteId = detectSiteId(row);
+      if (!siteId) return;
+
+      const cb = row.querySelector('input[type="checkbox"]');
+      const status = cb && cb.checked ? 'completed' : 'in_progress';
+      try{
+        await writeProgress(siteId, status, t.value);
+        console.log('Saved note', siteId);
+      }catch(e){
+        console.error('Save failed', e);
+      }
+    }
+
+    // keep sidebar pills/checkboxes/notes in sync with perSite (if we have taskId)
+    firebase.auth().onAuthStateChanged(async ()=>{
+      const taskId = await ensureTaskId();
+      if (!taskId) { console.warn('No assignment id; live reflection disabled.'); return; }
+      db.collection('assignments').doc(taskId).onSnapshot(snap=>{
+        const perSite = (snap.data()||{}).perSite || {};
+        root.querySelectorAll('li, .list-item, .sidebar-row, .item, div').forEach(row=>{
+          const sid = detectSiteId(row);
+          if (!sid) return;
           const info = perSite[sid] || {};
           const pill = row.querySelector('.mini-pill');
           if (pill) pill.textContent = (info.status || 'assigned').replace('_',' ');
           const cb  = row.querySelector('input[type="checkbox"]');
           if (cb) cb.checked = info.status === 'completed';
           const note = row.querySelector('input[type="text"].site-note, input[type="text"][placeholder*="ote" i]');
-          if (note && typeof info.note === 'string' && note.value !== info.note) note.value = info.note;
+          if (note && typeof info.note==='string' && note.value!==info.note) note.value = info.note;
         });
       });
     });
-  })();
-  </script>
+  });
+})();
+</script>
 
 </body>
 </html>
