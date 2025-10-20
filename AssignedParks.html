@@ -66,6 +66,14 @@
       .site-ops input[type="text"]{ width: 120px; }
     }
   </style>
+
+  <style>
+  .bs-ops{ display:inline-flex; align-items:center; gap:8px; margin-left:8px; }
+  .bs-ops .bs-note{ width:140px; max-width:48vw; padding:6px 8px; border-radius:8px; border:1px solid #e2e8f0; }
+  .bs-ops label{ font-weight:700; color:#111827; font-size:12px; display:inline-flex; align-items:center; gap:6px; }
+  @media (max-width:768px){ .bs-ops .bs-note{ width:120px } }
+</style>
+
 </head>
 <body>
 
@@ -183,7 +191,7 @@
   const auth = firebase.auth();
   const params = new URLSearchParams(location.search);
 
-  // Resolve assignment id: ?task=... -> localStorage -> try to infer from focus
+  // Resolve assignment id: ?task=... -> localStorage -> try to infer from focus (best effort)
   let assignmentId = params.get('task') || localStorage.getItem('currentTaskId') || null;
   if (assignmentId) { try { localStorage.setItem('currentTaskId', assignmentId); } catch(_) {} }
 
@@ -200,11 +208,11 @@
       snap.forEach(doc=>{
         const arr = (doc.data().siteIds||[]).map(x=>String(x).toUpperCase());
         const sc = ids.reduce((n,id)=>n+(arr.includes(id)?1:0),0);
-        if(sc>score){ best=doc.id; score=sc; }
+        if (sc>score){ best=doc.id; score=sc; }
       });
       if(best){ assignmentId=best; try{localStorage.setItem('currentTaskId',best);}catch(_){} }
       return best;
-    }catch(e){ console.warn('inferTaskIdFromFocus:',e); return null; }
+    }catch(e){ console.warn('inferTaskIdFromFocus:', e); return null; }
   }
   async function ensureTaskId(){ return assignmentId || await inferTaskIdFromFocus(); }
 
@@ -224,23 +232,19 @@
 
   async function writeProgress(siteId, status, note){
     const uid = auth.currentUser?.uid || null;
-    const taskId = await ensureTaskId(); // may still be null; we’ll still log work_logs
+    const taskId = await ensureTaskId();
 
     const writes = [];
-
     if (taskId){
       const update = {};
       update[`perSite.${siteId}.status`]      = status;
       update[`perSite.${siteId}.note`]        = (note||'').trim();
       update[`perSite.${siteId}.operatorUid`] = uid;
       update[`perSite.${siteId}.updatedAt`]   = firebase.firestore.FieldValue.serverTimestamp();
-      update[`perSite.${siteId}.completedAt`] = (status==='completed')
-        ? firebase.firestore.FieldValue.serverTimestamp()
-        : null;
+      update[`perSite.${siteId}.completedAt`] = (status==='completed') ? firebase.firestore.FieldValue.serverTimestamp() : null;
       writes.push(db.collection('assignments').doc(taskId).set(update,{merge:true}));
     }
-
-    // optional history log (kept – harmless even if you don’t use it)
+    // Optional history log
     writes.push(db.collection('work_logs').add({
       assignmentId: taskId || null,
       siteId, status,
@@ -248,11 +252,10 @@
       operatorUid: uid,
       timestamp: firebase.firestore.FieldValue.serverTimestamp()
     }));
-
     await Promise.all(writes);
   }
 
-  // -------- attach to the actual sidebar checkboxes & notes
+  // -------- add our own tiny "Done + Notes" controls; ignore native checkboxes
   function whenSidebarReady(cb){
     const root = document.getElementById('sidebar-content');
     if (!root) return;
@@ -262,67 +265,68 @@
     setTimeout(()=>mo.disconnect(),10000);
   }
 
-  whenSidebarReady((root)=>{
-    // treat ANY checkbox as "complete"
-    root.addEventListener('change', async (ev)=>{
-      const t = ev.target;
-      if (!(t instanceof HTMLInputElement)) return;
-      if (t.type !== 'checkbox') return;
+  function ensureControls(row){
+    if (row.querySelector('.bs-ops')) return;
+    const siteId = detectSiteId(row);
+    if (!siteId) return;
 
-      const row = t.closest('li, .list-item, .sidebar-row, .item, div') || root;
-      const siteId = detectSiteId(row);
-      if (!siteId) return;
-
-      const noteEl = row.querySelector('input[type="text"].site-note, input[type="text"][placeholder*="ote" i]');
-      const note   = noteEl ? noteEl.value : '';
-
-      try{
-        await writeProgress(siteId, t.checked ? 'completed' : 'assigned', note);
-        console.log('Saved', siteId, t.checked ? 'completed' : 'assigned');
-      }catch(e){
-        console.error('Save failed', e);
-        alert('Failed to save: ' + (e.message || e));
-      }
-    });
-
-    // save notes on blur/change if present
-    root.addEventListener('blur', handleNoteSave, true);
-    root.addEventListener('change', handleNoteSave, true);
-    async function handleNoteSave(ev){
-      const t = ev.target;
-      if (!(t instanceof HTMLInputElement)) return;
-      if (t.type !== 'text') return;
-
-      const row = t.closest('li, .list-item, .sidebar-row, .item, div') || root;
-      const siteId = detectSiteId(row);
-      if (!siteId) return;
-
-      const cb = row.querySelector('input[type="checkbox"]');
-      const status = cb && cb.checked ? 'completed' : 'in_progress';
-      try{
-        await writeProgress(siteId, status, t.value);
-        console.log('Saved note', siteId);
-      }catch(e){
-        console.error('Save failed', e);
-      }
+    // status pill (create if missing)
+    let pill = row.querySelector('.mini-pill');
+    if (!pill){
+      pill = document.createElement('span');
+      pill.className = 'mini-pill';
+      pill.textContent = 'assigned';
+      row.appendChild(pill);
     }
 
-    // keep sidebar pills/checkboxes/notes in sync with perSite (if we have taskId)
+    const ops = document.createElement('span');
+    ops.className = 'bs-ops';
+    ops.innerHTML = `
+      <label><input type="checkbox" class="bs-done"> Done</label>
+      <input type="text" class="bs-note" placeholder="Notes…">
+    `;
+    row.appendChild(ops);
+
+    const done = ops.querySelector('.bs-done');
+    const note = ops.querySelector('.bs-note');
+
+    done.addEventListener('change', async ()=>{
+      try{ await writeProgress(siteId, done.checked ? 'completed' : 'assigned', note.value||''); }
+      catch(e){ console.error(e); alert('Save failed: ' + (e.message||e)); }
+    });
+    function saveNote(){ writeProgress(siteId, done.checked ? 'completed' : 'in_progress', note.value||'').catch(console.error); }
+    note.addEventListener('change', saveNote);
+    note.addEventListener('blur', saveNote);
+  }
+
+  whenSidebarReady((root)=>{
+    const scan = () => {
+      root.querySelectorAll('li, .list-item, .sidebar-row, .item').forEach(el => {
+        if (el.closest('summary')) return; // skip group headers
+        ensureControls(el);
+      });
+    };
+    scan();
+    const mo = new MutationObserver(scan);
+    mo.observe(root, { childList:true, subtree:true });
+    setTimeout(()=>mo.disconnect(), 30000);
+
+    // Live reflection from Firestore into our bs- controls
     firebase.auth().onAuthStateChanged(async ()=>{
       const taskId = await ensureTaskId();
       if (!taskId) { console.warn('No assignment id; live reflection disabled.'); return; }
       db.collection('assignments').doc(taskId).onSnapshot(snap=>{
         const perSite = (snap.data()||{}).perSite || {};
-        root.querySelectorAll('li, .list-item, .sidebar-row, .item, div').forEach(row=>{
+        root.querySelectorAll('li, .list-item, .sidebar-row, .item').forEach(row=>{
           const sid = detectSiteId(row);
           if (!sid) return;
           const info = perSite[sid] || {};
           const pill = row.querySelector('.mini-pill');
           if (pill) pill.textContent = (info.status || 'assigned').replace('_',' ');
-          const cb  = row.querySelector('input[type="checkbox"]');
-          if (cb) cb.checked = info.status === 'completed';
-          const note = row.querySelector('input[type="text"].site-note, input[type="text"][placeholder*="ote" i]');
-          if (note && typeof info.note==='string' && note.value!==info.note) note.value = info.note;
+          const done = row.querySelector('.bs-done');
+          if (done) done.checked = info.status === 'completed';
+          const note = row.querySelector('.bs-note');
+          if (note && typeof info.note === 'string' && note.value !== info.note) note.value = info.note;
         });
       });
     });
