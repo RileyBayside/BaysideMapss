@@ -133,23 +133,38 @@
     const $ = (id) => document.getElementById(id);
     const rowsEl = $('rows');
 
-    const toStartOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0,0,0,0);
+    // kept for defaulting the inputs
     const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate()+n, 0,0,0,0);
-    const fmtDMY = (d) => {
+
+    // ===== AEST logic (Australia/Brisbane) =====
+    const AEST_TZ = 'Australia/Brisbane'; // UTC+10, no DST
+
+    // Convert <input type="date"> value (yyyy-mm-dd) to the UTC instant for AEST midnight at day start
+    function startUtcForAestDay(dayStr){
+      const [y,m,d] = dayStr.split('-').map(Number);
+      // AEST midnight is 14:00 UTC of the previous day
+      return new Date(Date.UTC(y, m-1, d, 14, 0, 0, 0));
+    }
+    // Exclusive upper bound: next day AEST midnight => UTC instant
+    function endUtcForAestDay(dayStr){
+      const [y,m,d] = dayStr.split('-').map(Number);
+      return new Date(Date.UTC(y, m-1, d+1, 14, 0, 0, 0));
+    }
+    // Format Firestore Timestamp/Date in AEST as dd/mm/yyyy
+    function fmtAest(ts){
+      const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
       if (!d) return '';
-      const dd = String(d.getDate()).padStart(2,'0');
-      const mm = String(d.getMonth()+1).padStart(2,'0');
-      const yy = d.getFullYear();
-      return `${dd}/${mm}/${yy}`;
-    };
+      return new Intl.DateTimeFormat('en-AU', {
+        timeZone: AEST_TZ, day:'2-digit', month:'2-digit', year:'numeric'
+      }).format(d);
+    }
+
     const yesNo = (v) => (typeof v === 'boolean' ? (v ? 'Yes' : 'No') : (String(v||'').trim() || '—'));
-    const joinish = (v) => Array.isArray(v) ? v.join('; ') : (v ?? '');
 
     // Try to read from flexible schema (answers may be top-level or nested in `answers`)
     function flatten(rec){
       const A = rec.answers || rec;
 
-      // Booleans / strings / arrays accepted
       const out = {
         ppe:        A.ppe ?? A.ppeOk ?? A.ppeChecked ?? null,
         equipment:  A.equipment ?? A.equipmentOk ?? null,
@@ -164,7 +179,7 @@
       };
 
       // Operator identity
-      const operator = rec.operatorName || rec.userName || rec.operator || rec.name || '';
+      const operator = rec.operatorDisplay || rec.operatorName || rec.userName || rec.operator || rec.name || '';
       const email    = rec.operatorEmail || rec.email || '';
       return { ...out, operator, email };
     }
@@ -184,16 +199,17 @@
       // stop previous live listener
       if (unsub) { try{unsub();}catch(_){} unsub = null; }
 
-      // build range: inclusive start, inclusive end (by querying < end+1day)
-      const startVal = $('startDate').valueAsDate || new Date();
-      const endVal   = $('endDate').valueAsDate   || new Date();
-      const startTs  = toStartOfDay(startVal);
-      const endNext  = addDays(toStartOfDay(endVal), 1);
+      const startStr = $('startDate').value || new Date().toISOString().slice(0,10);
+      const endStr   = $('endDate').value   || new Date().toISOString().slice(0,10);
+
+      // AEST-aligned UTC instants for Firestore range
+      const startUtc = startUtcForAestDay(startStr);
+      const endUtc   = endUtcForAestDay(endStr);
 
       // live listener for the range
       unsub = db.collection('risk_assessments')
-        .where('createdAt','>=', startTs)
-        .where('createdAt','<',  endNext)
+        .where('createdAt','>=', startUtc)
+        .where('createdAt','<',  endUtc)
         .orderBy('createdAt','desc')
         .onSnapshot(render, (err)=>{
           console.warn('risk_assessments query failed:', err);
@@ -214,14 +230,14 @@
 
       snap.forEach(doc=>{
         const d = doc.data() || {};
-        const created = d.createdAt?.toDate ? d.createdAt.toDate() : (d.createdAt instanceof Date ? d.createdAt : null);
+        const createdTs = d.createdAt; // Firestore Timestamp
         const flat = flatten(d);
 
         const opStr = [flat.operator, flat.email].filter(Boolean).join(' · ').toLowerCase();
         if (q && !opStr.includes(q)) return;
 
         rows.push({
-          date: fmtDMY(created),
+          date: fmtAest(createdTs),
           operator: [flat.operator, flat.email].filter(Boolean).join(' · '),
           ppe: yesNo(flat.ppe),
           equipment: yesNo(flat.equipment),
@@ -234,7 +250,8 @@
           nameNotes: [flat.typedName, (flat.notes||'').trim()].filter(Boolean).join(' — ')
         });
 
-        lastDocs.push({ created, flat });
+        const createdDate = createdTs?.toDate ? createdTs.toDate() : null;
+        lastDocs.push({ created: createdDate, flat });
       });
 
       if (!rows.length){
@@ -265,7 +282,7 @@
       rowsEl.appendChild(frag);
     }
 
-    // CSV
+    // CSV (dates in AEST too)
     function exportCSV(){
       if (!lastDocs.length){
         alert('Nothing to export for the current filter.');
@@ -280,8 +297,11 @@
       const lines = [header.map(esc).join(',')];
 
       lastDocs.forEach(({created, flat})=>{
+        const dateStr = created
+          ? new Intl.DateTimeFormat('en-AU',{ timeZone:AEST_TZ, day:'2-digit', month:'2-digit', year:'numeric'}).format(created)
+          : '';
         const row = [
-          fmtDMY(created),
+          dateStr,
           flat.operator || '',
           flat.email || '',
           yesNo(flat.ppe),
@@ -318,6 +338,7 @@
   })();
   </script>
 
+  <!-- Optional: role gate (unchanged) -->
   <script>
   firebase.auth().onAuthStateChanged(async (u) => {
     if (!u) { location.href = 'login.html'; return; }
@@ -331,16 +352,14 @@
              You don’t have access to view risk assessments.
            </td></tr>`
         );
-        // Don’t start the listener if not admin
         return;
       }
-      // OK: start your existing apply()/listener here if you want to gate it
-      // apply();
+      // If you prefer to gate the listener strictly, move the initial apply() call here.
     } catch (e) {
       console.warn('role check failed', e);
     }
   });
-</script>
+  </script>
 
 </body>
 </html>
