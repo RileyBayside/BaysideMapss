@@ -60,7 +60,7 @@
       list-style:none; cursor:pointer; user-select:none;
       padding:8px 10px; background:var(--soft-2);
       display:flex; align-items:center; justify-content:space-between; gap:10px;
-      font-weight:700; color:#var(--ink);
+      font-weight:700; color:var(--ink);
     }
     #sidebar-content details[open] > summary{ background:#eef2f7; }
 
@@ -90,6 +90,12 @@
     .bs-done-btn.done{
       background:#dcfce7; border-color:#bbf7d0; color:#065f46;
     }
+
+    /* Banner above filtered list */
+    .assign-banner{
+      padding:8px 10px; margin:6px 0; border:1px solid #e2e8f0; background:#fff8f8;
+      color:#7f1d1d; border-radius:8px; font-weight:700;
+    }
   </style>
 </head>
 <body>
@@ -111,7 +117,7 @@
       <div class="title">Assigned Parks</div>
     </div>
 
-    <button id="toggle-all">Expand All</button>
+    <button id="toggle-all">Collapse All</button>
     <div id="sidebar-content"></div>
 
     <div style="padding:10px 12px 16px">
@@ -168,16 +174,17 @@
     }
     function filterSidebarToIds(root, ids) {
       const wanted = new Set(ids.map(s => s.toUpperCase()));
-      const bannerId = 'assigned-filter-banner';
-      let banner = document.getElementById(bannerId);
+
+      // Banner
+      let banner = root.querySelector('.assign-banner');
       if (!banner) {
         banner = document.createElement('div');
-        banner.id = bannerId;
-        banner.style.cssText = 'padding:8px 10px;margin:6px 0;border:1px solid #e2e8f0;background:#fff8f8;color:#7f1d1d;border-radius:8px;font-weight:700';
+        banner.className = 'assign-banner';
         root.prepend(banner);
       }
       banner.textContent = ids.length ? `Showing ${ids.length} assigned site(s)` : 'No assigned sites to show.';
 
+      // Show only rows that contain one of the wanted IDs
       const hasAnyId = (el) => {
         const t = (el.textContent || '').toUpperCase();
         for (const id of wanted) if (t.includes(id)) return true;
@@ -185,7 +192,7 @@
       };
       const candidates = root.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row, div');
       candidates.forEach(el => {
-        if (el.id === 'assigned-filter-banner') return;
+        if (el.classList?.contains('assign-banner')) return;
         const keep = hasAnyId(el) || [...el.querySelectorAll('*')].some(hasAnyId);
         el.style.display = keep ? '' : 'none';
       });
@@ -196,6 +203,16 @@
         if (any) d.open = true;
       });
     }
+
+    // Collapse/expand all
+    document.getElementById('toggle-all')?.addEventListener('click', (e)=>{
+      const root = document.getElementById('sidebar-content');
+      const all = [...root.querySelectorAll('details')];
+      const anyOpen = all.some(d => d.open);
+      all.forEach(d => d.open = !anyOpen);
+      e.target.textContent = anyOpen ? 'Expand All' : 'Collapse All';
+    });
+
     firebase.auth().onAuthStateChanged(async () => {
       let ids = getFocusFromQuery();
       if (!ids.length) ids = await getFocusFromFirestore();
@@ -205,7 +222,7 @@
   })();
   </script>
 
-  <!-- Mark done / Undo: sticky across re-renders + slow writes -->
+  <!-- Buttons + optimistic progress + Firestore writes -->
   <script>
   (function () {
     const db   = firebase.firestore();
@@ -235,10 +252,8 @@
 
     const idRx = /\bM\d{3,5}\b/i;
     const up   = (s) => String(s||'').toUpperCase();
+    const rootEl = () => document.getElementById('sidebar-content') || document;
 
-    function rootEl(){ return document.getElementById('sidebar-content') || document; }
-
-    // --- robust, sticky site-id detection ---
     function matchIdFromNode(n){
       if (!n) return null;
       const m = (n.textContent||'').toUpperCase().match(idRx);
@@ -246,7 +261,6 @@
     }
     function findSiteIdForNotes(input){
       if (input.dataset.siteId) return up(input.dataset.siteId);
-
       let el = input.closest('[data-site-id], li, .list-item, .sidebar-row, .item, div');
       for (let hops=0; el && hops<6; hops++, el=el.parentElement){
         if (el.dataset && el.dataset.siteId){ input.dataset.siteId = up(el.dataset.siteId); return input.dataset.siteId; }
@@ -269,76 +283,66 @@
       container.querySelectorAll('.mini-pill,.badge,.tag,.status').forEach(n=>n.style.display='none');
     }
 
-    // case-insensitive + no-‘M’ resolver for perSite cache
-    function getPerSiteForId(perSite, rawId){
-      if (!perSite) return undefined;
-      const idU = up(rawId);
-      const idL = idU.toLowerCase();
-      const noM = idU.replace(/^M/,'');
-      return perSite[idU] ?? perSite[idL] ?? perSite[noM];
-    }
+    async function writeProgress(siteId, status, note){
+      const uid = auth.currentUser?.uid || null;
+      const taskId = await ensureTaskId();
 
-    // ---- localStorage-backed optimistic cache (per-site) ----
-    const OPT_TTL_MS = 10 * 60 * 1000; // 10 min
-    const optKey = (siteId) => `ap-opt:${String(siteId).toUpperCase()}`;
-    function optSet(siteId, status){
-      try{ localStorage.setItem(optKey(siteId), JSON.stringify({status, t:Date.now()})); }catch(_){}
-    }
-    function optGet(siteId){
-      try{
-        const raw = localStorage.getItem(optKey(siteId));
-        if (!raw) return null;
-        const obj = JSON.parse(raw);
-        if (!obj || !obj.t || (Date.now()-obj.t)>OPT_TTL_MS) { localStorage.removeItem(optKey(siteId)); return null; }
-        return obj;
-      }catch(_){ return null; }
-    }
-    function optClear(siteId){ try{ localStorage.removeItem(optKey(siteId)); }catch(_){} }
+      // Try to update the assignment (perSite). If rules block it, keep going.
+      if (taskId){
+        const update = {};
+        update[`perSite.${siteId}.status`]      = status;
+        update[`perSite.${siteId}.note`]        = (note||'').trim();
+        update[`perSite.${siteId}.operatorUid`] = uid;
+        update[`perSite.${siteId}.updatedAt`]   = firebase.firestore.FieldValue.serverTimestamp();
+        update[`perSite.${siteId}.completedAt`] = (status==='completed')
+                                                  ? firebase.firestore.FieldValue.serverTimestamp()
+                                                  : null;
+        try {
+          await db.collection('assignments').doc(taskId).set(update,{merge:true});
+        } catch (e) {
+          if (e.code !== 'permission-denied') throw e;
+          console.warn('assignments update blocked for operator; logging only');
+        }
+      }
 
-async function writeProgress(siteId, status, note){
-  const uid = auth.currentUser?.uid || null;
-  const taskId = await ensureTaskId();
-
-  if (taskId){
-    const update = {};
-    update[`perSite.${siteId}.status`]      = status;
-    update[`perSite.${siteId}.note`]        = (note||'').trim();
-    update[`perSite.${siteId}.operatorUid`] = uid;
-    update[`perSite.${siteId}.updatedAt`]   = firebase.firestore.FieldValue.serverTimestamp();
-    update[`perSite.${siteId}.completedAt`] = (status==='completed')
-                                              ? firebase.firestore.FieldValue.serverTimestamp()
-                                              : null;
-    try {
-      await db.collection('assignments').doc(taskId).set(update, { merge:true });
-    } catch (e) {
-      if (e.code !== 'permission-denied') throw e;   // ignore permission-denied here
-      console.warn('assignments update blocked for operator; logging only');
+      // Always record a work log (rules allow operator to create their own)
+      await db.collection('work_logs').add({
+        assignmentId: taskId || null,
+        siteId, status,
+        note: (note||'').trim(),
+        operatorUid: uid,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
     }
-  }
-
-  await db.collection('work_logs').add({
-    assignmentId: taskId || null,
-    siteId, status,
-    note: (note||'').trim(),
-    operatorUid: uid,
-    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-  });
-}
 
     // ---------- injection & sync ----------
-    const siteButtons = new Map(); // siteId -> button element currently in DOM
+    const siteButtons = new Map(); // siteId -> button
     const siteInputs  = new Map(); // siteId -> notes input
     let   perSiteCache  = {};      // latest snapshot from assignments
 
-    function setBtnUI(btn, done){
-      btn.classList.toggle('done', done);
-      btn.textContent = done ? 'Undo' : 'Mark done';
-    }
+    // optimistic state (keep UI sticky until Firestore confirms)
+    const optimistic = new Map();  // siteId -> {status, t}
+    const OPT_TTL_MS = 20000;
+
+    const setBtnUI = (btn, isDone) => {
+      btn.classList.toggle('done', !!isDone);
+      btn.textContent = isDone ? 'Undo' : 'Mark done';
+    };
+    const optSet = (sid, status) => optimistic.set(sid, { status, t: Date.now() });
+    const optGet = (sid) => {
+      const o = optimistic.get(sid);
+      if (o && (Date.now() - o.t) < OPT_TTL_MS) return o;
+      if (o) optimistic.delete(sid);
+      return null;
+    };
+    const optClear = (sid) => optimistic.delete(sid);
 
     function injectButtons(){
+      const now  = Date.now();
+      for (const [sid, o] of optimistic) if (now - o.t > OPT_TTL_MS) optimistic.delete(sid);
+
       const root = rootEl();
       const notes = root.querySelectorAll('input[placeholder^="Notes"], input[placeholder="Notes..."], textarea[placeholder^="Notes"]');
-
       notes.forEach(input=>{
         const sid = findSiteIdForNotes(input);
         if (!sid) return;
@@ -346,13 +350,9 @@ async function writeProgress(siteId, status, note){
         siteInputs.set(sid, input);
 
         let btn = siteButtons.get(sid);
-        const needsNew =
-          !btn || !btn.isConnected || btn.dataset.siteId !== sid || btn.previousElementSibling !== input;
+        if (!btn || btn.dataset.siteId !== sid){
+          if (btn && btn.parentElement) btn.parentElement.removeChild(btn);
 
-        if (needsNew){
-          if (btn && btn.isConnected && btn.parentElement) {
-            try { btn.parentElement.removeChild(btn); } catch {}
-          }
           btn = document.createElement('button');
           btn.type='button';
           btn.className='bs-done-btn';
@@ -365,81 +365,76 @@ async function writeProgress(siteId, status, note){
             e.preventDefault(); e.stopPropagation();
             const willBeDone = !btn.classList.contains('done');
 
-            // optimistic: persist to localStorage so it survives re-renders
+            // optimistic state first
             optSet(sid, willBeDone ? 'completed' : 'in_progress');
-
-            // immediate UI
-            setBtnUI(btn, willBeDone);
+            setBtnUI(btn, willBeDone);      // immediate UI
 
             try{
               await writeProgress(sid, willBeDone ? 'completed' : 'in_progress', input.value||'');
-            } catch (err) {
-  // If rules block the assignment write, KEEP the optimistic UI.
-  if (err?.code !== 'permission-denied') {
-    optClear(sid);
-    setBtnUI(btn, !willBeDone);
-  } else {
-    console.warn('assignments update blocked; keeping optimistic UI');
-  }
-}
-
+            }catch(err){
+              // Only revert UI for *real* failures; keep optimistic on permission-denied
+              if (err?.code !== 'permission-denied') {
+                optClear(sid);
+                setBtnUI(btn, !willBeDone);
+              } else {
+                console.warn('Save blocked by rules; keeping optimistic UI');
+              }
+            }
+          });
 
           const saveNote = async () => {
             const opt = optGet(sid);
             const status = opt ? opt.status : (btn.classList.contains('done') ? 'completed' : 'in_progress');
-            try{ await writeProgress(sid, status, input.value||''); }catch(e){ console.error(e); }
+            try{ await writeProgress(sid, status, input.value||''); }catch(e){
+              if (e?.code !== 'permission-denied') console.error(e);
+            }
           };
           input.addEventListener('change', saveNote);
           input.addEventListener('blur',   saveNote);
         }
 
-        // reflect current state -> UI
-        const info = getPerSiteForId(perSiteCache, sid) || {};
+        // reflect current state -> UI (optimistic overrides Firestore while fresh)
+        const info = { ...(perSiteCache[sid] || {}) };
         const opt  = optGet(sid);
-        const effectiveStatus = opt ? opt.status : info.status;
-        setBtnUI(btn, String(effectiveStatus||'').toLowerCase()==='completed');
+        if (opt) info.status = opt.status;
 
-        // keep notes in sync unless user is typing
-        const cachedNote = (info.note || '');
-        if (document.activeElement !== input && typeof cachedNote === 'string' && input.value !== cachedNote) {
+        const isDone = (info.status||'').toLowerCase() === 'completed';
+        setBtnUI(btn, isDone);
+
+        const cachedNote = (perSiteCache[sid] || {}).note;
+        if (typeof cachedNote === 'string' && document.activeElement !== input && input.value !== cachedNote) {
           input.value = cachedNote;
         }
 
-        // hide leftover “assigned” chips
-        const container = input.closest('li, .list-item, .sidebar-row, .item, div') || root;
-        hideAssignedChips(container);
+        hideAssignedChips(input.closest('li, .list-item, .sidebar-row, .item, div') || root);
       });
     }
 
-    // Observe DOM because sidebar re-renders
-    const observer = new MutationObserver(() => { requestAnimationFrame(injectButtons); });
-    function startObserver(){
-      const root = rootEl(); if (!root) return;
-      observer.observe(root, { childList:true, subtree:true });
-    }
-
-    // initial pass + safety refresh
+    // run once, then keep tidy for a minute (in case the sidebar renders incrementally)
     const iv = setInterval(()=>requestAnimationFrame(injectButtons), 1000);
     setTimeout(()=>clearInterval(iv), 60000);
-    requestAnimationFrame(()=>{ injectButtons(); startObserver(); });
+    requestAnimationFrame(injectButtons);
 
-    // live Firestore snapshot; clear optimistic entries when confirmed
+    // live snapshot -> keep UI in sync, but do not fight the optimistic state
     firebase.auth().onAuthStateChanged(async ()=>{
       const taskId = await ensureTaskId();
       if (!taskId) { console.warn('No assignment id; live sync disabled'); return; }
-      db.collection('assignments').doc(taskId).onSnapshot(snap=>{
-        const data = snap.data() || {};
-        perSiteCache = data.perSite || {};
-
-        // clear local optimistic entries that match server state
-        Object.keys(perSiteCache).forEach(sid=>{
-          const s = String(getPerSiteForId(perSiteCache, sid)?.status || '').toLowerCase();
-          const opt = optGet(sid);
-          if (opt && String(opt.status).toLowerCase() === s) optClear(sid);
-        });
-
-        requestAnimationFrame(injectButtons);
-      });
+      db.collection('assignments').doc(taskId).onSnapshot(
+        (snap)=>{
+          perSiteCache = (snap.data()||{}).perSite || {};
+          // clear optimistic entries that Firestore has now confirmed
+          for (const [sid, o] of optimistic) {
+            const s = (perSiteCache[sid]?.status || '').toLowerCase();
+            if ((o.status || '').toLowerCase() === s) optimistic.delete(sid);
+          }
+          requestAnimationFrame(injectButtons);
+        },
+        (err)=>{
+          // If an operator cannot read the assignment, keep showing optimistic state
+          console.warn('assignments read blocked:', err?.code || err);
+          requestAnimationFrame(injectButtons);
+        }
+      );
     });
   })();
   </script>
