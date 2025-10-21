@@ -68,6 +68,10 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
+
+  <!-- PDF libs -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
   <header class="bar">
@@ -95,7 +99,7 @@
           <input id="opFilter" placeholder="e.g., Alan or alan@…">
         </label>
         <button id="applyBtn" class="btn">Apply</button>
-        <button id="exportBtn" class="btn btn-red">Export CSV</button>
+        <button id="exportBtn" class="btn btn-red">Export to PDF</button>
       </div>
     </section>
 
@@ -185,7 +189,7 @@
   // ===== listeners & rendering =====
   let unsubs = [];
   let cache = new Map(); // key -> { data, created }
-  let lastDocs = [];     // for CSV: [{created, flat}]
+  let lastDocs = [];     // for export: [{created, flat}]
   let totalListeners = 0;
   let errorCount = 0;
   let gotAnySnapshot = false;
@@ -296,18 +300,46 @@
     }catch(e){ onErr('riskAssessments', e); }
   }
 
-  // CSV (AEST dates)
-  function exportCSV(){
+  // ======== PDF export ========
+  async function exportPDF(){
     if (!lastDocs.length){ alert('Nothing to export for the current filter.'); return; }
-    const esc = (v) => `"${String(v??'').replace(/"/g,'""')}"`;
-    const header = ['Date','Operator','Email','PPE','Equipment','Hazards','Traffic','Weather','SWMS','Fitness','Stop-Work','Typed Name','Notes'];
-    const lines = [header.map(esc).join(',')];
 
-    lastDocs.forEach(({created, flat})=>{
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const margin = 14;
+    let y = margin;
+
+    // Header with logo + title
+    try{
+      const img = await loadImage('logo.png');
+      const logoH = 12; // mm
+      const ratio = img.naturalWidth ? (img.naturalHeight / img.naturalWidth) : (1/3);
+      const logoW = logoH / ratio;
+      doc.addImage(img, 'PNG', margin, y, logoW, logoH);
+      doc.setFont('helvetica','bold'); doc.setFontSize(14);
+      doc.text('Risk Assessments', margin + logoW + 6, y + 8);
+      y += logoH + 3;
+    }catch(_){
+      doc.setFont('helvetica','bold'); doc.setFontSize(14);
+      doc.text('Risk Assessments', margin, y + 6); y += 12;
+    }
+
+    // Filters line
+    const startStr = $('startDate').value || aestTodayStr();
+    const endStr   = $('endDate').value   || aestTodayStr();
+    const opStr    = ($('opFilter').value || '').trim();
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    const filt = `Dates: ${startStr} → ${endStr}` + (opStr ? `   •   Operator filter: ${opStr}` : '');
+    doc.text(filt, margin, y); y += 4;
+
+    // Build rows for the table
+    const header = ['Date','Operator','Email','PPE','Equipment','Hazards','Traffic','Weather','SWMS','Fitness','Stop-Work','Typed Name','Notes'];
+    const body = lastDocs.map(({created, flat})=>{
       const dateStr = created
         ? new Intl.DateTimeFormat('en-AU',{ timeZone:AEST_TZ, day:'2-digit', month:'2-digit', year:'numeric'}).format(created)
         : '';
-      const row = [
+      return [
         dateStr,
         flat.operator || '',
         flat.email || '',
@@ -322,20 +354,47 @@
         flat.typedName || '',
         (flat.notes || '').replace(/\r?\n/g,' / ')
       ];
-      lines.push(row.map(esc).join(','));
     });
 
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'risk-assessments.csv';
-    document.body.appendChild(a); a.click();
-    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 0);
+    doc.autoTable({
+      head:[header],
+      body,
+      startY: y + 2,
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak', valign: 'top' },
+      headStyles: { fillColor: [248,250,252], textColor: 17, lineWidth: 0.2, lineColor: [226,232,240] },
+      bodyStyles: { lineWidth: 0.2, lineColor: [238,242,247] }
+    });
+
+    // Footer with page numbers & generated time (AEST)
+    const pages = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pages; i++){
+      doc.setPage(i);
+      const h = doc.internal.pageSize.getHeight();
+      doc.setFontSize(8);
+      const gen = new Intl.DateTimeFormat('en-AU', {
+        timeZone: AEST_TZ, year:'numeric', month:'2-digit', day:'2-digit',
+        hour:'2-digit', minute:'2-digit'
+      }).format(new Date());
+      doc.text(`Generated ${gen} AEST`, margin, h - 6);
+      doc.text(`Page ${i} of ${pages}`, pageW - margin, h - 6, { align:'right' });
+    }
+
+    doc.save('risk-assessments.pdf');
+  }
+
+  function loadImage(src){
+    return new Promise((resolve, reject)=>{
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
   }
 
   // Wire up UI
   $('applyBtn').addEventListener('click', apply);
-  $('exportBtn').addEventListener('click', exportCSV);
+  $('exportBtn').addEventListener('click', exportPDF);
 
   // Role gate: only admins/managers can see global results; start listeners after that.
   setDefaultDates();
