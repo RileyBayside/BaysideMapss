@@ -450,47 +450,50 @@
       }
     });
 
-    // live listeners for work_logs for the visible site ids (drives persistence)
-    firebase.auth().onAuthStateChanged(async ()=>{
-      // figure out which site IDs are on the page
-      const focus = (params.get('focus')||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
-      let ids = focus;
-      if (!ids.length){
-        // best-effort: fetch from assignment if readable
-        const tid = await ensureTaskId();
-        if (tid){
-          try{
-            const s = await db.collection('assignments').doc(tid).get();
-            ids = (s.data()?.siteIds || []).map(x=>String(x).toUpperCase());
-          }catch{}
-        }
-      }
-      ids = Array.from(new Set(ids));
-      if (!ids.length) return;
+    // live listeners for work_logs (read only current operator's logs to satisfy rules)
+  firebase.auth().onAuthStateChanged(async (u)=>{
+    if (!u) return;
+    const uid = u.uid;
 
-      const step = 10;
-      for(let i=0;i<ids.length;i+=step){
-        const batch = ids.slice(i,i+step);
-        db.collection('work_logs').where('siteId','in',batch).onSnapshot((snap)=>{
-          snap.docChanges().forEach(ch=>{
-            const w = ch.doc.data() || {};
-            const sid = String(w.siteId||'').toUpperCase();
-            const t = (w.timestamp?.toMillis?.() ?? w.completedAt?.toMillis?.() ?? w.updatedAt?.toMillis?.() ?? 0);
-            const cur = latestFromLogs[sid];
-            if (!cur || t > (cur._t||0)){
-              latestFromLogs[sid] = {
-                status: (w.status||'').toLowerCase(),
-                note:   (w.note||'').trim(),
-                _t: t
-              };
-            }
-          });
-          requestAnimationFrame(injectButtons);
-        });
+    // work out which site IDs are shown
+    const params = new URLSearchParams(location.search);
+    let ids = (params.get('focus')||'')
+      .split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+    if (!ids.length) {
+      const tid = await ensureTaskId();
+      if (tid) {
+        try {
+          const s = await firebase.firestore().collection('assignments').doc(tid).get();
+          ids = (s.data()?.siteIds || []).map(x=>String(x).toUpperCase());
+        } catch {}
       }
-    });
-  })();
-  </script>
+    }
+    const wanted = new Set(ids);
+
+    // IMPORTANT: this query matches your rules (operatorUid == request.auth.uid)
+    firebase.firestore().collection('work_logs')
+      .where('operatorUid','==', uid)
+      .onSnapshot((snap)=>{
+        snap.docChanges().forEach(ch=>{
+          const w = ch.doc.data() || {};
+          const sid = String(w.siteId||'').toUpperCase();
+          if (!wanted.has(sid)) return;         // only care about the shown parks
+          const t = (w.timestamp?.toMillis?.() ?? w.completedAt?.toMillis?.() ?? w.updatedAt?.toMillis?.() ?? 0);
+          const cur = latestFromLogs[sid];
+          if (!cur || t > (cur._t||0)){
+            latestFromLogs[sid] = {
+              status:(w.status||'').toLowerCase(),
+              note:  (w.note||'').trim(),
+              _t:    t
+            };
+          }
+        });
+        requestAnimationFrame(injectButtons);    // refresh UI with persisted state
+      }, (err)=>{
+        console.warn('work_logs listener error:', err);
+      });
+  });
+</script>
 
 </body>
 </html>
