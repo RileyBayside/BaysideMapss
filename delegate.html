@@ -15,13 +15,21 @@
       --accent:#d11e2b; --accent-600:#b71a24; --focus:#e6f0ff;
     }
     *{box-sizing:border-box}
-    html,body{height:100%}
-    body{ margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink); }
+
+    /* Fill the viewport and prevent page scroll */
+    html, body { height:100%; }
+    body{
+      margin:0;
+      font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      background:var(--bg); color:var(--ink);
+      display:flex; flex-direction:column; min-height:100vh; overflow:hidden;
+    }
 
     /* Header */
     .header{
       display:flex; align-items:center; justify-content:space-between; gap:16px;
-      padding:16px 22px; background:#fff; border-bottom:1px solid var(--muted); position:sticky; top:0; z-index:10;
+      padding:16px 22px; background:#fff; border-bottom:1px solid var(--muted);
+      flex:0 0 auto;
     }
     .brand{ display:flex; align-items:center; gap:14px }
     .brand img{ height:56px; display:block }
@@ -32,24 +40,34 @@
     .btn:hover{ background:#1f2937 }
 
     /* Layout */
-    .container{ max-width:1200px; margin: 20px auto; padding: 0 16px }
-    .grid{
-      display:grid;
-      grid-template-columns: 1fr 360px;  /* left grows, right fixed */
-      gap:16px;
+    .container{
+      max-width:1200px; margin: 12px auto; padding: 0 16px;
+      flex:1 1 auto; width:100%; overflow:hidden; /* no page scroll */
     }
-    @media (max-width:1100px){ .grid{ grid-template-columns: 1fr } }
+    .grid{
+      height:100%;
+      display:grid;
+      grid-template-columns: 1fr 360px;
+      gap:16px;
+      min-height:0; /* allow inner scroll */
+    }
+    @media (max-width:1100px){
+      .grid{ grid-template-columns: 1fr; }
+    }
 
-    .card{ background:var(--card); border:1px solid var(--muted); border-radius:16px; box-shadow:0 8px 26px rgba(16,24,40,.08); }
+    /* Cards fill their grid cell and scroll inside when needed */
+    .card{
+      background:var(--card); border:1px solid var(--muted); border-radius:16px;
+      box-shadow:0 8px 26px rgba(16,24,40,.08);
+      display:flex; flex-direction:column; min-height:0;
+    }
     .card h3{ margin:14px 16px 10px; font-size:16px; font-weight:800; color:var(--ink-2) }
-    .card .body{ padding: 0 16px 16px }
+    .card .body{ padding: 0 16px 16px; display:flex; flex-direction:column; flex:1 1 auto; min-height:0; }
 
-    .row{ display:flex; gap:10px }
+    .row{ display:flex; gap:8px }
     .row > *{ flex:1 }
 
     .strong{ font-weight:800 }
-
-    .half{ display:grid; gap:10px } /* a bit looser */
     .btn-accent{ background:var(--accent) }
     .btn-accent:hover{ background:var(--accent-600) }
 
@@ -60,17 +78,20 @@
     }
     .muted-note{ color:#64748b; display:block; margin-top:10px }
 
-    /* One-per-line suburb rows (when a suburb has no item list) */
-    .suburb-list{ list-style:none; padding:0; margin:0; display:grid; grid-template-columns:1fr; gap:8px }
+    .suburb-list{
+      list-style:none; padding:0; margin:0;
+      display:block;
+      flex:1 1 auto; min-height:0; overflow:auto; padding-right:6px;
+    }
     .suburb-row{
       display:flex; align-items:center; justify-content:space-between; gap:10px;
       padding:10px 12px; border:1px solid var(--muted); border-radius:10px; background:#fff;
+      margin-bottom:8px;
     }
     .suburb-row-left{ display:flex; align-items:center; gap:10px }
     .suburb-row label{ font-weight:700; color:var(--ink-2); cursor:pointer }
 
-    /* Collapsible suburb with many items */
-    .suburb-details{ border:1px solid var(--muted); border-radius:10px; background:#fff; }
+    .suburb-details{ border:1px solid var(--muted); border-radius:10px; background:#fff; margin-bottom:8px; }
     .suburb-details summary{
       list-style:none; cursor:pointer; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px;
       font-weight:700; color:var(--ink-2);
@@ -83,7 +104,7 @@
     .suburb-sites{ margin:0; padding:10px 14px 12px 14px }
     .suburb-sites li{
       display:flex; align-items:center; gap:10px; margin:4px 0;
-      color:#111827; font-weight:400; /* items not bold */
+      color:#111827; font-weight:400;
     }
     .site-label{ flex:1 }
     .note-btn{
@@ -92,15 +113,16 @@
     .note-btn.has-note{ border-color:#b91c1c; color:#b91c1c }
     .note-btn:hover{ background:#f8fafc }
 
-    /* Assignment (right) – fill card nicely */
-    aside.card{ display:flex; flex-direction:column; }
-    aside.card .body{ display:flex; flex-direction:column; flex:1 1 auto; }
-    .assign-stack{ max-width:360px; margin:0 auto; width:100%; display:flex; flex-direction:column; gap:12px; flex:1 1 auto; }
+    /* Assignment (right) – spaced and fills column; internal scroll for tasks */
+    aside.card .body{ display:flex; flex-direction:column; flex:1 1 auto; min-height:0; }
+    .assign-stack{ max-width:360px; margin:0 auto; width:100%; display:flex; flex-direction:column; gap:12px; flex:1 1 auto; min-height:0; }
     .assign-stack input, .assign-stack select, .assign-stack button{ width:100% }
-    .foot{ display:flex; gap:10px; margin-top:auto; flex-wrap:wrap } /* pinned to bottom */
-    .grow{ flex:1 }
+    .half{ display:grid; gap:10px; min-height:0; }
 
-    .basket{ display:grid; gap:8px; margin-top:6px; flex:1 1 auto; min-height:240px; overflow:auto; padding-right:6px }
+    .basket{
+      display:grid; gap:8px; flex:1 1 auto; min-height:0;
+      overflow:auto; padding-right:6px; margin-top:6px;
+    }
     .item{
       display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1px solid #e2e8f0; border-radius:12px; background:#fff;
       font-weight:700;
@@ -113,6 +135,11 @@
       background:#fee2e2; color:#7f1d1d; border:1px solid #fecaca;
     }
 
+    .foot{ display:flex; gap:10px; margin-top:auto; flex-wrap:wrap }
+    .btn-outline{ background:#fff; color:#111827; border:1px solid #cbd5e1 }
+    .grow{ flex:1 }
+
+    /* Toast */
     .toast{
       position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#111827; color:#fff;
       padding:12px 14px; border-radius:10px; font-weight:700; box-shadow:0 10px 24px rgba(0,0,0,.25); display:none; z-index:50;
@@ -127,26 +154,6 @@
     .modal-card .m-body{ padding:14px 16px }
     .modal-card footer{ padding:12px 16px; border-top:1px solid var(--muted); display:flex; gap:10px; justify-content:flex-end }
     .modal-card textarea{ width:100%; min-height:160px; resize:vertical; padding:10px 12px; border:1px solid var(--muted); border-radius:10px; font:14px/1.4 Inter,system-ui,sans-serif }
-    .btn-outline{ background:#fff; color:#111827; border:1px solid #cbd5e1 }
-
-    /* ---------- Even-fill layout for the left card ---------- */
-    .bs-assign-left{ display:flex; flex-direction:column; }
-    .bs-assign-left .body{ display:flex; flex-direction:column; flex:1 1 auto; }
-    .bs-assign-left #assignParksList{
-      flex:1 1 auto;
-      display:flex;
-      flex-direction:column;
-      justify-content:space-between;
-      gap:0;
-      min-height: 360px;
-    }
-    @media (max-height: 780px){
-      .bs-assign-left #assignParksList{
-        justify-content:flex-start;
-        gap:8px;
-        overflow:auto;
-      }
-    }
   </style>
 </head>
 <body>
@@ -173,10 +180,10 @@
   <main class="container">
     <section class="grid">
       <!-- Left: Assign Parks -->
-      <section class="card bs-assign-left">
+      <section class="card">
         <h3>Assign Parks</h3>
         <div class="body">
-          <div class="row" style="margin-bottom:10px; gap:8px">
+          <div class="row" style="margin-bottom:10px">
             <input id="suburbSearch" placeholder="Search suburbs…" class="inputish">
             <button id="addSelectedSuburbs" class="btn btn-accent" type="button">Add selected</button>
           </div>
@@ -362,7 +369,6 @@
 
     clearBtn.addEventListener('click', ()=>{
       _basket.length = 0;
-      // also uncheck left side
       document.querySelectorAll('#assignParksList input[type="checkbox"]').forEach(cb=>cb.checked=false);
       renderBasket();
     });
@@ -636,7 +642,6 @@
       return m ? m[0].toUpperCase() : '';
     }
 
-    // Build item li
     function makeItem(suburb, text){
       const siteId = parseSiteId(text);
       const li = document.createElement('li');
@@ -671,7 +676,6 @@
       (SUBURB_ITEMS[name]||[]).forEach(line => ol.appendChild(makeItem(name, line)));
       details.appendChild(ol);
 
-      // select all handling
       right.querySelector('[data-suburb-select-all]').addEventListener('change', (e)=>{
         const checked = e.target.checked;
         ol.querySelectorAll('input[type="checkbox"][data-site-id]').forEach(box=>{
@@ -683,7 +687,6 @@
       return details;
     }
 
-    // Simple suburb now also shows a "Select All" (it toggles the suburb checkbox)
     function buildSimpleSuburb(name, idx){
       const li = document.createElement('li'); li.className='suburb-row';
       const left = document.createElement('div'); left.className='suburb-row-left';
@@ -694,8 +697,6 @@
       const right = document.createElement('div'); right.className='summary-right';
       right.innerHTML = `<input id="selall_${idx}" type="checkbox" data-suburb-select-all data-suburb="${name}">
                          <label for="selall_${idx}">Select All</label>`;
-
-      // When "Select All" is toggled, simply tick/untick the suburb checkbox
       right.querySelector('[data-suburb-select-all]').addEventListener('change', (e)=>{
         cb.checked = e.target.checked;
         cb.dispatchEvent(new Event('change', {bubbles:true}));
@@ -723,9 +724,8 @@
     renderList();
     searchEl.addEventListener('input', e=>renderList(e.target.value));
 
-    // Live-sync ticks → Tasks (site-level)
     function rebuildBasketFromSelection(){
-      const grouped = new Map(); // suburb -> [ids]
+      const grouped = new Map();
       selectedMap.forEach(({siteId, suburb})=>{
         if(!grouped.has(suburb)) grouped.set(suburb, []);
         grouped.get(suburb).push(siteId);
@@ -746,8 +746,8 @@
       }
     });
 
-    // Add selected now also pushes “simple suburb” ticks as zone-only tasks
     addSelBtn.addEventListener('click', ()=>{
+      // also push currently ticked “simple suburbs”
       listEl.querySelectorAll('.suburb-row input[type="checkbox"]:checked').forEach(cb=>{
         _basket.push({zone:cb.value, siteIds:[]});
       });
