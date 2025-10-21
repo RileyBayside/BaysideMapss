@@ -134,11 +134,28 @@
   <!-- Map -->
   <div id="map"></div>
 
-  <!-- Core scripts -->
+  <!-- Core libs -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <!-- Prevent double auto-init from shared scripts -->
+  <script>window.BS_DISABLE_AUTO_INIT = true;</script>
+
+  <!-- Your shared map + sidebar helpers -->
   <script src="script.js"></script>
   <script src="sidebar.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <!-- Safe single init (only if shared auto-init honors the flag) -->
+  <script>
+    (function(){
+      try{
+        if (typeof window.initParksMowingMap === 'function') {
+          var mapDiv = document.getElementById('map');
+          // Leaflet sets _leaflet_id on the container when initialised
+          if (mapDiv && !mapDiv._leaflet_id) window.initParksMowingMap();
+        }
+      }catch(e){ console.warn('Map init fallback failed', e); }
+    })();
+  </script>
 
   <!-- Filter the sidebar to only show assigned IDs -->
   <script>
@@ -222,7 +239,7 @@
   })();
   </script>
 
-  <!-- Buttons + optimistic progress + Firestore writes -->
+  <!-- Buttons + optimistic progress + Firestore writes (with permission probe) -->
   <script>
   (function () {
     const db   = firebase.firestore();
@@ -283,12 +300,27 @@
       container.querySelectorAll('.mini-pill,.badge,.tag,.status').forEach(n=>n.style.display='none');
     }
 
+    // ---------- permission probe ----------
+    let canUpdateAssignments = null; // null unknown, boolean once resolved
+    async function resolveAssignmentWritePermission(){
+      const tid = await ensureTaskId();
+      const uid = auth.currentUser?.uid || null;
+      if (!tid || !uid) { canUpdateAssignments = false; return; }
+      try {
+        const snap = await db.collection('assignments').doc(tid).get();
+        const d = snap.data() || {};
+        canUpdateAssignments = (d.userId === uid);
+      } catch {
+        canUpdateAssignments = false; // if can't read, assume can't write
+      }
+    }
+
     async function writeProgress(siteId, status, note){
       const uid = auth.currentUser?.uid || null;
       const taskId = await ensureTaskId();
 
-      // Try to update the assignment (perSite). If rules block it, keep going.
-      if (taskId){
+      // Only try to update assignments if we know we can
+      if (taskId && canUpdateAssignments === true){
         const update = {};
         update[`perSite.${siteId}.status`]      = status;
         update[`perSite.${siteId}.note`]        = (note||'').trim();
@@ -297,15 +329,12 @@
         update[`perSite.${siteId}.completedAt`] = (status==='completed')
                                                   ? firebase.firestore.FieldValue.serverTimestamp()
                                                   : null;
-        try {
-          await db.collection('assignments').doc(taskId).set(update,{merge:true});
-        } catch (e) {
-          if (e.code !== 'permission-denied') throw e;
-          console.warn('assignments update blocked for operator; logging only');
-        }
+        await db.collection('assignments').doc(taskId).set(update,{merge:true});
+      } else if (taskId && canUpdateAssignments === false) {
+        // quietly skip the blocked write; still log work
       }
 
-      // Always record a work log (rules allow operator to create their own)
+      // Always record a work log (operators can create their own)
       await db.collection('work_logs').add({
         assignmentId: taskId || null,
         siteId, status,
@@ -335,7 +364,6 @@
       if (o) optimistic.delete(sid);
       return null;
     };
-    const optClear = (sid) => optimistic.delete(sid);
 
     function injectButtons(){
       const now  = Date.now();
@@ -365,19 +393,18 @@
             e.preventDefault(); e.stopPropagation();
             const willBeDone = !btn.classList.contains('done');
 
-            // optimistic state first
+            // optimistic state + UI first
             optSet(sid, willBeDone ? 'completed' : 'in_progress');
-            setBtnUI(btn, willBeDone);      // immediate UI
+            setBtnUI(btn, willBeDone);
 
             try{
               await writeProgress(sid, willBeDone ? 'completed' : 'in_progress', input.value||'');
             }catch(err){
-              // Only revert UI for *real* failures; keep optimistic on permission-denied
+              // only revert on real failures (not permission)
               if (err?.code !== 'permission-denied') {
-                optClear(sid);
+                optimistic.delete(sid);
                 setBtnUI(btn, !willBeDone);
-              } else {
-                console.warn('Save blocked by rules; keeping optimistic UI');
+                console.error('Save failed:', err);
               }
             }
           });
@@ -415,13 +442,20 @@
     setTimeout(()=>clearInterval(iv), 60000);
     requestAnimationFrame(injectButtons);
 
-    // live snapshot -> keep UI in sync, but do not fight the optimistic state
+    // live snapshot -> keep UI in sync, and determine permission
     firebase.auth().onAuthStateChanged(async ()=>{
+      await resolveAssignmentWritePermission();  // set canUpdateAssignments
       const taskId = await ensureTaskId();
       if (!taskId) { console.warn('No assignment id; live sync disabled'); return; }
       db.collection('assignments').doc(taskId).onSnapshot(
         (snap)=>{
           perSiteCache = (snap.data()||{}).perSite || {};
+          // refine write permission if we could read
+          try {
+            const d = snap.data() || {};
+            const uid = auth.currentUser?.uid || null;
+            if (uid) canUpdateAssignments = (d.userId === uid);
+          } catch {}
           // clear optimistic entries that Firestore has now confirmed
           for (const [sid, o] of optimistic) {
             const s = (perSiteCache[sid]?.status || '').toLowerCase();
@@ -432,6 +466,7 @@
         (err)=>{
           // If an operator cannot read the assignment, keep showing optimistic state
           console.warn('assignments read blocked:', err?.code || err);
+          canUpdateAssignments = false;
           requestAnimationFrame(injectButtons);
         }
       );
