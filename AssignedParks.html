@@ -450,7 +450,7 @@
       }
     });
 
-    // live listeners for work_logs (read only current operator's logs to satisfy rules)
+      // live listeners for work_logs (read only current operator's logs to satisfy rules)
   firebase.auth().onAuthStateChanged(async (u)=>{
     if (!u) return;
     const uid = u.uid;
@@ -470,14 +470,14 @@
     }
     const wanted = new Set(ids);
 
-    // IMPORTANT: this query matches your rules (operatorUid == request.auth.uid)
+    // IMPORTANT: matches rules (operatorUid == request.auth.uid)
     firebase.firestore().collection('work_logs')
       .where('operatorUid','==', uid)
       .onSnapshot((snap)=>{
         snap.docChanges().forEach(ch=>{
           const w = ch.doc.data() || {};
           const sid = String(w.siteId||'').toUpperCase();
-          if (!wanted.has(sid)) return;         // only care about the shown parks
+          if (!wanted.has(sid)) return;
           const t = (w.timestamp?.toMillis?.() ?? w.completedAt?.toMillis?.() ?? w.updatedAt?.toMillis?.() ?? 0);
           const cur = latestFromLogs[sid];
           if (!cur || t > (cur._t||0)){
@@ -488,11 +488,12 @@
             };
           }
         });
-        requestAnimationFrame(injectButtons);    // refresh UI with persisted state
+        requestAnimationFrame(injectButtons);
       }, (err)=>{
         console.warn('work_logs listener error:', err);
       });
-  })();
+  });
+})();
 </script>
 
 </body>
