@@ -754,5 +754,130 @@
 })();
 </script>
 
+  <script>
+/* Auto-lock to assigned markers (no UI button) */
+(function(){
+
+  const Lmap = window.BS_MAP || window.__BS_map || window.map || window.leafletMap || null;
+  if (!Lmap || !window.L) return;
+
+  // Hide/clean up any lock button you might have added previously
+  const oldBtn = document.getElementById('lock-assigned-btn');
+  if (oldBtn && oldBtn.parentNode) oldBtn.parentNode.removeChild(oldBtn);
+
+  const params = new URLSearchParams(location.search);
+  const hasAutoParam = params.get('autolock') === '1';
+  const hasUnlock    = params.get('unlock') === '1';
+
+  const up = (s)=>String(s||'').trim().toUpperCase();
+  const focusSet = new Set((params.get('focus')||'').split(',').map(up).filter(Boolean));
+  const idRx = /\bM\d{3,5}\b/i;
+
+  // Try to read an ID off a Leaflet marker (title/tooltip/text)
+  function siteIdFromMarker(m){
+    if (!m) return null;
+    if (m.options && m.options.siteId) return up(m.options.siteId);
+    if (m.options && m.options.title){
+      const mm = String(m.options.title).toUpperCase().match(idRx);
+      if (mm) return mm[0];
+    }
+    if (typeof m.getTooltip === 'function' && m.getTooltip()){
+      const txt = m.getTooltip().getContent();
+      const mm = String(txt||'').toUpperCase().match(idRx);
+      if (mm) return mm[0];
+    }
+    const txt = (m._icon && m._icon.textContent) ? m._icon.textContent : '';
+    const mm = String(txt||'').toUpperCase().match(idRx);
+    return mm ? mm[0] : null;
+  }
+
+  function assignedBounds(){
+    let b = null;
+    for (const k in Lmap._layers){
+      const lyr = Lmap._layers[k];
+      if (!(lyr instanceof L.Marker)) continue;
+      const sid = siteIdFromMarker(lyr);
+      // If a focus list exists, restrict to those IDs only
+      if (focusSet.size && (!sid || !focusSet.has(sid))) continue;
+      const ll = lyr.getLatLng();
+      if (!ll) continue;
+      b = b ? b.extend(ll) : L.latLngBounds(ll, ll);
+    }
+    return b;
+  }
+
+  // Best-effort admin detection (so admins can roam unless autolock=1)
+  let isAdmin = false;
+  try {
+    firebase.auth().onAuthStateChanged(async (u)=>{
+      if (!u) return;
+      try {
+        const snap = await firebase.firestore().collection('users').doc(u.uid).get();
+        isAdmin = (snap.data()?.role === 'admin');
+      } catch {}
+    });
+  } catch {}
+
+  let locked = false;
+  let maxB   = null;
+
+  function lockNow() {
+    const b = assignedBounds();
+    if (!b) return false;
+    maxB = b.pad(0.15);
+    try { Lmap.fitBounds(maxB, { padding:[24,24] }); } catch(e) {}
+    Lmap.setMaxBounds(maxB);
+    Lmap.options.maxBoundsViscosity = 1.0;
+    locked = true;
+    return true;
+  }
+
+  function maybeExpandOnNewMarkers(){
+    if (!locked || !maxB) return;
+    const b = assignedBounds();
+    if (b && !maxB.contains(b)){
+      maxB = b.pad(0.15);
+      Lmap.setMaxBounds(maxB);
+    }
+  }
+
+  // Decide if we should auto-lock on this page load
+  function shouldAutoLock(){
+    if (hasUnlock) return false;
+    if (hasAutoParam) return true;      // dashboard sent autolock=1
+    if (focusSet.size > 0 && !isAdmin) return true; // operator via shared URL
+    return false;
+  }
+
+  // Try a few times while markers load
+  function tryLockWithRetries(){
+    let tries = 0;
+    const iv = setInterval(()=>{
+      tries++;
+      if (lockNow() || tries >= 20) clearInterval(iv); // ~10s max
+    }, 500);
+
+    // For a short period, keep expanding the bounds if new markers arrive
+    const until = Date.now() + 8000;
+    const tidier = setInterval(()=>{
+      maybeExpandOnNewMarkers();
+      if (Date.now() > until) clearInterval(tidier);
+    }, 600);
+  }
+
+  // Kick off once auth role likely loaded (but don't block forever)
+  let started = false;
+  const start = ()=>{ if (!started && shouldAutoLock()){ started = true; tryLockWithRetries(); } };
+
+  // Start soon, but allow a moment for the admin flag to resolve
+  setTimeout(start, 400);
+  // Also start after the first pan/zoom (in case map initializes later)
+  Lmap.once('load', start);
+  // Safety: definitely start after ~2s regardless
+  setTimeout(start, 2000);
+
+})();
+</script>
+
 </body>
 </html>
