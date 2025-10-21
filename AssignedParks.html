@@ -134,30 +134,26 @@
   <!-- Map -->
   <div id="map"></div>
 
-  <!-- Core libs -->
+  <!-- Leaflet -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-  <!-- Prevent double auto-init from shared scripts -->
+  <!-- Try to suppress double-init from shared map bootstrap -->
   <script>window.BS_DISABLE_AUTO_INIT = true;</script>
-
-  <!-- Your shared map + sidebar helpers -->
   <script src="script.js"></script>
   <script src="sidebar.js"></script>
-
-  <!-- Safe single init (only if shared auto-init honors the flag) -->
   <script>
     (function(){
+      // Fallback init only if not already initialised by script.js
       try{
-        if (typeof window.initParksMowingMap === 'function') {
-          var mapDiv = document.getElementById('map');
-          // Leaflet sets _leaflet_id on the container when initialised
-          if (mapDiv && !mapDiv._leaflet_id) window.initParksMowingMap();
+        var mapDiv = document.getElementById('map');
+        if (typeof window.initParksMowingMap === 'function' && mapDiv && !mapDiv._leaflet_id){
+          window.initParksMowingMap();
         }
-      }catch(e){ console.warn('Map init fallback failed', e); }
+      }catch(e){ /* cosmetic if it fails */ }
     })();
   </script>
 
-  <!-- Filter the sidebar to only show assigned IDs -->
+  <!-- Sidebar filter to focus list -->
   <script>
   (function () {
     function getFocusFromQuery() {
@@ -201,7 +197,7 @@
       }
       banner.textContent = ids.length ? `Showing ${ids.length} assigned site(s)` : 'No assigned sites to show.';
 
-      // Show only rows that contain one of the wanted IDs
+      // Hide non-assigned rows
       const hasAnyId = (el) => {
         const t = (el.textContent || '').toUpperCase();
         for (const id of wanted) if (t.includes(id)) return true;
@@ -221,7 +217,7 @@
       });
     }
 
-    // Collapse/expand all
+    // Expand / collapse all groups
     document.getElementById('toggle-all')?.addEventListener('click', (e)=>{
       const root = document.getElementById('sidebar-content');
       const all = [...root.querySelectorAll('details')];
@@ -239,7 +235,7 @@
   })();
   </script>
 
-  <!-- Buttons + optimistic progress + Firestore writes (with permission probe) -->
+  <!-- Buttons + optimistic progress; persist via work_logs; also read work_logs on load -->
   <script>
   (function () {
     const db   = firebase.firestore();
@@ -263,7 +259,7 @@
           if(sc>score){best=doc.id;score=sc;}
         });
         if(best){ assignmentId=best; try{localStorage.setItem('currentTaskId',best);}catch(_){} }
-      }catch(e){ console.warn('infer task failed', e); }
+      }catch(e){ /* not critical */ }
       return assignmentId;
     }
 
@@ -300,41 +296,25 @@
       container.querySelectorAll('.mini-pill,.badge,.tag,.status').forEach(n=>n.style.display='none');
     }
 
-    // ---------- permission probe ----------
-    let canUpdateAssignments = null; // null unknown, boolean once resolved
-    async function resolveAssignmentWritePermission(){
-      const tid = await ensureTaskId();
-      const uid = auth.currentUser?.uid || null;
-      if (!tid || !uid) { canUpdateAssignments = false; return; }
-      try {
-        const snap = await db.collection('assignments').doc(tid).get();
-        const d = snap.data() || {};
-        canUpdateAssignments = (d.userId === uid);
-      } catch {
-        canUpdateAssignments = false; // if can't read, assume can't write
-      }
+    // ---- EFFECTIVE STATE = perSite (when readable) + freshest work_logs ----
+    let perSiteCache = {};      // from assignments (if readable)
+    const latestFromLogs = {};  // sid -> {status, note, _t}
+
+    function effectiveFor(sid){
+      const base = perSiteCache[sid] || {};
+      const log  = latestFromLogs[sid] || {};
+      const pick = {};
+      // prefer newest log values
+      pick.status = (log.status || base.status || '').toLowerCase();
+      pick.note   = (log.note   != null ? log.note   : base.note) || '';
+      return pick;
     }
 
     async function writeProgress(siteId, status, note){
       const uid = auth.currentUser?.uid || null;
       const taskId = await ensureTaskId();
 
-      // Only try to update assignments if we know we can
-      if (taskId && canUpdateAssignments === true){
-        const update = {};
-        update[`perSite.${siteId}.status`]      = status;
-        update[`perSite.${siteId}.note`]        = (note||'').trim();
-        update[`perSite.${siteId}.operatorUid`] = uid;
-        update[`perSite.${siteId}.updatedAt`]   = firebase.firestore.FieldValue.serverTimestamp();
-        update[`perSite.${siteId}.completedAt`] = (status==='completed')
-                                                  ? firebase.firestore.FieldValue.serverTimestamp()
-                                                  : null;
-        await db.collection('assignments').doc(taskId).set(update,{merge:true});
-      } else if (taskId && canUpdateAssignments === false) {
-        // quietly skip the blocked write; still log work
-      }
-
-      // Always record a work log (operators can create their own)
+      // LOG (operators always allowed by your rules)
       await db.collection('work_logs').add({
         assignmentId: taskId || null,
         siteId, status,
@@ -342,14 +322,34 @@
         operatorUid: uid,
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
       });
+
+      // If you want admins to also mirror into assignments, uncomment this block:
+      /*
+      try {
+        const u = auth.currentUser;
+        const userSnap = await db.collection('users').doc(u.uid).get();
+        const role = userSnap.data()?.role || '';
+        if (role === 'admin') {
+          const update = {};
+          update[`perSite.${siteId}.status`]      = status;
+          update[`perSite.${siteId}.note`]        = (note||'').trim();
+          update[`perSite.${siteId}.operatorUid`] = u.uid;
+          update[`perSite.${siteId}.updatedAt`]   = firebase.firestore.FieldValue.serverTimestamp();
+          update[`perSite.${siteId}.completedAt`] = (status==='completed')
+                                                    ? firebase.firestore.FieldValue.serverTimestamp()
+                                                    : null;
+          const tid = await ensureTaskId();
+          if (tid) await db.collection('assignments').doc(tid).set(update,{merge:true});
+        }
+      } catch {}
+      */
     }
 
     // ---------- injection & sync ----------
     const siteButtons = new Map(); // siteId -> button
     const siteInputs  = new Map(); // siteId -> notes input
-    let   perSiteCache  = {};      // latest snapshot from assignments
 
-    // optimistic state (keep UI sticky until Firestore confirms)
+    // optimistic state (keep UI sticky until listeners refresh)
     const optimistic = new Map();  // siteId -> {status, t}
     const OPT_TTL_MS = 20000;
 
@@ -400,37 +400,31 @@
             try{
               await writeProgress(sid, willBeDone ? 'completed' : 'in_progress', input.value||'');
             }catch(err){
-              // only revert on real failures (not permission)
-              if (err?.code !== 'permission-denied') {
-                optimistic.delete(sid);
-                setBtnUI(btn, !willBeDone);
-                console.error('Save failed:', err);
-              }
+              // rollback only on unexpected failures
+              optimistic.delete(sid);
+              setBtnUI(btn, !willBeDone);
+              console.error('Save failed:', err);
             }
           });
 
           const saveNote = async () => {
             const opt = optGet(sid);
-            const status = opt ? opt.status : (btn.classList.contains('done') ? 'completed' : 'in_progress');
-            try{ await writeProgress(sid, status, input.value||''); }catch(e){
-              if (e?.code !== 'permission-denied') console.error(e);
-            }
+            const eff = opt ? opt.status : effectiveFor(sid).status || (btn.classList.contains('done') ? 'completed' : 'in_progress');
+            try{ await writeProgress(sid, eff, input.value||''); }catch(e){ console.error(e); }
           };
           input.addEventListener('change', saveNote);
           input.addEventListener('blur',   saveNote);
         }
 
-        // reflect current state -> UI (optimistic overrides Firestore while fresh)
-        const info = { ...(perSiteCache[sid] || {}) };
+        // reflect EFFECTIVE state -> UI (optimistic overrides freshest logs while fresh)
+        const eff = effectiveFor(sid);
         const opt  = optGet(sid);
-        if (opt) info.status = opt.status;
-
-        const isDone = (info.status||'').toLowerCase() === 'completed';
+        const status = (opt?.status || eff.status || '').toLowerCase();
+        const isDone = status === 'completed';
         setBtnUI(btn, isDone);
 
-        const cachedNote = (perSiteCache[sid] || {}).note;
-        if (typeof cachedNote === 'string' && document.activeElement !== input && input.value !== cachedNote) {
-          input.value = cachedNote;
+        if (typeof eff.note === 'string' && document.activeElement !== input && input.value !== eff.note) {
+          input.value = eff.note;
         }
 
         hideAssignedChips(input.closest('li, .list-item, .sidebar-row, .item, div') || root);
@@ -442,34 +436,58 @@
     setTimeout(()=>clearInterval(iv), 60000);
     requestAnimationFrame(injectButtons);
 
-    // live snapshot -> keep UI in sync, and determine permission
+    // live snapshot of assignments (if readable) — optional
     firebase.auth().onAuthStateChanged(async ()=>{
-      await resolveAssignmentWritePermission();  // set canUpdateAssignments
-      const taskId = await ensureTaskId();
-      if (!taskId) { console.warn('No assignment id; live sync disabled'); return; }
-      db.collection('assignments').doc(taskId).onSnapshot(
-        (snap)=>{
-          perSiteCache = (snap.data()||{}).perSite || {};
-          // refine write permission if we could read
-          try {
-            const d = snap.data() || {};
-            const uid = auth.currentUser?.uid || null;
-            if (uid) canUpdateAssignments = (d.userId === uid);
-          } catch {}
-          // clear optimistic entries that Firestore has now confirmed
-          for (const [sid, o] of optimistic) {
-            const s = (perSiteCache[sid]?.status || '').toLowerCase();
-            if ((o.status || '').toLowerCase() === s) optimistic.delete(sid);
-          }
-          requestAnimationFrame(injectButtons);
-        },
-        (err)=>{
-          // If an operator cannot read the assignment, keep showing optimistic state
-          console.warn('assignments read blocked:', err?.code || err);
-          canUpdateAssignments = false;
-          requestAnimationFrame(injectButtons);
+      const tid = await ensureTaskId();
+      if (tid){
+        db.collection('assignments').doc(tid).onSnapshot(
+          (snap)=>{
+            perSiteCache = (snap.data()||{}).perSite || {};
+            requestAnimationFrame(injectButtons);
+          },
+          ()=>{ /* operators might not have read; that's OK */ }
+        );
+      }
+    });
+
+    // live listeners for work_logs for the visible site ids (drives persistence)
+    firebase.auth().onAuthStateChanged(async ()=>{
+      // figure out which site IDs are on the page
+      const focus = (params.get('focus')||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+      let ids = focus;
+      if (!ids.length){
+        // best-effort: fetch from assignment if readable
+        const tid = await ensureTaskId();
+        if (tid){
+          try{
+            const s = await db.collection('assignments').doc(tid).get();
+            ids = (s.data()?.siteIds || []).map(x=>String(x).toUpperCase());
+          }catch{}
         }
-      );
+      }
+      ids = Array.from(new Set(ids));
+      if (!ids.length) return;
+
+      const step = 10;
+      for(let i=0;i<ids.length;i+=step){
+        const batch = ids.slice(i,i+step);
+        db.collection('work_logs').where('siteId','in',batch).onSnapshot((snap)=>{
+          snap.docChanges().forEach(ch=>{
+            const w = ch.doc.data() || {};
+            const sid = String(w.siteId||'').toUpperCase();
+            const t = (w.timestamp?.toMillis?.() ?? w.completedAt?.toMillis?.() ?? w.updatedAt?.toMillis?.() ?? 0);
+            const cur = latestFromLogs[sid];
+            if (!cur || t > (cur._t||0)){
+              latestFromLogs[sid] = {
+                status: (w.status||'').toLowerCase(),
+                note:   (w.note||'').trim(),
+                _t: t
+              };
+            }
+          });
+          requestAnimationFrame(injectButtons);
+        });
+      }
     });
   })();
   </script>
