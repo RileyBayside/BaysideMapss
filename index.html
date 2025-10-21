@@ -293,290 +293,272 @@
     })();
   </script>
 
-  <!-- Tasks: live listener + renderer (filters out completed site IDs and shows Zone at top) -->
-  <script>
-    (function () {
-      const db = firebase.firestore();
+  <!-- Tasks: live listener + renderer (live remaining counter via work_logs like assignments.html) -->
+<script>
+(function () {
+  const db = firebase.firestore();
 
-      // ---- Progress state (per-task) ----
-      const progressByTask = new Map();     // taskId -> { done:Set<string> }
-      const progressUnsubs = new Map();     // taskId -> () => void
-      let latestItems = [];                 // last assignments snapshot (raw)
-      let mounted = false;
+  // ---------- helpers ----------
+  const up = (x) => String(x || '').trim().toUpperCase();
+  function parseIdList(list){
+    if (!list) return [];
+    if (Array.isArray(list)) return list.map(up).filter(Boolean);
+    return String(list).split(/[\s,]+/g).map(up).filter(Boolean);
+  }
+  function getPerSiteForId(perSite, rawId){
+    if (!perSite) return undefined;
+    const idU = up(rawId);
+    const idL = idU.toLowerCase();
+    const noM = idU.replace(/^M/,'');
+    return perSite[idU] ?? perSite[idL] ?? perSite[noM];
+  }
+  function baseIdsFromTask(t){
+    if (Array.isArray(t.siteIds)) return parseIdList(t.siteIds);
+    if (t.sites && typeof t.sites === 'object') return Object.keys(t.sites).map(up);
+    if (t.siteList) return parseIdList(t.siteList);
+    return [];
+  }
+  function zoneTitle(t){
+    const zNum = t.zoneNumber ?? t.zoneNo ?? t.zoneNum ?? null;
+    const zName = t.zoneName ?? t.area ?? t.suburb ?? t.region ?? null;
+    const zStr  = (typeof t.zone === 'string') ? t.zone.trim() : null;
+    if (zStr && /^zone\s*\d+/i.test(zStr)) return zStr.replace(/\s*-\s*/,' - ');
+    if (zNum && zName) return `Zone ${zNum} - ${zName}`;
+    if (zNum) return `Zone ${zNum}`;
+    if (zName) return zName;
+    return zStr || 'Task';
+  }
 
-      function upcaseId(x){ return String(x || '').trim().toUpperCase(); }
-
-      function parseIdList(list){
-        if (!list) return [];
-        if (Array.isArray(list)) return list.map(upcaseId).filter(Boolean);
-        // allow comma/space separated strings
-        return String(list).split(/[\s,]+/g).map(upcaseId).filter(Boolean);
-      }
-
-      function baseIdsFromTask(t){
-        if (Array.isArray(t.siteIds)) return parseIdList(t.siteIds);
-        if (t.sites && typeof t.sites === 'object'){
-          // { M0123:{done:false}, M0456:{done:true} }
-          return Object.keys(t.sites).map(upcaseId);
-        }
-        if (t.siteList) return parseIdList(t.siteList);
-        return [];
-      }
-
-      function completedIdsFromTaskFields(t){
-        const out = new Set();
-        parseIdList(t.completedSiteIds).forEach(id => out.add(id));
-        parseIdList(t.completedIds).forEach(id => out.add(id));
-        if (t.sites && typeof t.sites === 'object'){
-          for (const [k,v] of Object.entries(t.sites)){
-            if (v && (v.done || v.status === 'completed' || v.tick === true)){
-              out.add(upcaseId(k));
-            }
-          }
-        }
-        return out;
-      }
-
-      function getLiveDoneSet(taskId){
-        const live = progressByTask.get(taskId);
-        return live?.done || new Set();
-      }
-
-      function computeRemaining(t){
-        const base = baseIdsFromTask(t);
-        const staticDone = completedIdsFromTaskFields(t);
-        const liveDone = getLiveDoneSet(t.id);
-        const done = new Set([...staticDone, ...liveDone]);
-        return base.filter(id => !done.has(id));
-      }
-
-      function zoneTitle(t){
-        // Try to render "Zone X - Name"
-        const zNum = t.zoneNumber ?? t.zoneNo ?? t.zoneNum ?? null;
-        const zNameCandidate = t.zoneName ?? t.area ?? t.suburb ?? t.region ?? null;
-        const zField = (typeof t.zone === 'string') ? t.zone.trim() : null;
-
-        if (zField && /^zone\s*\d+/i.test(zField)) {
-          // Already like "Zone 1 - Wellington Point" or "Zone 2"
-          return zField.replace(/\s*-\s*/,' - ');
-        }
-        if (zNum && zNameCandidate) return `Zone ${zNum} - ${zNameCandidate}`;
-        if (zNum) return `Zone ${zNum}`;
-        if (zNameCandidate) return zNameCandidate;
-        // last fallback: use whatever zone string or a generic label
-        return zField || 'Task';
-      }
-
-      async function markTaskStarted(taskId) {
-        const uid = firebase.auth().currentUser?.uid || null;
-        const ref = db.collection('assignments').doc(taskId);
-        try {
-          await db.runTransaction(async (tx) => {
-            const snap = await tx.get(ref);
-            if (!snap.exists) return;
-            const d = snap.data() || {};
-            if (d.status === 'completed') return;
-            if (d.status !== 'in_progress') {
-              tx.update(ref, {
-                status: 'in_progress',
-                startedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                startedBy: uid
-              });
-            } else {
-              tx.update(ref, { lastOpenedAt: firebase.firestore.FieldValue.serverTimestamp() });
-            }
+  async function markTaskStarted(taskId) {
+    const uid = firebase.auth().currentUser?.uid || null;
+    const ref = db.collection('assignments').doc(taskId);
+    try {
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) return;
+        const d = snap.data() || {};
+        if (d.status === 'completed') return;
+        if (d.status !== 'in_progress') {
+          tx.update(ref, {
+            status: 'in_progress',
+            startedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            startedBy: uid
           });
-        } catch (e) {
-          console.warn('markTaskStarted failed:', e);
+        } else {
+          tx.update(ref, { lastOpenedAt: firebase.firestore.FieldValue.serverTimestamp() });
         }
-      }
-
-      function renderTasks(items) {
-        const el = document.getElementById('tasks-list');
-        if (!el) return;
-
-        // Filter out rows with nothing remaining
-        const toShow = items.map(t => {
-          const remaining = computeRemaining(t);
-          return { t, remaining, total: baseIdsFromTask(t).length };
-        }).filter(x => x.remaining.length > 0);
-
-        el.innerHTML = '';
-        if (!toShow.length) {
-          const p = document.createElement('p');
-          p.style.color = '#64748b';
-          p.textContent = 'No tasks assigned yet.';
-          el.appendChild(p);
-          return;
-        }
-
-        toShow.forEach(({t, remaining, total}) => {
-          const row = document.createElement('div');
-          row.className = 'task-row';
-
-          const left = document.createElement('div');
-          left.className = 'task-main';
-
-          // Top line: Zone X - Name
-          const title = document.createElement('div');
-          title.className = 'task-title';
-
-          const focus = remaining.join(',');
-          const dest = focus
-            ? `AssignedParks.html?focus=${encodeURIComponent(focus)}&task=${encodeURIComponent(t.id)}`
-            : `AssignedParks.html?task=${encodeURIComponent(t.id)}`;
-
-          const a = document.createElement('a');
-          a.className = 'task-link';
-          a.title = 'Open remaining sites in the map';
-          a.href = dest;
-          a.textContent = zoneTitle(t);
-          a.addEventListener('click', async (ev) => {
-            ev.preventDefault();
-            try { await markTaskStarted(t.id); } catch {}
-            location.href = dest;
-          });
-          title.appendChild(a);
-          left.appendChild(title);
-
-          // Meta line: progress + due
-          const meta = document.createElement('div');
-          meta.className = 'task-meta';
-          const dueDate = t.dueDate?.toDate ? t.dueDate.toDate()
-                       : (t.dueDate instanceof Date ? t.dueDate : null);
-          const dueTxt = dueDate ? ` • Due ${dueDate.toLocaleDateString()}` : '';
-          meta.textContent = `${remaining.length} remaining${total ? ` of ${total}`:''}${dueTxt}`;
-          left.appendChild(meta);
-
-          // Remaining IDs block
-          if (remaining.length){
-            const note = document.createElement('div');
-            note.className = 'task-note';
-            note.textContent = remaining.join(', ');
-            left.appendChild(note);
-          }
-
-          const right = document.createElement('div');
-          right.className = 'task-actions';
-
-          const badge = document.createElement('span');
-          badge.className = 'badge badge-slate';
-          const s = (t.status || 'assigned').replace('_',' ');
-          badge.textContent = s.charAt(0).toUpperCase() + s.slice(1);
-          right.appendChild(badge);
-
-          const openBtn = document.createElement('a');
-          openBtn.href = dest;
-          openBtn.className = 'btn btn-dark btn-small';
-          openBtn.textContent = 'Open';
-          openBtn.addEventListener('click', async (ev) => {
-            ev.preventDefault();
-            try { await markTaskStarted(t.id); } catch {}
-            location.href = dest;
-          });
-          right.appendChild(openBtn);
-
-          row.appendChild(left);
-          row.appendChild(right);
-          el.appendChild(row);
-        });
-      }
-
-      // Attach live listeners for per-site completion ticks
-      function ensureProgressListeners(taskId){
-        if (progressUnsubs.has(taskId)) return; // already attached
-        const unsubs = [];
-
-        // assignments/{taskId}/sites
-        try {
-          const u1 = db.collection('assignments').doc(taskId).collection('sites')
-            .onSnapshot((snap)=>{
-              const done = new Set(progressByTask.get(taskId)?.done || []);
-              snap.forEach(doc=>{
-                const d = doc.data() || {};
-                const id = upcaseId(d.siteId || d.id || doc.id);
-                if (!id) return;
-                if (d.done === true || d.status === 'completed' || d.tick === true) done.add(id);
-                else if (d.done === false) done.delete(id);
-              });
-              progressByTask.set(taskId, { done });
-              if (mounted) renderTasks(latestItems);
-            }, (e)=>console.warn('sites sublistener error', e));
-          unsubs.push(u1);
-        } catch(e){ /* ignore */ }
-
-        // assignments/{taskId}/completions
-        try {
-          const u2 = db.collection('assignments').doc(taskId).collection('completions')
-            .onSnapshot((snap)=>{
-              const done = new Set(progressByTask.get(taskId)?.done || []);
-              snap.forEach(doc=>{
-                const d = doc.data() || {};
-                const id = upcaseId(d.siteId || doc.id);
-                if (id) done.add(id);
-              });
-              progressByTask.set(taskId, { done });
-              if (mounted) renderTasks(latestItems);
-            }, (e)=>console.warn('completions sublistener error', e));
-          unsubs.push(u2);
-        } catch(e){ /* ignore */ }
-
-        progressUnsubs.set(taskId, ()=>unsubs.forEach(u=>{ try{ u(); }catch{} }));
-      }
-
-      function teardownMissingProgressListeners(currentIds){
-        const keep = new Set(currentIds);
-        for (const [tid, unsub] of progressUnsubs.entries()){
-          if (!keep.has(tid)){
-            try{ unsub(); }catch{}
-            progressUnsubs.delete(tid);
-            progressByTask.delete(tid);
-          }
-        }
-      }
-
-      window.startTasksListener = function (uid) {
-        mounted = true;
-        return db.collection('assignments')
-          .where('userId', '==', uid)
-          .onSnapshot((snap) => {
-            const items = [];
-            snap.forEach(doc => {
-              const d = doc.data() || {};
-              if ((d.status || 'assigned').toLowerCase() === 'completed') return;
-              items.push({ id: doc.id, ...d });
-            });
-
-            // Keep listeners aligned with current tasks
-            items.forEach(it => ensureProgressListeners(it.id));
-            teardownMissingProgressListeners(items.map(x => x.id));
-
-            // Sort: due date (earliest) then newest created
-            items.sort((a, b) => {
-              const ad = a.dueDate?.toDate ? a.dueDate.toDate() : (a.dueDate instanceof Date ? a.dueDate : null);
-              const bd = b.dueDate?.toDate ? b.dueDate.toDate() : (b.dueDate instanceof Date ? b.dueDate : null);
-              if (ad && bd) return ad - bd;
-              if (ad && !bd) return -1;
-              if (!ad && bd) return 1;
-              const ac = a.createdAt?.toDate ? a.createdAt.toDate() : 0;
-              const bc = b.createdAt?.toDate ? b.createdAt.toDate() : 0;
-              return (bc || 0) - (ac || 0);
-            });
-
-            latestItems = items;
-            renderTasks(items);
-          }, (err) => {
-            console.warn('tasks listener error:', err);
-            const el = document.getElementById('tasks-list');
-            if (el) el.innerHTML = '<p style="color:#b91c1c">Failed to load tasks.</p>';
-          });
-      };
-
-      firebase.auth().onAuthStateChanged((u) => {
-        if (u) window.startTasksListener(u.uid);
       });
-    })();
-  </script>
+    } catch (e) { console.warn('markTaskStarted failed:', e); }
+  }
+
+  // ---------- live progress state per task (mirrors assignments.html approach) ----------
+  const taskStreams = new Map(); // taskId -> { siteIds:string[], latest:{[sid]:{status,_t}}, logUnsubs:[] }
+  let latestItems = [];           // last assignments snapshot
+  let mounted = false;
+
+  function ensureTaskStreams(task){
+    const ids = Array.from(new Set(baseIdsFromTask(task)));
+    let st = taskStreams.get(task.id);
+    if (!st) { st = { siteIds:[], latest:{}, logUnsubs:[] }; taskStreams.set(task.id, st); }
+
+    const prevSet = new Set(st.siteIds);
+    const changed = ids.length !== st.siteIds.length || ids.some(x=>!prevSet.has(x));
+    if (!changed) return;
+
+    // tear down old
+    st.logUnsubs.forEach(u=>{ try{u();}catch{} });
+    st.logUnsubs = [];
+    st.siteIds = ids;
+
+    const chunk = 10;
+    for (let i=0; i<ids.length; i+=chunk){
+      const batch = ids.slice(i, i+chunk);
+      try {
+        const u = db.collection('work_logs').where('siteId','in', batch)
+          .onSnapshot(snap=>{
+            snap.docChanges().forEach(ch=>{
+              const w   = ch.doc.data()||{};
+              const sid = up(w.siteId || ch.doc.id);
+              const t   = (w.completedAt?.toMillis?.() ?? w.timestamp?.toMillis?.() ?? w.createdAt?.toMillis?.() ?? 0);
+              const stt = (w.status||'').toLowerCase();
+              const cur = st.latest[sid];
+              if (!cur || t > cur._t) st.latest[sid] = { status: stt, _t: t };
+            });
+            if (mounted) renderTasks(latestItems);
+          }, e=>console.warn('work_logs listener error', e));
+        st.logUnsubs.push(u);
+      } catch(e){ console.warn('work_logs subscribe failed', e); }
+    }
+  }
+
+  function teardownMissingStreams(currentTaskIds){
+    const keep = new Set(currentTaskIds);
+    for (const [tid, st] of taskStreams.entries()){
+      if (!keep.has(tid)){
+        st.logUnsubs.forEach(u=>{ try{u();}catch{} });
+        taskStreams.delete(tid);
+      }
+    }
+  }
+
+  function isCompleted(t, id){
+    const sid = up(id);
+    // 1) latest work_logs (authoritative)
+    const live = taskStreams.get(t.id)?.latest?.[sid]?.status || '';
+    if (live === 'completed') return true;
+
+    // 2) perSite map on the assignment doc
+    const ps = getPerSiteForId(t.perSite || {}, sid) || {};
+    if ((ps.status||'').toLowerCase() === 'completed') return true;
+
+    // 3) static arrays on the doc (fallbacks)
+    const arrays = [t.completedSiteIds, t.completedIds];
+    for (const arr of arrays){
+      const set = new Set(parseIdList(arr));
+      if (set.has(sid)) return true;
+    }
+    return false;
+  }
+
+  function remainingIds(t){
+    const base = baseIdsFromTask(t);
+    return base.filter(id => !isCompleted(t, id));
+  }
+
+  // ---------- UI ----------
+  function renderTasks(items){
+    const el = document.getElementById('tasks-list');
+    if (!el) return;
+
+    // Only show tasks that still have remaining parks
+    const rows = items.map(t => {
+      const remaining = remainingIds(t);
+      return { t, remaining, total: baseIdsFromTask(t).length };
+    }).filter(x => x.remaining.length > 0);
+
+    el.innerHTML = '';
+    if (!rows.length){
+      const p = document.createElement('p');
+      p.style.color = '#64748b';
+      p.textContent = 'No tasks assigned yet.';
+      el.appendChild(p);
+      return;
+    }
+
+    rows.forEach(({t, remaining, total})=>{
+      const row = document.createElement('div');
+      row.className = 'task-row';
+
+      const left = document.createElement('div');
+      left.className = 'task-main';
+
+      // Title: Zone X - Name
+      const title = document.createElement('div');
+      title.className = 'task-title';
+      const dest = remaining.length
+        ? `AssignedParks.html?focus=${encodeURIComponent(remaining.join(','))}&task=${encodeURIComponent(t.id)}`
+        : `AssignedParks.html?task=${encodeURIComponent(t.id)}`;
+
+      const a = document.createElement('a');
+      a.className = 'task-link';
+      a.href = dest;
+      a.title = 'Open remaining sites in the map';
+      a.textContent = zoneTitle(t);
+      a.addEventListener('click', async (ev) => {
+        ev.preventDefault();
+        try { await markTaskStarted(t.id); } catch {}
+        location.href = dest;
+      });
+      title.appendChild(a);
+      left.appendChild(title);
+
+      // Meta: **live** remaining count
+      const meta = document.createElement('div');
+      meta.className = 'task-meta';
+      const dueDate = t.dueDate?.toDate ? t.dueDate.toDate()
+                   : (t.dueDate instanceof Date ? t.dueDate : null);
+      const dueTxt  = dueDate ? ` • Due ${dueDate.toLocaleDateString()}` : '';
+      meta.textContent = `${remaining.length} remaining of ${total}${dueTxt}`;
+      left.appendChild(meta);
+
+      // Remaining list
+      if (remaining.length){
+        const note = document.createElement('div');
+        note.className = 'task-note';
+        note.textContent = remaining.join(', ');
+        left.appendChild(note);
+      }
+
+      // Right actions
+      const right = document.createElement('div');
+      right.className = 'task-actions';
+
+      const badge = document.createElement('span');
+      badge.className = 'badge badge-slate';
+      const s = (t.status || 'assigned').replace('_',' ');
+      badge.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+      right.appendChild(badge);
+
+      const openBtn = document.createElement('a');
+      openBtn.href = dest;
+      openBtn.className = 'btn btn-dark btn-small';
+      openBtn.textContent = 'Open';
+      openBtn.addEventListener('click', async (ev) => {
+        ev.preventDefault();
+        try { await markTaskStarted(t.id); } catch {}
+        location.href = dest;
+      });
+      right.appendChild(openBtn);
+
+      row.appendChild(left);
+      row.appendChild(right);
+      el.appendChild(row);
+    });
+  }
+
+  window.startTasksListener = function (uid) {
+    mounted = true;
+    return db.collection('assignments')
+      .where('userId', '==', uid)
+      .onSnapshot((snap) => {
+        const items = [];
+        snap.forEach(doc => {
+          const d = doc.data() || {};
+          if ((d.status || 'assigned').toLowerCase() === 'completed') return;
+          const task = { id: doc.id, ...d };
+          items.push(task);
+          ensureTaskStreams(task); // attach/refresh work_logs listeners per task
+        });
+
+        teardownMissingStreams(items.map(x => x.id));
+
+        // Sort: due first, then newest created
+        items.sort((a, b) => {
+          const ad = a.dueDate?.toDate ? a.dueDate.toDate() : (a.dueDate instanceof Date ? a.dueDate : null);
+          const bd = b.dueDate?.toDate ? b.dueDate.toDate() : (b.dueDate instanceof Date ? b.dueDate : null);
+          if (ad && bd) return ad - bd;
+          if (ad && !bd) return -1;
+          if (!ad && bd) return 1;
+          const ac = a.createdAt?.toDate ? a.createdAt.toDate() : 0;
+          const bc = b.createdAt?.toDate ? b.createdAt.toDate() : 0;
+          return (bc || 0) - (ac || 0);
+        });
+
+        latestItems = items;
+        renderTasks(items);
+      }, (err) => {
+        console.warn('tasks listener error:', err);
+        const el = document.getElementById('tasks-list');
+        if (el) el.innerHTML = '<p style="color:#b91c1c">Failed to load tasks.</p>';
+      });
+  };
+
+  firebase.auth().onAuthStateChanged((u) => {
+    if (u) window.startTasksListener(u.uid);
+  });
+})();
+</script>
+
 
   <!-- Risk Assessment modal logic (AEST + writes createdAt) -->
   <script>
