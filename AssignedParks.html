@@ -219,8 +219,8 @@
     const q = (params.get('focus')||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
     if (!q.length) return null;
     try{
-      const batch = q.slice(0,10);
-      const snap = await db.collection('assignments').where('siteIds','array-contains-any',batch).get();
+      const snap = await db.collection('assignments')
+        .where('siteIds','array-contains-any', q.slice(0,10)).get();
       let best=null,score=-1;
       snap.forEach(doc=>{
         const arr=(doc.data().siteIds||[]).map(x=>String(x).toUpperCase());
@@ -237,7 +237,7 @@
 
   function rootEl(){ return document.getElementById('sidebar-content') || document; }
 
-  // --- robust, sticky site-id detection ---
+  // ---- robust site-id detection (sticky in data-site-id) ----
   function matchIdFromNode(n){
     if (!n) return null;
     const m = (n.textContent||'').toUpperCase().match(idRx);
@@ -245,26 +245,20 @@
   }
   function findSiteIdForNotes(input){
     if (input.dataset.siteId) return up(input.dataset.siteId);
-
     let el = input.closest('[data-site-id], li, .list-item, .sidebar-row, .item, div');
     for (let hops=0; el && hops<6; hops++, el=el.parentElement){
-      if (el.dataset && el.dataset.siteId){ input.dataset.siteId = up(el.dataset.siteId); return input.dataset.siteId; }
-      let m = matchIdFromNode(el); if (m){ input.dataset.siteId = m; return m; }
+      if (el.dataset && el.dataset.siteId){ input.dataset.siteId=up(el.dataset.siteId); return input.dataset.siteId; }
+      let m = matchIdFromNode(el); if (m){ input.dataset.siteId=m; return m; }
       const sum = el.querySelector && el.querySelector('summary');
-      m = matchIdFromNode(sum); if (m){ input.dataset.siteId = m; return m; }
+      m = matchIdFromNode(sum); if (m){ input.dataset.siteId=m; return m; }
       let p = el.previousElementSibling;
-      while (p){ m = matchIdFromNode(p); if (m){ input.dataset.siteId = m; return m; } p = p.previousElementSibling; }
+      while (p){ m = matchIdFromNode(p); if (m){ input.dataset.siteId=m; return m; } p=p.previousElementSibling; }
     }
     const any = matchIdFromNode(document);
     if (any) input.dataset.siteId = any;
     return any || null;
   }
 
-  function hideAssignedChips(container){
-    container.querySelectorAll('.mini-pill,.badge,.tag,.status').forEach(n=>n.style.display='none');
-  }
-
-  // case-insensitive + no-‘M’ resolver for perSite cache
   function getPerSiteForId(perSite, rawId){
     if (!perSite) return undefined;
     const idU = up(rawId);
@@ -272,6 +266,23 @@
     const noM = idU.replace(/^M/,'');
     return perSite[idU] ?? perSite[idL] ?? perSite[noM];
   }
+
+  // ---- localStorage-backed optimistic cache (survives re-renders) ----
+  const OPT_TTL_MS = 10 * 60 * 1000; // 10 min
+  function optKey(siteId){ return `ap-opt:${assignmentId||'na'}:${siteId}`; }
+  function optSet(siteId, status){
+    try{ localStorage.setItem(optKey(siteId), JSON.stringify({status, t:Date.now()})); }catch(_){}
+  }
+  function optGet(siteId){
+    try{
+      const raw = localStorage.getItem(optKey(siteId));
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      if (!obj || !obj.t || (Date.now()-obj.t)>OPT_TTL_MS) { localStorage.removeItem(optKey(siteId)); return null; }
+      return obj;
+    }catch(_){ return null; }
+  }
+  function optClear(siteId){ try{ localStorage.removeItem(optKey(siteId)); }catch(_){} }
 
   async function writeProgress(siteId, status, note){
     const uid = auth.currentUser?.uid || null;
@@ -298,13 +309,9 @@
   }
 
   // ---------- injection & sync ----------
-  const siteButtons = new Map(); // siteId -> button element currently in DOM
+  const siteButtons = new Map(); // siteId -> button (in DOM)
   const siteInputs  = new Map(); // siteId -> notes input
-  let   perSiteCache  = {};      // latest snapshot from assignments
-
-  // Keep UI “clicked” until Firestore confirms it
-  const optimistic = new Map();  // siteId -> {status, t}
-  const OPT_TTL_MS = 120000;     // 2 minutes
+  let   perSiteCache  = {};      // latest snapshot
 
   function setBtnUI(btn, done){
     btn.classList.toggle('done', done);
@@ -312,9 +319,6 @@
   }
 
   function injectButtons(){
-    const now  = Date.now();
-    for (const [sid, o] of optimistic) if (now - o.t > OPT_TTL_MS) optimistic.delete(sid);
-
     const root = rootEl();
     const notes = root.querySelectorAll('input[placeholder^="Notes"], input[placeholder="Notes..."], textarea[placeholder^="Notes"]');
 
@@ -326,15 +330,10 @@
 
       let btn = siteButtons.get(sid);
       const needsNew =
-        !btn ||
-        !btn.isConnected ||                     // <- button was removed by a re-render
-        btn.dataset.siteId !== sid ||
-        btn.previousElementSibling !== input;   // <- not attached to THIS input
+        !btn || !btn.isConnected || btn.dataset.siteId !== sid || btn.previousElementSibling !== input;
 
       if (needsNew){
-        if (btn && btn.isConnected && btn.parentElement) {
-          try { btn.parentElement.removeChild(btn); } catch {}
-        }
+        if (btn && btn.isConnected && btn.parentElement) { try{ btn.parentElement.removeChild(btn); }catch(_){} }
         btn = document.createElement('button');
         btn.type='button';
         btn.className='bs-done-btn';
@@ -346,21 +345,25 @@
         btn.addEventListener('click', async (e)=>{
           e.preventDefault(); e.stopPropagation();
           const willBeDone = !btn.classList.contains('done');
-          // stick optimistic state
-          optimistic.set(sid, { status: willBeDone ? 'completed' : 'in_progress', t: Date.now() });
+
+          // optimistic: persist to localStorage so it survives re-renders
+          optSet(sid, willBeDone ? 'completed' : 'in_progress');
+
+          // immediate UI
           setBtnUI(btn, willBeDone);
+
           try{
             await writeProgress(sid, willBeDone ? 'completed' : 'in_progress', input.value||'');
           }catch(err){
             // revert on failure
-            optimistic.delete(sid);
+            optClear(sid);
             setBtnUI(btn, !willBeDone);
             console.error('Save failed:', err);
           }
         });
 
         const saveNote = async () => {
-          const opt = optimistic.get(sid);
+          const opt = optGet(sid);
           const status = opt ? opt.status : (btn.classList.contains('done') ? 'completed' : 'in_progress');
           try{ await writeProgress(sid, status, input.value||''); }catch(e){ console.error(e); }
         };
@@ -368,36 +371,37 @@
         input.addEventListener('blur',   saveNote);
       }
 
-      // reflect current state -> UI (optimistic overrides Firestore while fresh)
+      // reflect current state -> UI
       const info = getPerSiteForId(perSiteCache, sid) || {};
-      const opt  = optimistic.get(sid);
-      const status = (opt && (Date.now() - opt.t) < OPT_TTL_MS) ? opt.status : info.status;
-      setBtnUI(btn, (String(status||'').toLowerCase() === 'completed'));
+      const opt  = optGet(sid);
+      const effectiveStatus = opt ? opt.status : info.status;
+      setBtnUI(btn, String(effectiveStatus||'').toLowerCase()==='completed');
 
-      // don't clobber current typing
+      // keep notes in sync unless user is typing
       const cachedNote = (info.note || '');
       if (document.activeElement !== input && typeof cachedNote === 'string' && input.value !== cachedNote) {
         input.value = cachedNote;
       }
 
-      hideAssignedChips(input.closest('li, .list-item, .sidebar-row, .item, div') || root);
+      // hide leftover “assigned” chips
+      const container = input.closest('li, .list-item, .sidebar-row, .item, div') || root;
+      container.querySelectorAll('.mini-pill,.badge,.tag,.status').forEach(n=>n.style.display='none');
     });
   }
 
-  // Refresh on DOM changes (the sidebar re-renders)
+  // Observe DOM because sidebar re-renders
   const observer = new MutationObserver(() => { requestAnimationFrame(injectButtons); });
-  const startObserver = () => {
-    const root = rootEl();
-    if (!root) return;
-    observer.observe(root, { childList: true, subtree: true });
-  };
+  function startObserver(){
+    const root = rootEl(); if (!root) return;
+    observer.observe(root, { childList:true, subtree:true });
+  }
 
-  // run once + keep tidy for a minute as a safety net
+  // initial pass + safety refresh
   const iv = setInterval(()=>requestAnimationFrame(injectButtons), 1000);
   setTimeout(()=>clearInterval(iv), 60000);
-  requestAnimationFrame(() => { injectButtons(); startObserver(); });
+  requestAnimationFrame(()=>{ injectButtons(); startObserver(); });
 
-  // live snapshot -> keep UI in sync, but do not fight the optimistic state
+  // live Firestore snapshot; clear optimistic entries when confirmed
   firebase.auth().onAuthStateChanged(async ()=>{
     const taskId = await ensureTaskId();
     if (!taskId) { console.warn('No assignment id; live sync disabled'); return; }
@@ -405,11 +409,12 @@
       const data = snap.data() || {};
       perSiteCache = data.perSite || {};
 
-      // clear optimistic entries that Firestore has now confirmed
-      for (const [sid, o] of optimistic) {
+      // clear local optimistic entries that match server state
+      Object.keys(perSiteCache).forEach(sid=>{
         const s = String(getPerSiteForId(perSiteCache, sid)?.status || '').toLowerCase();
-        if ((o.status || '').toLowerCase() === s) optimistic.delete(sid);
-      }
+        const opt = optGet(sid);
+        if (opt && String(opt.status).toLowerCase() === s) optClear(sid);
+      });
 
       requestAnimationFrame(injectButtons);
     });
