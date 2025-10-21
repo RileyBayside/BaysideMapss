@@ -205,7 +205,7 @@
   })();
   </script>
 
- <script>
+<script>
 (function () {
   const db   = firebase.firestore();
   const auth = firebase.auth();
@@ -246,29 +246,15 @@
   function findSiteIdForNotes(input){
     if (input.dataset.siteId) return up(input.dataset.siteId);
 
-    // 1) nearest row-like ancestor
     let el = input.closest('[data-site-id], li, .list-item, .sidebar-row, .item, div');
     for (let hops=0; el && hops<6; hops++, el=el.parentElement){
-      // explicit data attribute wins
       if (el.dataset && el.dataset.siteId){ input.dataset.siteId = up(el.dataset.siteId); return input.dataset.siteId; }
-
-      // the node itself
       let m = matchIdFromNode(el); if (m){ input.dataset.siteId = m; return m; }
-
-      // a <summary> heading (common pattern)
       const sum = el.querySelector && el.querySelector('summary');
       m = matchIdFromNode(sum); if (m){ input.dataset.siteId = m; return m; }
-
-      // previous siblings text
       let p = el.previousElementSibling;
-      while (p){
-        m = matchIdFromNode(p);
-        if (m){ input.dataset.siteId = m; return m; }
-        p = p.previousElementSibling;
-      }
+      while (p){ m = matchIdFromNode(p); if (m){ input.dataset.siteId = m; return m; } p = p.previousElementSibling; }
     }
-
-    // fallback (very defensive)
     const any = matchIdFromNode(document);
     if (any) input.dataset.siteId = any;
     return any || null;
@@ -276,6 +262,15 @@
 
   function hideAssignedChips(container){
     container.querySelectorAll('.mini-pill,.badge,.tag,.status').forEach(n=>n.style.display='none');
+  }
+
+  // case-insensitive + no-‘M’ resolver for perSite cache
+  function getPerSiteForId(perSite, rawId){
+    if (!perSite) return undefined;
+    const idU = up(rawId);
+    const idL = idU.toLowerCase();
+    const noM = idU.replace(/^M/,'');
+    return perSite[idU] ?? perSite[idL] ?? perSite[noM];
   }
 
   async function writeProgress(siteId, status, note){
@@ -303,21 +298,26 @@
   }
 
   // ---------- injection & sync ----------
-  const siteButtons = new Map(); // siteId -> button
+  const siteButtons = new Map(); // siteId -> button element currently in DOM
   const siteInputs  = new Map(); // siteId -> notes input
   let   perSiteCache  = {};      // latest snapshot from assignments
 
-  // Keep UI locked in the clicked state until Firestore confirms it
+  // Keep UI “clicked” until Firestore confirms it
   const optimistic = new Map();  // siteId -> {status, t}
-  const OPT_TTL_MS = 20000;
+  const OPT_TTL_MS = 120000;     // 2 minutes
+
+  function setBtnUI(btn, done){
+    btn.classList.toggle('done', done);
+    btn.textContent = done ? 'Undo' : 'Mark done';
+  }
 
   function injectButtons(){
     const now  = Date.now();
-    // prune stale optimistic entries
     for (const [sid, o] of optimistic) if (now - o.t > OPT_TTL_MS) optimistic.delete(sid);
 
     const root = rootEl();
     const notes = root.querySelectorAll('input[placeholder^="Notes"], input[placeholder="Notes..."], textarea[placeholder^="Notes"]');
+
     notes.forEach(input=>{
       const sid = findSiteIdForNotes(input);
       if (!sid) return;
@@ -325,9 +325,16 @@
       siteInputs.set(sid, input);
 
       let btn = siteButtons.get(sid);
-      if (!btn || btn.dataset.siteId !== sid){
-        if (btn && btn.parentElement) btn.parentElement.removeChild(btn);
+      const needsNew =
+        !btn ||
+        !btn.isConnected ||                     // <- button was removed by a re-render
+        btn.dataset.siteId !== sid ||
+        btn.previousElementSibling !== input;   // <- not attached to THIS input
 
+      if (needsNew){
+        if (btn && btn.isConnected && btn.parentElement) {
+          try { btn.parentElement.removeChild(btn); } catch {}
+        }
         btn = document.createElement('button');
         btn.type='button';
         btn.className='bs-done-btn';
@@ -339,21 +346,15 @@
         btn.addEventListener('click', async (e)=>{
           e.preventDefault(); e.stopPropagation();
           const willBeDone = !btn.classList.contains('done');
-
-          // optimistic state first (sticky during refresh)
+          // stick optimistic state
           optimistic.set(sid, { status: willBeDone ? 'completed' : 'in_progress', t: Date.now() });
-
-          // optimistic UI
-          btn.classList.toggle('done', willBeDone);
-          btn.textContent = willBeDone ? 'Undo' : 'Mark done';
-
+          setBtnUI(btn, willBeDone);
           try{
             await writeProgress(sid, willBeDone ? 'completed' : 'in_progress', input.value||'');
           }catch(err){
             // revert on failure
             optimistic.delete(sid);
-            btn.classList.toggle('done', !willBeDone);
-            btn.textContent = !willBeDone ? 'Undo' : 'Mark done';
+            setBtnUI(btn, !willBeDone);
             console.error('Save failed:', err);
           }
         });
@@ -368,17 +369,14 @@
       }
 
       // reflect current state -> UI (optimistic overrides Firestore while fresh)
-      const info = { ...(perSiteCache[sid] || {}) };
+      const info = getPerSiteForId(perSiteCache, sid) || {};
       const opt  = optimistic.get(sid);
-      if (opt && (Date.now() - opt.t) < OPT_TTL_MS) info.status = opt.status;
+      const status = (opt && (Date.now() - opt.t) < OPT_TTL_MS) ? opt.status : info.status;
+      setBtnUI(btn, (String(status||'').toLowerCase() === 'completed'));
 
-      const isDone = (info.status||'').toLowerCase() === 'completed';
-      btn.classList.toggle('done', isDone);
-      btn.textContent = isDone ? 'Undo' : 'Mark done';
-
-      // don't clobber what the operator is currently typing
-      const cachedNote = (perSiteCache[sid] || {}).note;
-      if (typeof cachedNote === 'string' && document.activeElement !== input && input.value !== cachedNote) {
+      // don't clobber current typing
+      const cachedNote = (info.note || '');
+      if (document.activeElement !== input && typeof cachedNote === 'string' && input.value !== cachedNote) {
         input.value = cachedNote;
       }
 
@@ -386,21 +384,30 @@
     });
   }
 
-  // run once, then keep tidy for a minute (in case the sidebar renders incrementally)
+  // Refresh on DOM changes (the sidebar re-renders)
+  const observer = new MutationObserver(() => { requestAnimationFrame(injectButtons); });
+  const startObserver = () => {
+    const root = rootEl();
+    if (!root) return;
+    observer.observe(root, { childList: true, subtree: true });
+  };
+
+  // run once + keep tidy for a minute as a safety net
   const iv = setInterval(()=>requestAnimationFrame(injectButtons), 1000);
   setTimeout(()=>clearInterval(iv), 60000);
-  requestAnimationFrame(injectButtons);
+  requestAnimationFrame(() => { injectButtons(); startObserver(); });
 
   // live snapshot -> keep UI in sync, but do not fight the optimistic state
   firebase.auth().onAuthStateChanged(async ()=>{
     const taskId = await ensureTaskId();
     if (!taskId) { console.warn('No assignment id; live sync disabled'); return; }
     db.collection('assignments').doc(taskId).onSnapshot(snap=>{
-      perSiteCache = (snap.data()||{}).perSite || {};
+      const data = snap.data() || {};
+      perSiteCache = data.perSite || {};
 
       // clear optimistic entries that Firestore has now confirmed
       for (const [sid, o] of optimistic) {
-        const s = (perSiteCache[sid]?.status || '').toLowerCase();
+        const s = String(getPerSiteForId(perSiteCache, sid)?.status || '').toLowerCase();
         if ((o.status || '').toLowerCase() === s) optimistic.delete(sid);
       }
 
