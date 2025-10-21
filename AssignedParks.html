@@ -512,5 +512,94 @@
   })();
   </script>
 
+  <script>
+/* --- Lean-map helpers: viewport culling + assigned-only filter --- */
+(function () {
+  // Try to find the Leaflet map object your init code created
+  const map =
+    window.BS_MAP || window.__BS_map || window.map || (window.leafletMap || null);
+  if (!map || !window.L) return; // nothing to do until the map exists
+
+  // Parse focus (assigned) IDs from the URL: ?focus=M0123,M0456
+  const up = (s) => String(s || "").trim().toUpperCase();
+  const focus = new URLSearchParams(location.search).get("focus") || "";
+  const FOCUS_SET = new Set(
+    focus.split(",").map(up).filter(Boolean)
+  );
+
+  // How we decide if a Marker belongs to an assigned ID.
+  // We look for an M#### token in the marker's title or the icon's label text.
+  const idRx = /\bM\d{3,5}\b/i;
+  function markerSiteId(m) {
+    // 1) explicit property used by your code (if present)
+    if (m && m.options && m.options.siteId) return up(m.options.siteId);
+    // 2) Leaflet title/tooltip text
+    if (m && typeof m.getTooltip === "function" && m.getTooltip()) {
+      const t = m.getTooltip().getContent();
+      const mm = String(t || "").toUpperCase().match(idRx);
+      if (mm) return mm[0];
+    }
+    if (m && m.options && m.options.title) {
+      const mm = String(m.options.title || "").toUpperCase().match(idRx);
+      if (mm) return mm[0];
+    }
+    // 3) The DOM label inside the marker icon (your white tag)
+    const txt = (m && m._icon && m._icon.textContent) ? m._icon.textContent : "";
+    const mm = String(txt || "").toUpperCase().match(idRx);
+    return mm ? mm[0] : null;
+  }
+
+  // Toggle a marker's visibility without removing it from the map
+  function setMarkerVisible(m, on) {
+    const icon = m._icon, shadow = m._shadow;
+    if (icon)  icon.style.display  = on ? "" : "none";
+    if (shadow) shadow.style.display = on ? "" : "none";
+  }
+
+  // We run this after every pan/zoom (debounced) to keep only what's needed on-screen.
+  let rafId = 0;
+  function refreshCulling() {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(() => {
+      const padBounds = map.getBounds().pad(0.2); // a little buffer so edges don't flicker
+
+      // Iterate all Leaflet layers the simple way; only adjust Markers (your tags)
+      for (const k in map._layers) {
+        const layer = map._layers[k];
+
+        // Only handle plain L.Marker (the white ID tags)
+        if (layer instanceof L.Marker) {
+          const inView = padBounds.contains(layer.getLatLng());
+          // If we have a focus list, hide anything not assigned, regardless of inView
+          if (FOCUS_SET.size) {
+            const sid = markerSiteId(layer);
+            const isAssigned = !!(sid && FOCUS_SET.has(up(sid)));
+            setMarkerVisible(layer, inView && isAssigned);
+          } else {
+            setMarkerVisible(layer, inView);
+          }
+        }
+      }
+    });
+  }
+
+  // Hook map events
+  map.on("moveend zoomend", refreshCulling);
+
+  // Initial pass (after the current frame so icons exist)
+  setTimeout(refreshCulling, 0);
+
+  // If your layer content streams in over a few seconds, keep things tidy briefly:
+  const tidyUntil = Date.now() + 8000; // 8s after page load
+  const iv = setInterval(() => {
+    refreshCulling();
+    if (Date.now() > tidyUntil) clearInterval(iv);
+  }, 600);
+
+  // Optional: expose a manual refresh for debugging
+  window.BS_refreshCulling = refreshCulling;
+})();
+</script>
+
 </body>
 </html>
