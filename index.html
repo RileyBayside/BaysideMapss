@@ -48,8 +48,9 @@
 
     .badge{ border-radius:999px; padding:4px 8px; font-weight:800; font-size:12px; white-space:nowrap; }
     .badge-amber{ background:#fee2e2; color:#7f1d1d; border:1px solid #fecaca; }
+    .badge-slate{ background:#f1f5f9; color:#334155; border:1px solid #e2e8f0; }
 
-    /* Notes block under each task */
+    /* Notes block under each task (used to show remaining IDs) */
     .task-note{
       margin-top:6px;
       padding:8px 10px;
@@ -61,7 +62,7 @@
       white-space:pre-wrap;
     }
 
-    /* Right-side actions: keep pill & button neatly spaced */
+    /* Right-side actions */
     .task-actions{
       display:inline-flex;
       align-items:center;
@@ -292,10 +293,79 @@
     })();
   </script>
 
-  <!-- Tasks: live listener + renderer (marks task in_progress on open) -->
+  <!-- Tasks: live listener + renderer (filters out completed site IDs and shows Zone at top) -->
   <script>
     (function () {
       const db = firebase.firestore();
+
+      // ---- Progress state (per-task) ----
+      const progressByTask = new Map();     // taskId -> { done:Set<string> }
+      const progressUnsubs = new Map();     // taskId -> () => void
+      let latestItems = [];                 // last assignments snapshot (raw)
+      let mounted = false;
+
+      function upcaseId(x){ return String(x || '').trim().toUpperCase(); }
+
+      function parseIdList(list){
+        if (!list) return [];
+        if (Array.isArray(list)) return list.map(upcaseId).filter(Boolean);
+        // allow comma/space separated strings
+        return String(list).split(/[\s,]+/g).map(upcaseId).filter(Boolean);
+      }
+
+      function baseIdsFromTask(t){
+        if (Array.isArray(t.siteIds)) return parseIdList(t.siteIds);
+        if (t.sites && typeof t.sites === 'object'){
+          // { M0123:{done:false}, M0456:{done:true} }
+          return Object.keys(t.sites).map(upcaseId);
+        }
+        if (t.siteList) return parseIdList(t.siteList);
+        return [];
+      }
+
+      function completedIdsFromTaskFields(t){
+        const out = new Set();
+        parseIdList(t.completedSiteIds).forEach(id => out.add(id));
+        parseIdList(t.completedIds).forEach(id => out.add(id));
+        if (t.sites && typeof t.sites === 'object'){
+          for (const [k,v] of Object.entries(t.sites)){
+            if (v && (v.done || v.status === 'completed' || v.tick === true)){
+              out.add(upcaseId(k));
+            }
+          }
+        }
+        return out;
+      }
+
+      function getLiveDoneSet(taskId){
+        const live = progressByTask.get(taskId);
+        return live?.done || new Set();
+      }
+
+      function computeRemaining(t){
+        const base = baseIdsFromTask(t);
+        const staticDone = completedIdsFromTaskFields(t);
+        const liveDone = getLiveDoneSet(t.id);
+        const done = new Set([...staticDone, ...liveDone]);
+        return base.filter(id => !done.has(id));
+      }
+
+      function zoneTitle(t){
+        // Try to render "Zone X - Name"
+        const zNum = t.zoneNumber ?? t.zoneNo ?? t.zoneNum ?? null;
+        const zNameCandidate = t.zoneName ?? t.area ?? t.suburb ?? t.region ?? null;
+        const zField = (typeof t.zone === 'string') ? t.zone.trim() : null;
+
+        if (zField && /^zone\s*\d+/i.test(zField)) {
+          // Already like "Zone 1 - Wellington Point" or "Zone 2"
+          return zField.replace(/\s*-\s*/,' - ');
+        }
+        if (zNum && zNameCandidate) return `Zone ${zNum} - ${zNameCandidate}`;
+        if (zNum) return `Zone ${zNum}`;
+        if (zNameCandidate) return zNameCandidate;
+        // last fallback: use whatever zone string or a generic label
+        return zField || 'Task';
+      }
 
       async function markTaskStarted(taskId) {
         const uid = firebase.auth().currentUser?.uid || null;
@@ -325,8 +395,14 @@
         const el = document.getElementById('tasks-list');
         if (!el) return;
 
+        // Filter out rows with nothing remaining
+        const toShow = items.map(t => {
+          const remaining = computeRemaining(t);
+          return { t, remaining, total: baseIdsFromTask(t).length };
+        }).filter(x => x.remaining.length > 0);
+
         el.innerHTML = '';
-        if (!items.length) {
+        if (!toShow.length) {
           const p = document.createElement('p');
           p.style.color = '#64748b';
           p.textContent = 'No tasks assigned yet.';
@@ -334,27 +410,27 @@
           return;
         }
 
-        items.forEach((t) => {
+        toShow.forEach(({t, remaining, total}) => {
           const row = document.createElement('div');
           row.className = 'task-row';
 
           const left = document.createElement('div');
           left.className = 'task-main';
 
-          const ids = Array.isArray(t.siteIds) ? t.siteIds.map(s => String(s).toUpperCase()) : [];
-          const focus = ids.join(',');
+          // Top line: Zone X - Name
+          const title = document.createElement('div');
+          title.className = 'task-title';
+
+          const focus = remaining.join(',');
           const dest = focus
             ? `AssignedParks.html?focus=${encodeURIComponent(focus)}&task=${encodeURIComponent(t.id)}`
             : `AssignedParks.html?task=${encodeURIComponent(t.id)}`;
 
-          const title = document.createElement('div');
-          title.className = 'task-title';
-
           const a = document.createElement('a');
           a.className = 'task-link';
-          a.title = 'Open these in the map';
+          a.title = 'Open remaining sites in the map';
           a.href = dest;
-          a.textContent = (t.zone || 'Task') + (ids.length ? ` — ${ids.join(', ')}` : '');
+          a.textContent = zoneTitle(t);
           a.addEventListener('click', async (ev) => {
             ev.preventDefault();
             try { await markTaskStarted(t.id); } catch {}
@@ -363,17 +439,20 @@
           title.appendChild(a);
           left.appendChild(title);
 
+          // Meta line: progress + due
           const meta = document.createElement('div');
           meta.className = 'task-meta';
           const dueDate = t.dueDate?.toDate ? t.dueDate.toDate()
                        : (t.dueDate instanceof Date ? t.dueDate : null);
-          meta.textContent = dueDate ? `Due ${dueDate.toLocaleDateString()}` : 'Assigned';
+          const dueTxt = dueDate ? ` • Due ${dueDate.toLocaleDateString()}` : '';
+          meta.textContent = `${remaining.length} remaining${total ? ` of ${total}`:''}${dueTxt}`;
           left.appendChild(meta);
 
-          if (t.notes && String(t.notes).trim()) {
+          // Remaining IDs block
+          if (remaining.length){
             const note = document.createElement('div');
             note.className = 'task-note';
-            note.textContent = String(t.notes).trim();
+            note.textContent = remaining.join(', ');
             left.appendChild(note);
           }
 
@@ -381,7 +460,7 @@
           right.className = 'task-actions';
 
           const badge = document.createElement('span');
-          badge.className = 'badge badge-amber';
+          badge.className = 'badge badge-slate';
           const s = (t.status || 'assigned').replace('_',' ');
           badge.textContent = s.charAt(0).toUpperCase() + s.slice(1);
           right.appendChild(badge);
@@ -403,7 +482,61 @@
         });
       }
 
+      // Attach live listeners for per-site completion ticks
+      function ensureProgressListeners(taskId){
+        if (progressUnsubs.has(taskId)) return; // already attached
+        const unsubs = [];
+
+        // assignments/{taskId}/sites
+        try {
+          const u1 = db.collection('assignments').doc(taskId).collection('sites')
+            .onSnapshot((snap)=>{
+              const done = new Set(progressByTask.get(taskId)?.done || []);
+              snap.forEach(doc=>{
+                const d = doc.data() || {};
+                const id = upcaseId(d.siteId || d.id || doc.id);
+                if (!id) return;
+                if (d.done === true || d.status === 'completed' || d.tick === true) done.add(id);
+                else if (d.done === false) done.delete(id);
+              });
+              progressByTask.set(taskId, { done });
+              if (mounted) renderTasks(latestItems);
+            }, (e)=>console.warn('sites sublistener error', e));
+          unsubs.push(u1);
+        } catch(e){ /* ignore */ }
+
+        // assignments/{taskId}/completions
+        try {
+          const u2 = db.collection('assignments').doc(taskId).collection('completions')
+            .onSnapshot((snap)=>{
+              const done = new Set(progressByTask.get(taskId)?.done || []);
+              snap.forEach(doc=>{
+                const d = doc.data() || {};
+                const id = upcaseId(d.siteId || doc.id);
+                if (id) done.add(id);
+              });
+              progressByTask.set(taskId, { done });
+              if (mounted) renderTasks(latestItems);
+            }, (e)=>console.warn('completions sublistener error', e));
+          unsubs.push(u2);
+        } catch(e){ /* ignore */ }
+
+        progressUnsubs.set(taskId, ()=>unsubs.forEach(u=>{ try{ u(); }catch{} }));
+      }
+
+      function teardownMissingProgressListeners(currentIds){
+        const keep = new Set(currentIds);
+        for (const [tid, unsub] of progressUnsubs.entries()){
+          if (!keep.has(tid)){
+            try{ unsub(); }catch{}
+            progressUnsubs.delete(tid);
+            progressByTask.delete(tid);
+          }
+        }
+      }
+
       window.startTasksListener = function (uid) {
+        mounted = true;
         return db.collection('assignments')
           .where('userId', '==', uid)
           .onSnapshot((snap) => {
@@ -414,7 +547,11 @@
               items.push({ id: doc.id, ...d });
             });
 
-            // Sort: due date first (earliest), then newest createdAt
+            // Keep listeners aligned with current tasks
+            items.forEach(it => ensureProgressListeners(it.id));
+            teardownMissingProgressListeners(items.map(x => x.id));
+
+            // Sort: due date (earliest) then newest created
             items.sort((a, b) => {
               const ad = a.dueDate?.toDate ? a.dueDate.toDate() : (a.dueDate instanceof Date ? a.dueDate : null);
               const bd = b.dueDate?.toDate ? b.dueDate.toDate() : (b.dueDate instanceof Date ? b.dueDate : null);
@@ -426,6 +563,7 @@
               return (bc || 0) - (ac || 0);
             });
 
+            latestItems = items;
             renderTasks(items);
           }, (err) => {
             console.warn('tasks listener error:', err);
