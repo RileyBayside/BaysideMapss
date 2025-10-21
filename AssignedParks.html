@@ -295,29 +295,35 @@
     }
     function optClear(siteId){ try{ localStorage.removeItem(optKey(siteId)); }catch(_){} }
 
-    async function writeProgress(siteId, status, note){
-      const uid = auth.currentUser?.uid || null;
-      const taskId = await ensureTaskId();
-      const ops = [];
+async function writeProgress(siteId, status, note){
+  const uid = auth.currentUser?.uid || null;
+  const taskId = await ensureTaskId();
 
-      if (taskId){
-        const update = {};
-        update[`perSite.${siteId}.status`]      = status;
-        update[`perSite.${siteId}.note`]        = (note||'').trim();
-        update[`perSite.${siteId}.operatorUid`] = uid;
-        update[`perSite.${siteId}.updatedAt`]   = firebase.firestore.FieldValue.serverTimestamp();
-        update[`perSite.${siteId}.completedAt`] = (status==='completed') ? firebase.firestore.FieldValue.serverTimestamp() : null;
-        ops.push(db.collection('assignments').doc(taskId).set(update,{merge:true}));
-      }
-      ops.push(db.collection('work_logs').add({
-        assignmentId: taskId || null,
-        siteId, status,
-        note: (note||'').trim(),
-        operatorUid: uid,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-      }));
-      await Promise.all(ops);
+  if (taskId){
+    const update = {};
+    update[`perSite.${siteId}.status`]      = status;
+    update[`perSite.${siteId}.note`]        = (note||'').trim();
+    update[`perSite.${siteId}.operatorUid`] = uid;
+    update[`perSite.${siteId}.updatedAt`]   = firebase.firestore.FieldValue.serverTimestamp();
+    update[`perSite.${siteId}.completedAt`] = (status==='completed')
+                                              ? firebase.firestore.FieldValue.serverTimestamp()
+                                              : null;
+    try {
+      await db.collection('assignments').doc(taskId).set(update, { merge:true });
+    } catch (e) {
+      if (e.code !== 'permission-denied') throw e;   // ignore permission-denied here
+      console.warn('assignments update blocked for operator; logging only');
     }
+  }
+
+  await db.collection('work_logs').add({
+    assignmentId: taskId || null,
+    siteId, status,
+    note: (note||'').trim(),
+    operatorUid: uid,
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
 
     // ---------- injection & sync ----------
     const siteButtons = new Map(); // siteId -> button element currently in DOM
@@ -367,13 +373,16 @@
 
             try{
               await writeProgress(sid, willBeDone ? 'completed' : 'in_progress', input.value||'');
-            }catch(err){
-              // revert on failure
-              optClear(sid);
-              setBtnUI(btn, !willBeDone);
-              console.error('Save failed:', err);
-            }
-          });
+            } catch (err) {
+  // If rules block the assignment write, KEEP the optimistic UI.
+  if (err?.code !== 'permission-denied') {
+    optClear(sid);
+    setBtnUI(btn, !willBeDone);
+  } else {
+    console.warn('assignments update blocked; keeping optimistic UI');
+  }
+}
+
 
           const saveNote = async () => {
             const opt = optGet(sid);
