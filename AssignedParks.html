@@ -48,6 +48,13 @@
     #sidebar #toggle-all{ display:block; width:calc(100% - 24px); margin:10px 12px 8px; background:var(--accent); }
     #sidebar #toggle-all:hover{ background:var(--accent-600); }
 
+    /* NEW: full-width utility buttons (Home/Admin etc.) */
+    #sidebar .wide-btn{
+      display:block; width:calc(100% - 24px); margin:8px 12px;
+      background:#111827; color:#fff;
+    }
+    #sidebar .wide-btn:hover{ background:#0b1220; }
+
     /* Sidebar content spacing */
     #sidebar #sidebar-content{ padding:8px 12px 16px; }
 
@@ -117,12 +124,15 @@
       <div class="title">Assigned Parks</div>
     </div>
 
+    <!-- NEW: Return home button -->
+    <button class="wide-btn" id="homeBtn" type="button" title="Back to Dashboard">Return home</button>
+
     <button id="toggle-all">Collapse All</button>
     <div id="sidebar-content"></div>
 
-    <div style="padding:10px 12px 16px">
-      <button onclick="adminLogin()">Admin Login</button>
-      <div id="admin-tools" style="display:none; margin-top:8px; display:grid; gap:6px">
+    <div style="padding:6px 0 14px">
+      <button class="wide-btn" onclick="adminLogin()">Admin Login</button>
+      <div id="admin-tools" style="display:none; margin-top:6px; padding:0 12px; display:grid; gap:6px">
         <button onclick="exportPDFCouncil()" style="background:#111827">PDF report for Council</button>
         <button onclick="exportPDFBayside()" style="background:#111827">PDF Report for Bayside</button>
         <button onclick="clearUserData()" style="background:#64748b">Clear All User Data</button>
@@ -143,6 +153,13 @@
   <script src="sidebar.js"></script>
   <script>
     (function(){
+      // Home button wiring
+      document.getElementById('homeBtn')?.addEventListener('click', ()=> {
+        // preserve a breadcrumb if you want (optional)
+        try{ sessionStorage.setItem('bayside_prev', location.href); }catch(_){}
+        location.href = 'index.html';
+      });
+
       // Fallback init only if not already initialised by script.js
       try{
         var mapDiv = document.getElementById('map');
@@ -304,7 +321,6 @@
       const base = perSiteCache[sid] || {};
       const log  = latestFromLogs[sid] || {};
       const pick = {};
-      // prefer newest log values
       pick.status = (log.status || base.status || '').toLowerCase();
       pick.note   = (log.note   != null ? log.note   : base.note) || '';
       return pick;
@@ -323,7 +339,7 @@
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
       });
 
-      // If you want admins to also mirror into assignments, uncomment this block:
+      // Optional mirror into assignments for admins only (kept commented)
       /*
       try {
         const u = auth.currentUser;
@@ -450,51 +466,51 @@
       }
     });
 
-      // live listeners for work_logs (read only current operator's logs to satisfy rules)
-  firebase.auth().onAuthStateChanged(async (u)=>{
-    if (!u) return;
-    const uid = u.uid;
+    // live listeners for work_logs (read only current operator's logs to satisfy rules)
+    firebase.auth().onAuthStateChanged(async (u)=>{
+      if (!u) return;
+      const uid = u.uid;
 
-    // work out which site IDs are shown
-    const params = new URLSearchParams(location.search);
-    let ids = (params.get('focus')||'')
-      .split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
-    if (!ids.length) {
-      const tid = await ensureTaskId();
-      if (tid) {
-        try {
-          const s = await firebase.firestore().collection('assignments').doc(tid).get();
-          ids = (s.data()?.siteIds || []).map(x=>String(x).toUpperCase());
-        } catch {}
+      // work out which site IDs are shown
+      const params = new URLSearchParams(location.search);
+      let ids = (params.get('focus')||'')
+        .split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+      if (!ids.length) {
+        const tid = await ensureTaskId();
+        if (tid) {
+          try {
+            const s = await firebase.firestore().collection('assignments').doc(tid).get();
+            ids = (s.data()?.siteIds || []).map(x=>String(x).toUpperCase());
+          } catch {}
+        }
       }
-    }
-    const wanted = new Set(ids);
+      const wanted = new Set(ids);
 
-    // IMPORTANT: matches rules (operatorUid == request.auth.uid)
-    firebase.firestore().collection('work_logs')
-      .where('operatorUid','==', uid)
-      .onSnapshot((snap)=>{
-        snap.docChanges().forEach(ch=>{
-          const w = ch.doc.data() || {};
-          const sid = String(w.siteId||'').toUpperCase();
-          if (!wanted.has(sid)) return;
-          const t = (w.timestamp?.toMillis?.() ?? w.completedAt?.toMillis?.() ?? w.updatedAt?.toMillis?.() ?? 0);
-          const cur = latestFromLogs[sid];
-          if (!cur || t > (cur._t||0)){
-            latestFromLogs[sid] = {
-              status:(w.status||'').toLowerCase(),
-              note:  (w.note||'').trim(),
-              _t:    t
-            };
-          }
+      // IMPORTANT: this query matches your rules (operatorUid == request.auth.uid)
+      firebase.firestore().collection('work_logs')
+        .where('operatorUid','==', uid)
+        .onSnapshot((snap)=>{
+          snap.docChanges().forEach(ch=>{
+            const w = ch.doc.data() || {};
+            const sid = String(w.siteId||'').toUpperCase();
+            if (!wanted.has(sid)) return;
+            const t = (w.timestamp?.toMillis?.() ?? w.completedAt?.toMillis?.() ?? w.updatedAt?.toMillis?.() ?? 0);
+            const cur = latestFromLogs[sid];
+            if (!cur || t > (cur._t||0)){
+              latestFromLogs[sid] = {
+                status:(w.status||'').toLowerCase(),
+                note:  (w.note||'').trim(),
+                _t:    t
+              };
+            }
+          });
+          requestAnimationFrame(injectButtons);
+        }, (err)=>{
+          console.warn('work_logs listener error:', err);
         });
-        requestAnimationFrame(injectButtons);
-      }, (err)=>{
-        console.warn('work_logs listener error:', err);
-      });
-  });
-})();
-</script>
+    });
+  })();
+  </script>
 
 </body>
 </html>
