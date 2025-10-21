@@ -601,5 +601,158 @@
 })();
 </script>
 
+  <!-- Add this button in the sidebar (where your other buttons live). If you already have a control block, put it near “Expand All”. -->
+<script>
+(function injectLockButton(){
+  const side = document.getElementById('sidebar');
+  if (!side) return;
+
+  // Insert the button just under the “Expand All” button
+  const anchor = document.getElementById('toggle-all');
+  const btn = document.createElement('button');
+  btn.id = 'lock-assigned-btn';
+  btn.textContent = 'Lock to assigned area';
+  btn.style.margin = '0 12px 8px';   // match your spacing
+  btn.style.width  = 'calc(100% - 24px)';
+  btn.style.background = 'var(--accent)';
+  btn.addEventListener('click', () => {
+    if (window.__BS_lockAssigned?.locked) {
+      window.__BS_lockAssigned.unlock();
+    } else {
+      window.__BS_lockAssigned.lock();
+    }
+  });
+
+  if (anchor && anchor.parentNode) {
+    anchor.insertAdjacentElement('afterend', btn);
+  } else {
+    // fallback: append near top
+    const wrap = document.createElement('div');
+    wrap.style.padding = '10px 12px 0';
+    wrap.appendChild(btn);
+    side.insertBefore(wrap, side.children[1] || null);
+  }
+})();
+</script>
+
+<!-- Lock-to-assignment logic -->
+<script>
+(function lockToAssignedArea(){
+  const map =
+    window.BS_MAP || window.__BS_map || window.map || (window.leafletMap || null);
+  if (!map || !window.L) return;
+
+  const up = (s) => String(s || '').trim().toUpperCase();
+  const idRx = /\bM\d{3,5}\b/i;
+
+  // Read focus list from URL
+  const focusQ = new URLSearchParams(location.search).get('focus') || '';
+  const FOCUS_SET = new Set(focusQ.split(',').map(up).filter(Boolean));
+
+  // Helper: try to read an ID from a Marker (matches your white tags)
+  function markerSiteId(m) {
+    if (!m) return null;
+    if (m.options && m.options.siteId) return up(m.options.siteId);
+    if (typeof m.getTooltip === 'function' && m.getTooltip()) {
+      const t = m.getTooltip().getContent();
+      const mm = String(t || '').toUpperCase().match(idRx);
+      if (mm) return mm[0];
+    }
+    if (m.options && m.options.title) {
+      const mm = String(m.options.title || '').toUpperCase().match(idRx);
+      if (mm) return mm[0];
+    }
+    const txt = (m._icon && m._icon.textContent) ? m._icon.textContent : '';
+    const mm = String(txt || '').toUpperCase().match(idRx);
+    return mm ? mm[0] : null;
+  }
+
+  function assignedBounds() {
+    let b = null;
+    for (const k in map._layers) {
+      const lyr = map._layers[k];
+      if (!(lyr instanceof L.Marker)) continue;
+      const sid = markerSiteId(lyr);
+      if (!sid || (FOCUS_SET.size && !FOCUS_SET.has(sid))) continue;
+      b = b ? b.extend(lyr.getLatLng()) : L.latLngBounds(lyr.getLatLng(), lyr.getLatLng());
+    }
+    return b;
+  }
+
+  let locked = false;
+  let lastBounds = null;
+
+  function updateButton() {
+    const btn = document.getElementById('lock-assigned-btn');
+    if (!btn) return;
+    btn.textContent = locked ? 'Unlock map area' : 'Lock to assigned area';
+  }
+
+  function lock() {
+    const b = assignedBounds();
+    if (!b) {               // markers may not be ready yet—try again shortly
+      setTimeout(lock, 500);
+      return;
+    }
+    lastBounds = b.pad(0.15);     // small margin so panning feels natural
+    map.setMaxBounds(lastBounds);
+    map.options.maxBoundsViscosity = 1.0;  // “sticky” at the edge
+    // Fit once (don’t snap again if user already moved)
+    try { map.fitBounds(lastBounds, { padding:[24,24] }); } catch(e) {}
+    locked = true;
+    updateButton();
+    // Remember preference this session
+    try { sessionStorage.setItem('bs_lock_assigned', '1'); } catch(_){}
+  }
+
+  function unlock() {
+    map.setMaxBounds(null);
+    map.options.maxBounds = null;
+    map.options.maxBoundsViscosity = 0;
+    locked = false;
+    updateButton();
+    try { sessionStorage.removeItem('bs_lock_assigned'); } catch(_){}
+  }
+
+  // If focus is present, auto-lock once the markers are likely on the map
+  const shouldAutoLock = FOCUS_SET.size > 0;
+  if (shouldAutoLock || sessionStorage.getItem('bs_lock_assigned') === '1') {
+    // try a few times in case markers stream in
+    let attempts = 0;
+    const iv = setInterval(() => {
+      attempts++;
+      const b = assignedBounds();
+      if (b || attempts >= 20) { // ~10s max
+        clearInterval(iv);
+        lock();
+      }
+    }, 500);
+  }
+
+  // Expose for the button click
+  window.__BS_lockAssigned = { lock, unlock, get locked(){ return locked; } };
+
+  // If markers are added dynamically later, keep bounds generous but don’t auto-jump
+  let rafId = 0;
+  function maybeExpandBoundsOnNewMarkers() {
+    if (!locked || !lastBounds) return;
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(() => {
+      const b = assignedBounds();
+      if (b && !lastBounds.contains(b)) {
+        lastBounds = b.pad(0.15);
+        map.setMaxBounds(lastBounds);
+      }
+    });
+  }
+  // cheap listener: run a few seconds as layers arrive
+  const tidyUntil = Date.now() + 8000;
+  const tidier = setInterval(() => {
+    maybeExpandBoundsOnNewMarkers();
+    if (Date.now() > tidyUntil) clearInterval(tidier);
+  }, 600);
+})();
+</script>
+
 </body>
 </html>
