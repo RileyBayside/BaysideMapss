@@ -377,9 +377,10 @@
         // Title: Zone X - Name
         const title = document.createElement('div');
         title.className = 'task-title';
+        // AFTER (adds autolock=1) 
         const dest = remaining.length
-          ? `AssignedParks.html?focus=${encodeURIComponent(remaining.join(','))}&task=${encodeURIComponent(t.id)}`
-          : `AssignedParks.html?task=${encodeURIComponent(t.id)}`;
+        ? `AssignedParks.html?focus=${encodeURIComponent(remaining.join(','))}&task=${encodeURIComponent(t.id)}&autolock=1`
+        : `AssignedParks.html?task=${encodeURIComponent(t.id)}&autolock=1`;
 
         const a = document.createElement('a');
         a.className = 'task-link';
