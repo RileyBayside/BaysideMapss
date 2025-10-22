@@ -661,8 +661,133 @@
       setTimeout(startWhenReady, 2000); // safety
     })();
   </script>
-</body>
-</html>
+
+  <script>
+/* Race-proof autolock to assigned sites */
+(function autoLockToAssigned(){
+  const QS = new URLSearchParams(location.search);
+  const AUTOLOCK = QS.get('autolock') === '1';
+  const FOCUS_SET = new Set((QS.get('focus')||'')
+                    .split(',').map(s=>String(s).trim().toUpperCase()).filter(Boolean));
+  const idRx = /\bM\d{3,5}\b/i;
+  const up = s => String(s||'').toUpperCase();
+
+  function getMap(){
+    return window.BS_MAP || window.__BS_map || window.map || window.leafletMap || null;
+  }
+
+  function waitForMap(cb){
+    let tries = 0;
+    (function tick(){
+      const m = getMap();
+      // Leaflet sets _leaflet_id when the container has a map
+      if (m && m._leaflet_id) { cb(m); return; }
+      if (++tries > 120){ cb(m); return; } // give up after ~12s
+      setTimeout(tick, 100);
+    })();
+  }
+
+  function siteIdFromLayer(lyr){
+    if (!lyr) return null;
+    // explicit
+    if (lyr.options && lyr.options.siteId) return up(lyr.options.siteId);
+    // title
+    if (lyr.options && lyr.options.title){
+      const m = up(lyr.options.title).match(idRx); if (m) return m[0];
+    }
+    // tooltip
+    if (typeof lyr.getTooltip === 'function' && lyr.getTooltip()){
+      const t = lyr.getTooltip().getContent();
+      const m = up(t||'').match(idRx); if (m) return m[0];
+    }
+    // icon text (your white tags)
+    const txt = (lyr._icon && lyr._icon.textContent) ? lyr._icon.textContent : '';
+    const m = up(txt).match(idRx); if (m) return m[0];
+
+    // vector layers (if any store the id in options.name)
+    if (typeof lyr.getBounds === 'function' && lyr.options && lyr.options.name){
+      const mm = up(lyr.options.name).match(idRx); if (mm) return mm[0];
+    }
+    return null;
+  }
+
+  function setMarkerVisible(marker, on){
+    if (marker._icon)  marker._icon.style.display  = on ? '' : 'none';
+    if (marker._shadow) marker._shadow.style.display = on ? '' : 'none';
+  }
+
+  waitForMap(function(map){
+    if (!map || !window.L) return;
+
+    let fitDone = false;
+    let maxBounds = null;
+
+    function computeAssignedBounds(){
+      let b = null;
+      for (const k in map._layers){
+        const lyr = map._layers[k];
+
+        // Markers (your white ID tags are L.Marker with a divIcon)
+        if (lyr instanceof L.Marker){
+          const sid = siteIdFromLayer(lyr);
+          const assigned = !FOCUS_SET.size || (sid && FOCUS_SET.has(sid));
+
+          // Hide non-assigned markers when focusing
+          if (FOCUS_SET.size) setMarkerVisible(lyr, assigned);
+          if (!assigned) continue;
+
+          const ll = lyr.getLatLng && lyr.getLatLng();
+          if (ll) b = b ? b.extend(ll) : L.latLngBounds(ll, ll);
+        }
+
+        // Optional: if you have polygons for sites
+        else if (typeof lyr.getBounds === 'function' && FOCUS_SET.size){
+          const sid = siteIdFromLayer(lyr);
+          if (sid && FOCUS_SET.has(sid)){
+            const bb = lyr.getBounds();
+            if (bb && bb.isValid()) b = b ? b.extend(bb) : bb.clone();
+          }
+        }
+      }
+      return b;
+    }
+
+    function tryFitAndLock(){
+      const b = computeAssignedBounds();
+      if (!b || !b.isValid()) return false;
+
+      if (!fitDone){
+        const padded = b.pad(0.15);
+        try { map.fitBounds(padded, { padding:[24,24] }); } catch {}
+        if (AUTOLOCK || FOCUS_SET.size){
+          maxBounds = padded;
+          map.setMaxBounds(maxBounds);
+          map.options.maxBoundsViscosity = 1.0; // “sticky” edges
+        }
+        fitDone = true;
+      } else if (maxBounds){
+        // If new assigned markers stream in, expand the lock area
+        if (!maxBounds.contains(b)){
+          maxBounds = b.pad(0.15);
+          map.setMaxBounds(maxBounds);
+        }
+      }
+      return true;
+    }
+
+    // Keep trying while layers stream in, then stop once stable
+    let attempts = 0;
+    const iv = setInterval(()=>{
+      attempts++;
+      const ok = tryFitAndLock();
+      if ((ok && attempts > 4) || attempts > 120) clearInterval(iv);
+    }, 500);
+
+    // Snap immediately as soon as new markers/layers appear
+    map.on('layeradd', tryFitAndLock);
+  });
+})();
+</script>
 
 </body>
 </html>
