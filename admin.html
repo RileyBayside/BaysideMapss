@@ -303,7 +303,7 @@
       }
 
       async function load(){
-        const snap = await db.collection('users').where('role','==','operator').get();
+        const snap = await db.collection('users').where('role','==','operator', 'snipper').get();
         cache = [];
         snap.forEach(doc => cache.push({ id: doc.id, ...doc.data() }));
         render();
