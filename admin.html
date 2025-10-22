@@ -174,7 +174,7 @@
     })();
   </script>
 
-  <!-- ===== Mowing PDF: ALL OPERATORS, COMPLETED TODAY (AEST) — with logo + brand styling ===== -->
+  <!-- ===== Mowing PDF: ALL OPERATORS, COMPLETED TODAY — with logo + brand styling ===== -->
   <script>
     (function () {
       const db = firebase.firestore();
@@ -297,14 +297,14 @@
         // Header with logo and black/red theme
         const headerY = 36;
         if (logoData) {
-          const LOGO_H = 28;           // visually balanced
-          const LOGO_W = LOGO_H * 2.3; // approximate ratio of your logo
+          const LOGO_H = 36;           // ↑ slightly larger logo
+          const LOGO_W = LOGO_H * 2.3; // keep aspect ratio
           doc.addImage(logoData, 'PNG', marginX, headerY - 20, LOGO_W, LOGO_H);
         }
 
         doc.setTextColor(...BRAND_BLACK);
         doc.setFont('helvetica','bold'); doc.setFontSize(16);
-        doc.text('Parks Mowing — Completed Today (AEST)', marginX, headerY + 18);
+        doc.text('Parks Mowing — Completed Today', marginX, headerY + 18); // removed "(AEST)" from title
 
         doc.setFont('helvetica','normal'); doc.setFontSize(11);
         doc.setTextColor(...SLATE);
