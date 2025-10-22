@@ -147,26 +147,78 @@
   <!-- Leaflet -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-  <!-- Suppress double-init from shared map bootstrap -->
-  <script>window.BS_DISABLE_AUTO_INIT = true;</script>
-  <script src="script.js"></script>
-  <script src="sidebar.js"></script>
   <script>
-    (function(){
-      // Home button
-      document.getElementById('homeBtn')?.addEventListener('click', ()=>{
-        try{ sessionStorage.setItem('bayside_prev', location.href); }catch(_){}
-        location.href = 'index.html';
-      });
+  (function(){
+  if (!window.L) return;
 
-      // Fallback map init (if script.js didn't already)
-      try{
-        var mapDiv = document.getElementById('map');
-        if (typeof window.initParksMowingMap === 'function' && mapDiv && !mapDiv._leaflet_id){
-          window.initParksMowingMap();
+  const params = new URLSearchParams(location.search);
+  if (params.get('unlock') === '1') return;                    // escape hatch
+  const wanted = new Set((params.get('focus')||'')
+                  .split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
+  if (!wanted.size) return;
+
+  const up=s=>String(s||'').toUpperCase();
+  const idRx=/\bM\d{3,5}\b/;
+
+  function siteIdFromMarker(m){
+    if (m?.options?.siteId) return up(m.options.siteId);
+    if (m?.options?.title){ const mm=up(m.options.title).match(idRx); if(mm) return mm[0]; }
+    if (typeof m?.getTooltip==='function' && m.getTooltip()){
+      const mm=up(m.getTooltip().getContent()).match(idRx); if(mm) return mm[0];
+    }
+    const txt=(m?._icon?.textContent)?up(m._icon.textContent):'';
+    const mm=txt.match(idRx); return mm?mm[0]:null;
+  }
+
+  const state=new Map(); // mapId -> {bounds, matched, fitted, started}
+  function maybeFit(map){
+    const s=state.get(map._leaflet_id); if(!s||s.fitted) return;
+    const min=Math.min(3, wanted.size);
+    if (s.matched>=min || Date.now()-s.started>15000){
+      if (s.bounds){
+        const lock=s.bounds.pad(0.25);
+        try{ map.fitBounds(lock,{padding:[24,24]}); }catch{}
+        map.setMaxBounds(lock);
+        map.options.maxBoundsViscosity=1.0;
+        map.setMinZoom(map.getZoom());                   // stops zooming out to whole region
+      }
+      s.fitted=true;
+    }
+  }
+
+  const origAddTo=L.Marker.prototype.addTo;
+  L.Marker.prototype.addTo=function(map){
+    const res=origAddTo.call(this,map);
+    const sid=siteIdFromMarker(this);
+    if(sid && wanted.has(sid)){
+      let s=state.get(map._leaflet_id);
+      if(!s){ s={bounds:null,matched:0,fitted:false,started:Date.now()}; state.set(map._leaflet_id,s); }
+      const ll=this.getLatLng();
+      if(ll){ s.bounds=s.bounds? s.bounds.extend(ll):L.latLngBounds(ll,ll); s.matched++; maybeFit(map); }
+    }
+    return res;
+  };
+
+  // Safety sweep in case some markers were present before the patch loaded
+  setTimeout(()=>{
+    const maps=[];
+    ['BS_MAP','__BS_map','map','leafletMap'].forEach(k=>{ if(window[k]?.fitBounds) maps.push(window[k]); });
+    maps.forEach(map=>{
+      let s=state.get(map._leaflet_id);
+      if(!s){ s={bounds:null,matched:0,fitted:false,started:Date.now()-14000}; state.set(map._leaflet_id,s); }
+      for(const k in map._layers){
+        const lyr=map._layers[k];
+        if(!(lyr instanceof L.Marker)) continue;
+        const sid=siteIdFromMarker(lyr);
+        if(sid && wanted.has(sid)){
+          const ll=lyr.getLatLng();
+          s.bounds=s.bounds? s.bounds.extend(ll):L.latLngBounds(ll,ll);
+          s.matched++;
         }
-      }catch(e){}
-    })();
+      }
+      maybeFit(map);
+    });
+  },1000);
   </script>
 
   <!-- Sidebar filter to focus list -->
