@@ -8,10 +8,8 @@
   <!-- Fonts & shared styles -->
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <!-- If you already have this file in the repo it will drive most of the look -->
   <link rel="stylesheet" href="dashboard.css" />
 
-  <!-- Lightweight page-specific styles to match your current UI -->
   <style>
     :root{
       --ink:#0f172a; --ink2:#111827; --muted:#e5e7eb; --bg:#f6f7fb; --card:#fff;
@@ -19,7 +17,7 @@
     }
     body{ margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink); }
 
-    /* App bar (re-uses your dashboard look) */
+    /* App bar */
     .appbar{ position:sticky; top:0; z-index:10; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 20px; background:#fff; border-bottom:1px solid var(--muted); }
     .appbar__left{ display:flex; align-items:center; gap:12px }
     .logo{ height:44px; width:auto }
@@ -46,18 +44,18 @@
     .row{ display:flex; gap:10px; flex-wrap:wrap }
     .row .btn{ padding:8px 12px; border-radius:10px }
 
-    /* Work area cards (uses your existing look) */
+    /* Work area cards */
     .section-title{ font-size:18px; font-weight:800; margin:10px 2px 14px; color:#111827 }
     .cards-row{ display:grid; grid-template-columns: repeat(3, 1fr); gap:16px }
     @media (max-width:1024px){ .cards-row{ grid-template-columns: 1fr } }
-    .work-card{ display:flex; flex-direction:column; gap:0; background:#fff; border:1px solid var(--muted); border-radius:16px; overflow:hidden; text-decoration:none; color:inherit; box-shadow:0 8px 26px rgba(16,24,40,.06); }
-    .work-card__img{ aspect-ratio: 16/9; background:#000; display:flex; align-items:center; justify-content:center; overflow:hidden }
+    .work-card{ display:flex; flex-direction:column; background:#fff; border:1px solid var(--muted); border-radius:16px; overflow:hidden; text-decoration:none; color:inherit; box-shadow:0 8px 26px rgba(16,24,40,.06); }
+    .work-card__img{ aspect-ratio: 16/9; display:flex; align-items:center; justify-content:center; overflow:hidden }
     .work-card__img img{ width:100%; height:100%; object-fit:cover }
     .work-card__footer{ display:flex; align-items:center; justify-content:space-between; padding:12px 14px }
     .work-card__title{ font-weight:800; color:#111827 }
   </style>
 
-  <!-- jsPDF for the one-click “Mowing PDF (all operators, completed today)” export -->
+  <!-- jsPDF + autoTable -->
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.1/dist/jspdf.plugin.autotable.min.js"></script>
 </head>
@@ -148,7 +146,7 @@
 
   <footer class="footer-space" style="height:32px"></footer>
 
-  <!-- Small header helpers (show display name, handle logout) -->
+  <!-- Small header helpers -->
   <script>
     (function () {
       const db = firebase.firestore();
@@ -176,13 +174,19 @@
     })();
   </script>
 
-  <!-- ===== Mowing PDF: ALL OPERATORS, COMPLETED TODAY (AEST) ===== -->
+  <!-- ===== Mowing PDF: ALL OPERATORS, COMPLETED TODAY (AEST) — with logo + brand styling ===== -->
   <script>
     (function () {
       const db = firebase.firestore();
       const AEST_TZ = 'Australia/Brisbane';
 
-      // Build today's window in AEST (Queensland has no DST)
+      // Brand palette
+      const BRAND_BLACK = [17,24,39];      // #111827
+      const BRAND_RED   = [209,30,43];     // #d11e2b
+      const SLATE       = [100,116,139];   // #64748b
+      const GRID        = [226,232,240];   // #e2e8f0
+
+      // AEST day window
       function buildAESTWindow(d = new Date()) {
         const y = new Intl.DateTimeFormat('en-CA', { timeZone: AEST_TZ, year: 'numeric' }).format(d);
         const m = new Intl.DateTimeFormat('en-CA', { timeZone: AEST_TZ, month: '2-digit' }).format(d);
@@ -192,13 +196,31 @@
         const end   = new Date(`${iso}T23:59:59+10:00`);
         return { iso, start, end };
       }
-
       function fmtAEST(ts) {
         const d = ts instanceof Date ? ts : (ts?.toDate ? ts.toDate() : new Date(ts));
         return new Intl.DateTimeFormat('en-AU', {
           timeZone: AEST_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
           hour: '2-digit', minute: '2-digit', hour12: false
         }).format(d);
+      }
+
+      // Load logo as dataURL (from ./logo.png)
+      function loadLogoDataURL(){
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            try{
+              const c = document.createElement('canvas');
+              c.width = img.naturalWidth; c.height = img.naturalHeight;
+              const ctx = c.getContext('2d');
+              ctx.drawImage(img, 0, 0);
+              resolve(c.toDataURL('image/png'));
+            }catch(e){ resolve(null); }
+          };
+          img.onerror = () => resolve(null);
+          img.src = 'logo.png';
+        });
       }
 
       async function getUsersMap() {
@@ -213,7 +235,6 @@
         return out;
       }
 
-      // Pull completed work_logs for today; keep only mowing IDs (M####) and dedupe by operator+site (latest wins)
       async function fetchCompletedMowingToday() {
         const { start, end } = buildAESTWindow();
         const snap = await db.collection('work_logs')
@@ -228,7 +249,7 @@
           if (status !== 'completed') return;
 
           const sid = String(d.siteId || '').toUpperCase();
-          if (!/^M\d+$/i.test(sid)) return; // only mowing-style IDs
+          if (!/^M\d+$/i.test(sid)) return; // only mowing IDs
 
           tmp.push({
             operatorUid: d.operatorUid || '',
@@ -250,6 +271,7 @@
 
       async function exportMowingPDFAllOperatorsToday() {
         const { jsPDF } = window.jspdf;
+        const logoData = await loadLogoDataURL();
         const { iso } = buildAESTWindow();
 
         const [usersMap, completed] = await Promise.all([
@@ -262,7 +284,7 @@
           r.timeAEST = fmtAEST(r.ts);
         });
 
-        // Sort by operator then siteId
+        // Sort by operator > site
         completed.sort((a,b) => {
           const n = (a.operator || '').localeCompare(b.operator || '');
           return n !== 0 ? n : (a.siteId || '').localeCompare(b.siteId || '');
@@ -272,27 +294,66 @@
         const pageW = doc.internal.pageSize.getWidth();
         const marginX = 40;
 
-        doc.setFont('helvetica','bold'); doc.setFontSize(16);
-        doc.text('Parks Mowing — Completed Today (AEST)', marginX, 44);
-        doc.setFont('helvetica','normal'); doc.setFontSize(11);
-        doc.text(`Date: ${iso}`, marginX, 64);
-        doc.text(`Records: ${completed.length}`, marginX + 140, 64);
+        // Header with logo and black/red theme
+        const headerY = 36;
+        if (logoData) {
+          const LOGO_H = 28;           // visually balanced
+          const LOGO_W = LOGO_H * 2.3; // approximate ratio of your logo
+          doc.addImage(logoData, 'PNG', marginX, headerY - 20, LOGO_W, LOGO_H);
+        }
 
+        doc.setTextColor(...BRAND_BLACK);
+        doc.setFont('helvetica','bold'); doc.setFontSize(16);
+        doc.text('Parks Mowing — Completed Today (AEST)', marginX, headerY + 18);
+
+        doc.setFont('helvetica','normal'); doc.setFontSize(11);
+        doc.setTextColor(...SLATE);
+        doc.text(`Date: ${iso}`, marginX, headerY + 36);
+
+        // Red accent underline
+        doc.setDrawColor(...BRAND_RED);
+        doc.setLineWidth(1.5);
+        doc.line(marginX, headerY + 44, pageW - marginX, headerY + 44);
+
+        // Table body
         const body = completed.length
           ? completed.map(r => [r.operator, r.siteId, r.note || '', r.timeAEST])
           : [['—','—','No mowing sites completed today','—']];
 
+        // AutoTable with brand styling
         doc.autoTable({
           head: [['Operator', 'Site ID', 'Note', 'Time (AEST)']],
           body,
-          startY: 86,
+          startY: headerY + 62,
           margin: { left: marginX, right: marginX },
-          styles: { font: 'helvetica', fontSize: 10, cellPadding: 6, overflow: 'linebreak' },
+          theme: 'grid',
+          styles: {
+            font: 'helvetica',
+            fontSize: 10,
+            textColor: BRAND_BLACK,
+            lineColor: GRID,
+            lineWidth: 0.6,
+            cellPadding: 6
+          },
+          headStyles: {
+            fillColor: BRAND_RED,
+            textColor: [255,255,255],
+            fontStyle: 'bold',
+            lineColor: BRAND_RED,
+            halign: 'left'
+          },
           columnStyles: {
-            0: { cellWidth: 150 },
+            0: { cellWidth: 160 },
             1: { cellWidth: 70, halign: 'center' },
-            2: { cellWidth: pageW - (marginX*2) - 150 - 70 - 110 },
+            2: { cellWidth: pageW - (marginX*2) - 160 - 70 - 110 },
             3: { cellWidth: 110, halign: 'right' }
+          },
+          didDrawPage: (data) => {
+            // Footer page number (subtle slate)
+            const str = `Page ${doc.internal.getNumberOfPages()}`;
+            doc.setFontSize(9);
+            doc.setTextColor(...SLATE);
+            doc.text(str, pageW - marginX, doc.internal.pageSize.getHeight() - 18, { align: 'right' });
           }
         });
 
