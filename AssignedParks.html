@@ -48,7 +48,7 @@
     #sidebar #toggle-all{ display:block; width:calc(100% - 24px); margin:10px 12px 8px; background:var(--accent); }
     #sidebar #toggle-all:hover{ background:var(--accent-600); }
 
-    /* NEW: full-width utility buttons (Home/Admin etc.) */
+    /* Full-width utility buttons (Home/Admin etc.) */
     #sidebar .wide-btn{
       display:block; width:calc(100% - 24px); margin:8px 12px;
       background:#111827; color:#fff;
@@ -88,7 +88,7 @@
     #sidebar-content .tag,
     #sidebar-content .status { display:none !important; }
 
-    /* Our single Done button style */
+    /* Done button style */
     .bs-done-btn{
       appearance:none; border-radius:10px; border:1px solid #e2e8f0;
       background:#fff; color:#111827; padding:6px 10px; font-weight:800; cursor:pointer;
@@ -124,7 +124,7 @@
       <div class="title">Assigned Parks</div>
     </div>
 
-    <!-- NEW: Return home button -->
+    <!-- Return home -->
     <button class="wide-btn" id="homeBtn" type="button" title="Back to Dashboard">Return home</button>
 
     <button id="toggle-all">Collapse All</button>
@@ -147,26 +147,25 @@
   <!-- Leaflet -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-  <!-- Try to suppress double-init from shared map bootstrap -->
+  <!-- Suppress double-init from shared map bootstrap -->
   <script>window.BS_DISABLE_AUTO_INIT = true;</script>
   <script src="script.js"></script>
   <script src="sidebar.js"></script>
   <script>
     (function(){
-      // Home button wiring
-      document.getElementById('homeBtn')?.addEventListener('click', ()=> {
-        // preserve a breadcrumb if you want (optional)
+      // Home button
+      document.getElementById('homeBtn')?.addEventListener('click', ()=>{
         try{ sessionStorage.setItem('bayside_prev', location.href); }catch(_){}
         location.href = 'index.html';
       });
 
-      // Fallback init only if not already initialised by script.js
+      // Fallback map init (if script.js didn't already)
       try{
         var mapDiv = document.getElementById('map');
         if (typeof window.initParksMowingMap === 'function' && mapDiv && !mapDiv._leaflet_id){
           window.initParksMowingMap();
         }
-      }catch(e){ /* cosmetic if it fails */ }
+      }catch(e){}
     })();
   </script>
 
@@ -330,7 +329,6 @@
       const uid = auth.currentUser?.uid || null;
       const taskId = await ensureTaskId();
 
-      // LOG (operators always allowed by your rules)
       await db.collection('work_logs').add({
         assignmentId: taskId || null,
         siteId, status,
@@ -338,27 +336,6 @@
         operatorUid: uid,
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
       });
-
-      // Optional mirror into assignments for admins only (kept commented)
-      /*
-      try {
-        const u = auth.currentUser;
-        const userSnap = await db.collection('users').doc(u.uid).get();
-        const role = userSnap.data()?.role || '';
-        if (role === 'admin') {
-          const update = {};
-          update[`perSite.${siteId}.status`]      = status;
-          update[`perSite.${siteId}.note`]        = (note||'').trim();
-          update[`perSite.${siteId}.operatorUid`] = u.uid;
-          update[`perSite.${siteId}.updatedAt`]   = firebase.firestore.FieldValue.serverTimestamp();
-          update[`perSite.${siteId}.completedAt`] = (status==='completed')
-                                                    ? firebase.firestore.FieldValue.serverTimestamp()
-                                                    : null;
-          const tid = await ensureTaskId();
-          if (tid) await db.collection('assignments').doc(tid).set(update,{merge:true});
-        }
-      } catch {}
-      */
     }
 
     // ---------- injection & sync ----------
@@ -416,7 +393,6 @@
             try{
               await writeProgress(sid, willBeDone ? 'completed' : 'in_progress', input.value||'');
             }catch(err){
-              // rollback only on unexpected failures
               optimistic.delete(sid);
               setBtnUI(btn, !willBeDone);
               console.error('Save failed:', err);
@@ -432,7 +408,6 @@
           input.addEventListener('blur',   saveNote);
         }
 
-        // reflect EFFECTIVE state -> UI (optimistic overrides freshest logs while fresh)
         const eff = effectiveFor(sid);
         const opt  = optGet(sid);
         const status = (opt?.status || eff.status || '').toLowerCase();
@@ -447,7 +422,6 @@
       });
     }
 
-    // run once, then keep tidy for a minute (in case the sidebar renders incrementally)
     const iv = setInterval(()=>requestAnimationFrame(injectButtons), 1000);
     setTimeout(()=>clearInterval(iv), 60000);
     requestAnimationFrame(injectButtons);
@@ -461,17 +435,16 @@
             perSiteCache = (snap.data()||{}).perSite || {};
             requestAnimationFrame(injectButtons);
           },
-          ()=>{ /* operators might not have read; that's OK */ }
+          ()=>{}
         );
       }
     });
 
-    // live listeners for work_logs (read only current operator's logs to satisfy rules)
+    // live listeners for work_logs (only current operator's logs)
     firebase.auth().onAuthStateChanged(async (u)=>{
       if (!u) return;
       const uid = u.uid;
 
-      // work out which site IDs are shown
       const params = new URLSearchParams(location.search);
       let ids = (params.get('focus')||'')
         .split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
@@ -486,7 +459,6 @@
       }
       const wanted = new Set(ids);
 
-      // IMPORTANT: this query matches your rules (operatorUid == request.auth.uid)
       firebase.firestore().collection('work_logs')
         .where('operatorUid','==', uid)
         .onSnapshot((snap)=>{
@@ -512,372 +484,144 @@
   })();
   </script>
 
+  <!-- Lean map: cull off-screen markers and hide non-assigned tags -->
   <script>
-/* --- Lean-map helpers: viewport culling + assigned-only filter --- */
-(function () {
-  // Try to find the Leaflet map object your init code created
-  const map =
-    window.BS_MAP || window.__BS_map || window.map || (window.leafletMap || null);
-  if (!map || !window.L) return; // nothing to do until the map exists
-
-  // Parse focus (assigned) IDs from the URL: ?focus=M0123,M0456
-  const up = (s) => String(s || "").trim().toUpperCase();
-  const focus = new URLSearchParams(location.search).get("focus") || "";
-  const FOCUS_SET = new Set(
-    focus.split(",").map(up).filter(Boolean)
-  );
-
-  // How we decide if a Marker belongs to an assigned ID.
-  // We look for an M#### token in the marker's title or the icon's label text.
-  const idRx = /\bM\d{3,5}\b/i;
-  function markerSiteId(m) {
-    // 1) explicit property used by your code (if present)
-    if (m && m.options && m.options.siteId) return up(m.options.siteId);
-    // 2) Leaflet title/tooltip text
-    if (m && typeof m.getTooltip === "function" && m.getTooltip()) {
-      const t = m.getTooltip().getContent();
-      const mm = String(t || "").toUpperCase().match(idRx);
-      if (mm) return mm[0];
+  (function () {
+    function getMap() {
+      return (window.BS && window.BS.map) ||
+             window.BS_MAP || window.__BS_map ||
+             window.leafletMap || window.map || null;
     }
-    if (m && m.options && m.options.title) {
-      const mm = String(m.options.title || "").toUpperCase().match(idRx);
-      if (mm) return mm[0];
+    const map = getMap();
+    if (!map || !window.L) return;
+
+    const up = (s) => String(s || "").trim().toUpperCase();
+    const focus = new URLSearchParams(location.search).get("focus") || "";
+    const FOCUS_SET = new Set(focus.split(",").map(up).filter(Boolean));
+    const idRx = /\bM\d{3,5}\b/i;
+
+    function markerSiteId(m) {
+      if (m && m.options && m.options.siteId) return up(m.options.siteId);
+      if (m && typeof m.getTooltip === "function" && m.getTooltip()) {
+        const t = m.getTooltip().getContent();
+        const mm = String(t || "").toUpperCase().match(idRx);
+        if (mm) return mm[0];
+      }
+      if (m && m.options && m.options.title) {
+        const mm = String(m.options.title || "").toUpperCase().match(idRx);
+        if (mm) return mm[0];
+      }
+      const txt = (m && m._icon && m._icon.textContent) ? m._icon.textContent : "";
+      const mm = String(txt || "").toUpperCase().match(idRx);
+      return mm ? mm[0] : null;
     }
-    // 3) The DOM label inside the marker icon (your white tag)
-    const txt = (m && m._icon && m._icon.textContent) ? m._icon.textContent : "";
-    const mm = String(txt || "").toUpperCase().match(idRx);
-    return mm ? mm[0] : null;
-  }
+    function setMarkerVisible(m, on) {
+      const icon = m._icon, shadow = m._shadow;
+      if (icon)  icon.style.display  = on ? "" : "none";
+      if (shadow) shadow.style.display = on ? "" : "none";
+    }
 
-  // Toggle a marker's visibility without removing it from the map
-  function setMarkerVisible(m, on) {
-    const icon = m._icon, shadow = m._shadow;
-    if (icon)  icon.style.display  = on ? "" : "none";
-    if (shadow) shadow.style.display = on ? "" : "none";
-  }
-
-  // We run this after every pan/zoom (debounced) to keep only what's needed on-screen.
-  let rafId = 0;
-  function refreshCulling() {
-    if (rafId) cancelAnimationFrame(rafId);
-    rafId = requestAnimationFrame(() => {
-      const padBounds = map.getBounds().pad(0.2); // a little buffer so edges don't flicker
-
-      // Iterate all Leaflet layers the simple way; only adjust Markers (your tags)
-      for (const k in map._layers) {
-        const layer = map._layers[k];
-
-        // Only handle plain L.Marker (the white ID tags)
-        if (layer instanceof L.Marker) {
-          const inView = padBounds.contains(layer.getLatLng());
-          // If we have a focus list, hide anything not assigned, regardless of inView
-          if (FOCUS_SET.size) {
-            const sid = markerSiteId(layer);
-            const isAssigned = !!(sid && FOCUS_SET.has(up(sid)));
-            setMarkerVisible(layer, inView && isAssigned);
-          } else {
-            setMarkerVisible(layer, inView);
+    let rafId = 0;
+    function refreshCulling() {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        const padBounds = map.getBounds().pad(0.2);
+        for (const k in map._layers) {
+          const layer = map._layers[k];
+          if (layer instanceof L.Marker) {
+            const inView = padBounds.contains(layer.getLatLng());
+            if (FOCUS_SET.size) {
+              const sid = markerSiteId(layer);
+              const isAssigned = !!(sid && FOCUS_SET.has(up(sid)));
+              setMarkerVisible(layer, inView && isAssigned);
+            } else {
+              setMarkerVisible(layer, inView);
+            }
           }
         }
-      }
-    });
-  }
-
-  // Hook map events
-  map.on("moveend zoomend", refreshCulling);
-
-  // Initial pass (after the current frame so icons exist)
-  setTimeout(refreshCulling, 0);
-
-  // If your layer content streams in over a few seconds, keep things tidy briefly:
-  const tidyUntil = Date.now() + 8000; // 8s after page load
-  const iv = setInterval(() => {
-    refreshCulling();
-    if (Date.now() > tidyUntil) clearInterval(iv);
-  }, 600);
-
-  // Optional: expose a manual refresh for debugging
-  window.BS_refreshCulling = refreshCulling;
-})();
-</script>
-
-  <!-- Add this button in the sidebar (where your other buttons live). If you already have a control block, put it near “Expand All”. -->
-<script>
-(function injectLockButton(){
-  const side = document.getElementById('sidebar');
-  if (!side) return;
-
-  // Insert the button just under the “Expand All” button
-  const anchor = document.getElementById('toggle-all');
-  const btn = document.createElement('button');
-  btn.id = 'lock-assigned-btn';
-  btn.textContent = 'Lock to assigned area';
-  btn.style.margin = '0 12px 8px';   // match your spacing
-  btn.style.width  = 'calc(100% - 24px)';
-  btn.style.background = 'var(--accent)';
-  btn.addEventListener('click', () => {
-    if (window.__BS_lockAssigned?.locked) {
-      window.__BS_lockAssigned.unlock();
-    } else {
-      window.__BS_lockAssigned.lock();
+      });
     }
-  });
-
-  if (anchor && anchor.parentNode) {
-    anchor.insertAdjacentElement('afterend', btn);
-  } else {
-    // fallback: append near top
-    const wrap = document.createElement('div');
-    wrap.style.padding = '10px 12px 0';
-    wrap.appendChild(btn);
-    side.insertBefore(wrap, side.children[1] || null);
-  }
-})();
-</script>
-
-<!-- Lock-to-assignment logic -->
-<script>
-(function lockToAssignedArea(){
-  const map =
-    window.BS_MAP || window.__BS_map || window.map || (window.leafletMap || null);
-  if (!map || !window.L) return;
-
-  const up = (s) => String(s || '').trim().toUpperCase();
-  const idRx = /\bM\d{3,5}\b/i;
-
-  // Read focus list from URL
-  const focusQ = new URLSearchParams(location.search).get('focus') || '';
-  const FOCUS_SET = new Set(focusQ.split(',').map(up).filter(Boolean));
-
-  // Helper: try to read an ID from a Marker (matches your white tags)
-  function markerSiteId(m) {
-    if (!m) return null;
-    if (m.options && m.options.siteId) return up(m.options.siteId);
-    if (typeof m.getTooltip === 'function' && m.getTooltip()) {
-      const t = m.getTooltip().getContent();
-      const mm = String(t || '').toUpperCase().match(idRx);
-      if (mm) return mm[0];
-    }
-    if (m.options && m.options.title) {
-      const mm = String(m.options.title || '').toUpperCase().match(idRx);
-      if (mm) return mm[0];
-    }
-    const txt = (m._icon && m._icon.textContent) ? m._icon.textContent : '';
-    const mm = String(txt || '').toUpperCase().match(idRx);
-    return mm ? mm[0] : null;
-  }
-
-  function assignedBounds() {
-    let b = null;
-    for (const k in map._layers) {
-      const lyr = map._layers[k];
-      if (!(lyr instanceof L.Marker)) continue;
-      const sid = markerSiteId(lyr);
-      if (!sid || (FOCUS_SET.size && !FOCUS_SET.has(sid))) continue;
-      b = b ? b.extend(lyr.getLatLng()) : L.latLngBounds(lyr.getLatLng(), lyr.getLatLng());
-    }
-    return b;
-  }
-
-  let locked = false;
-  let lastBounds = null;
-
-  function updateButton() {
-    const btn = document.getElementById('lock-assigned-btn');
-    if (!btn) return;
-    btn.textContent = locked ? 'Unlock map area' : 'Lock to assigned area';
-  }
-
-  function lock() {
-    const b = assignedBounds();
-    if (!b) {               // markers may not be ready yet—try again shortly
-      setTimeout(lock, 500);
-      return;
-    }
-    lastBounds = b.pad(0.15);     // small margin so panning feels natural
-    map.setMaxBounds(lastBounds);
-    map.options.maxBoundsViscosity = 1.0;  // “sticky” at the edge
-    // Fit once (don’t snap again if user already moved)
-    try { map.fitBounds(lastBounds, { padding:[24,24] }); } catch(e) {}
-    locked = true;
-    updateButton();
-    // Remember preference this session
-    try { sessionStorage.setItem('bs_lock_assigned', '1'); } catch(_){}
-  }
-
-  function unlock() {
-    map.setMaxBounds(null);
-    map.options.maxBounds = null;
-    map.options.maxBoundsViscosity = 0;
-    locked = false;
-    updateButton();
-    try { sessionStorage.removeItem('bs_lock_assigned'); } catch(_){}
-  }
-
-  // If focus is present, auto-lock once the markers are likely on the map
-  const shouldAutoLock = FOCUS_SET.size > 0;
-  if (shouldAutoLock || sessionStorage.getItem('bs_lock_assigned') === '1') {
-    // try a few times in case markers stream in
-    let attempts = 0;
+    map.on("moveend zoomend", refreshCulling);
+    setTimeout(refreshCulling, 0);
+    const tidyUntil = Date.now() + 8000;
     const iv = setInterval(() => {
-      attempts++;
-      const b = assignedBounds();
-      if (b || attempts >= 20) { // ~10s max
-        clearInterval(iv);
-        lock();
-      }
-    }, 500);
-  }
-
-  // Expose for the button click
-  window.__BS_lockAssigned = { lock, unlock, get locked(){ return locked; } };
-
-  // If markers are added dynamically later, keep bounds generous but don’t auto-jump
-  let rafId = 0;
-  function maybeExpandBoundsOnNewMarkers() {
-    if (!locked || !lastBounds) return;
-    if (rafId) cancelAnimationFrame(rafId);
-    rafId = requestAnimationFrame(() => {
-      const b = assignedBounds();
-      if (b && !lastBounds.contains(b)) {
-        lastBounds = b.pad(0.15);
-        map.setMaxBounds(lastBounds);
-      }
-    });
-  }
-  // cheap listener: run a few seconds as layers arrive
-  const tidyUntil = Date.now() + 8000;
-  const tidier = setInterval(() => {
-    maybeExpandBoundsOnNewMarkers();
-    if (Date.now() > tidyUntil) clearInterval(tidier);
-  }, 600);
-})();
-</script>
-
-  <script>
-/* Auto-lock to assigned markers (no UI button) */
-(function(){
-
-  const Lmap = window.BS_MAP || window.__BS_map || window.map || window.leafletMap || null;
-  if (!Lmap || !window.L) return;
-
-  // Hide/clean up any lock button you might have added previously
-  const oldBtn = document.getElementById('lock-assigned-btn');
-  if (oldBtn && oldBtn.parentNode) oldBtn.parentNode.removeChild(oldBtn);
-
-  const params = new URLSearchParams(location.search);
-  const hasAutoParam = params.get('autolock') === '1';
-  const hasUnlock    = params.get('unlock') === '1';
-
-  const up = (s)=>String(s||'').trim().toUpperCase();
-  const focusSet = new Set((params.get('focus')||'').split(',').map(up).filter(Boolean));
-  const idRx = /\bM\d{3,5}\b/i;
-
-  // Try to read an ID off a Leaflet marker (title/tooltip/text)
-  function siteIdFromMarker(m){
-    if (!m) return null;
-    if (m.options && m.options.siteId) return up(m.options.siteId);
-    if (m.options && m.options.title){
-      const mm = String(m.options.title).toUpperCase().match(idRx);
-      if (mm) return mm[0];
-    }
-    if (typeof m.getTooltip === 'function' && m.getTooltip()){
-      const txt = m.getTooltip().getContent();
-      const mm = String(txt||'').toUpperCase().match(idRx);
-      if (mm) return mm[0];
-    }
-    const txt = (m._icon && m._icon.textContent) ? m._icon.textContent : '';
-    const mm = String(txt||'').toUpperCase().match(idRx);
-    return mm ? mm[0] : null;
-  }
-
-  function assignedBounds(){
-    let b = null;
-    for (const k in Lmap._layers){
-      const lyr = Lmap._layers[k];
-      if (!(lyr instanceof L.Marker)) continue;
-      const sid = siteIdFromMarker(lyr);
-      // If a focus list exists, restrict to those IDs only
-      if (focusSet.size && (!sid || !focusSet.has(sid))) continue;
-      const ll = lyr.getLatLng();
-      if (!ll) continue;
-      b = b ? b.extend(ll) : L.latLngBounds(ll, ll);
-    }
-    return b;
-  }
-
-  // Best-effort admin detection (so admins can roam unless autolock=1)
-  let isAdmin = false;
-  try {
-    firebase.auth().onAuthStateChanged(async (u)=>{
-      if (!u) return;
-      try {
-        const snap = await firebase.firestore().collection('users').doc(u.uid).get();
-        isAdmin = (snap.data()?.role === 'admin');
-      } catch {}
-    });
-  } catch {}
-
-  let locked = false;
-  let maxB   = null;
-
-  function lockNow() {
-    const b = assignedBounds();
-    if (!b) return false;
-    maxB = b.pad(0.15);
-    try { Lmap.fitBounds(maxB, { padding:[24,24] }); } catch(e) {}
-    Lmap.setMaxBounds(maxB);
-    Lmap.options.maxBoundsViscosity = 1.0;
-    locked = true;
-    return true;
-  }
-
-  function maybeExpandOnNewMarkers(){
-    if (!locked || !maxB) return;
-    const b = assignedBounds();
-    if (b && !maxB.contains(b)){
-      maxB = b.pad(0.15);
-      Lmap.setMaxBounds(maxB);
-    }
-  }
-
-  // Decide if we should auto-lock on this page load
-  function shouldAutoLock(){
-    if (hasUnlock) return false;
-    if (hasAutoParam) return true;      // dashboard sent autolock=1
-    if (focusSet.size > 0 && !isAdmin) return true; // operator via shared URL
-    return false;
-  }
-
-  // Try a few times while markers load
-  function tryLockWithRetries(){
-    let tries = 0;
-    const iv = setInterval(()=>{
-      tries++;
-      if (lockNow() || tries >= 20) clearInterval(iv); // ~10s max
-    }, 500);
-
-    // For a short period, keep expanding the bounds if new markers arrive
-    const until = Date.now() + 8000;
-    const tidier = setInterval(()=>{
-      maybeExpandOnNewMarkers();
-      if (Date.now() > until) clearInterval(tidier);
+      refreshCulling();
+      if (Date.now() > tidyUntil) clearInterval(iv);
     }, 600);
-  }
+    window.BS_refreshCulling = refreshCulling;
+  })();
+  </script>
 
-  // Kick off once auth role likely loaded (but don't block forever)
-  let started = false;
-  const start = ()=>{ if (!started && shouldAutoLock()){ started = true; tryLockWithRetries(); } };
+  <!-- Auto-fit & lock to the assigned area from ?focus=... -->
+  <script>
+  (function () {
+    const params = new URLSearchParams(location.search);
+    const focusIds = (params.get('focus') || '')
+      .split(',')
+      .map(s => s.trim().toUpperCase())
+      .filter(Boolean);
+    if (!focusIds.length) return;
 
-  // Start soon, but allow a moment for the admin flag to resolve
-  setTimeout(start, 400);
-  // Also start after the first pan/zoom (in case map initializes later)
-  Lmap.once('load', start);
-  // Safety: definitely start after ~2s regardless
-  setTimeout(start, 2000);
+    function getMap() {
+      return (window.BS && window.BS.map) ||
+             window.BS_MAP || window.__BS_map ||
+             window.leafletMap || window.map || null;
+    }
+    function siteIdFromLayer(layer) {
+      try {
+        const f = layer.feature || {};
+        const p = f.properties || {};
+        const candidates = [
+          layer.options && layer.options.title,
+          layer.options && layer.options.sid,
+          layer.options && layer.options.siteId,
+          layer.sid, layer.siteId,
+          p.id, p.siteId, p.code, p.name, p.label, p.title
+        ].filter(Boolean);
+        for (const c of candidates) {
+          const m = String(c).toUpperCase().match(/\bM\d{3,5}\b/);
+          if (m) return m[0];
+        }
+      } catch (_) {}
+      return null;
+    }
+    function boundsForIds(map, wantedSet) {
+      let bounds = null, found = 0;
+      map.eachLayer(l => {
+        const sid = siteIdFromLayer(l);
+        if (!sid || !wantedSet.has(sid)) return;
+        let lb = null;
+        if (typeof l.getBounds === 'function') lb = l.getBounds();
+        else if (typeof l.getLatLng === 'function') {
+          const ll = l.getLatLng();
+          lb = L.latLngBounds(ll, ll);
+        }
+        if (lb) { bounds = bounds ? bounds.extend(lb) : L.latLngBounds(lb); found++; }
+      });
+      return { bounds, found };
+    }
+    function waitAndLock() {
+      const map = getMap();
+      if (!map) { setTimeout(waitAndLock, 250); return; }
 
-})();
-</script>
+      const wanted = new Set(focusIds);
+      const start = Date.now();
+      const iv = setInterval(() => {
+        const { bounds, found } = boundsForIds(map, wanted);
+        if (found >= Math.min(wanted.size, 3) || Date.now() - start > 8000) {
+          clearInterval(iv);
+          if (bounds) {
+            map.fitBounds(bounds.pad(0.20), { animate: true });
+            const lock = bounds.pad(0.25);
+            map.setMaxBounds(lock);
+            map.setMinZoom(map.getZoom()); // stop zooming out to the whole LGA
+          }
+        }
+      }, 400);
+    }
+    waitAndLock();
+  })();
+  </script>
 
 </body>
 </html>
