@@ -552,76 +552,91 @@
   })();
   </script>
 
-  <!-- Auto-fit & lock to the assigned area from ?focus=... -->
-  <script>
-  (function () {
-    const params = new URLSearchParams(location.search);
-    const focusIds = (params.get('focus') || '')
-      .split(',')
-      .map(s => s.trim().toUpperCase())
-      .filter(Boolean);
-    if (!focusIds.length) return;
+<script>
+/* Auto fit+lock to ?focus=... as markers are added (race-proof) */
+(function(){
+  if (!window.L) return;
 
-    function getMap() {
-      return (window.BS && window.BS.map) ||
-             window.BS_MAP || window.__BS_map ||
-             window.leafletMap || window.map || null;
-    }
-    function siteIdFromLayer(layer) {
-      try {
-        const f = layer.feature || {};
-        const p = f.properties || {};
-        const candidates = [
-          layer.options && layer.options.title,
-          layer.options && layer.options.sid,
-          layer.options && layer.options.siteId,
-          layer.sid, layer.siteId,
-          p.id, p.siteId, p.code, p.name, p.label, p.title
-        ].filter(Boolean);
-        for (const c of candidates) {
-          const m = String(c).toUpperCase().match(/\bM\d{3,5}\b/);
-          if (m) return m[0];
-        }
-      } catch (_) {}
-      return null;
-    }
-    function boundsForIds(map, wantedSet) {
-      let bounds = null, found = 0;
-      map.eachLayer(l => {
-        const sid = siteIdFromLayer(l);
-        if (!sid || !wantedSet.has(sid)) return;
-        let lb = null;
-        if (typeof l.getBounds === 'function') lb = l.getBounds();
-        else if (typeof l.getLatLng === 'function') {
-          const ll = l.getLatLng();
-          lb = L.latLngBounds(ll, ll);
-        }
-        if (lb) { bounds = bounds ? bounds.extend(lb) : L.latLngBounds(lb); found++; }
-      });
-      return { bounds, found };
-    }
-    function waitAndLock() {
-      const map = getMap();
-      if (!map) { setTimeout(waitAndLock, 250); return; }
+  const params = new URLSearchParams(location.search);
+  if (params.get('unlock') === '1') return;               // escape hatch
+  const wanted = new Set((params.get('focus')||'')
+                  .split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
+  if (!wanted.size) return;
 
-      const wanted = new Set(focusIds);
-      const start = Date.now();
-      const iv = setInterval(() => {
-        const { bounds, found } = boundsForIds(map, wanted);
-        if (found >= Math.min(wanted.size, 3) || Date.now() - start > 8000) {
-          clearInterval(iv);
-          if (bounds) {
-            map.fitBounds(bounds.pad(0.20), { animate: true });
-            const lock = bounds.pad(0.25);
-            map.setMaxBounds(lock);
-            map.setMinZoom(map.getZoom()); // stop zooming out to the whole LGA
-          }
-        }
-      }, 400);
+  const up = s => String(s||'').toUpperCase();
+  const idRx = /\bM\d{3,5}\b/;
+
+  function siteIdFromMarker(m){
+    if (m && m.options && m.options.siteId) return up(m.options.siteId);
+    if (m && m.options && m.options.title){
+      const mm = up(m.options.title).match(idRx); if (mm) return mm[0];
     }
-    waitAndLock();
-  })();
-  </script>
+    if (m && typeof m.getTooltip==='function' && m.getTooltip()){
+      const mm = up(m.getTooltip().getContent()).match(idRx); if (mm) return mm[0];
+    }
+    const txt = (m && m._icon && m._icon.textContent) ? up(m._icon.textContent) : '';
+    const mm = txt.match(idRx); return mm ? mm[0] : null;
+  }
+
+  // Per-map state: we may not know your map variable; use the map passed to addTo()
+  const state = new Map(); // map._leaflet_id -> {bounds, matched, fitted, started}
+
+  function maybeFit(map){
+    const s = state.get(map._leaflet_id);
+    if (!s || s.fitted) return;
+    const min = Math.min(3, wanted.size);                 // fit after a few matches
+    if (s.matched >= min || Date.now() - s.started > 15000){
+      if (s.bounds){
+        const lock = s.bounds.pad(0.25);
+        try { map.fitBounds(lock, { padding:[24,24] }); } catch {}
+        map.setMaxBounds(lock);
+        map.options.maxBoundsViscosity = 1.0;
+        map.setMinZoom(map.getZoom());                    // don’t allow zooming out to the whole LGA
+      }
+      s.fitted = true;
+    }
+  }
+
+  const origAddTo = L.Marker.prototype.addTo;
+  L.Marker.prototype.addTo = function(map){
+    const res = origAddTo.call(this, map);
+    const sid = siteIdFromMarker(this);
+    if (sid && wanted.has(sid)){
+      let s = state.get(map._leaflet_id);
+      if (!s){ s = { bounds:null, matched:0, fitted:false, started:Date.now() }; state.set(map._leaflet_id, s); }
+      const ll = this.getLatLng();
+      if (ll){
+        s.bounds = s.bounds ? s.bounds.extend(ll) : L.latLngBounds(ll, ll);
+        s.matched++;
+        maybeFit(map);
+      }
+    }
+    return res;
+  };
+
+  // Safety: do one sweep a bit later in case some markers existed before this patch loaded
+  setTimeout(()=>{
+    const maps = [];
+    ['BS_MAP','__BS_map','map','leafletMap'].forEach(k => { if (window[k] && window[k].fitBounds) maps.push(window[k]); });
+    maps.forEach(map=>{
+      let s = state.get(map._leaflet_id);
+      if (!s){ s = { bounds:null, matched:0, fitted:false, started:Date.now()-14000 }; state.set(map._leaflet_id, s); }
+      for (const k in map._layers){
+        const lyr = map._layers[k];
+        if (!(lyr instanceof L.Marker)) continue;
+        const sid = siteIdFromMarker(lyr);
+        if (sid && wanted.has(sid)){
+          const ll = lyr.getLatLng();
+          s.bounds = s.bounds ? s.bounds.extend(ll) : L.latLngBounds(ll,ll);
+          s.matched++;
+        }
+      }
+      maybeFit(map);
+    });
+  }, 1000);
+})();
+</script>
+
 
 </body>
 </html>
