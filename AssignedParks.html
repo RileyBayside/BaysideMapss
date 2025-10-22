@@ -3,14 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <title>Assigned Parks</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="logo.png" type="image/png" />
 
-  <!-- Core styles (same as ParksMowing) -->
+  <!-- Core styles -->
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-
-  <!-- Sidebar styles (same as ParksMowing) -->
   <link rel="stylesheet" href="sidebar.css" />
 
   <style>
@@ -48,17 +46,16 @@
     #sidebar #toggle-all{ display:block; width:calc(100% - 24px); margin:10px 12px 8px; background:var(--accent); }
     #sidebar #toggle-all:hover{ background:var(--accent-600); }
 
-    /* Full-width utility buttons (Home/Admin etc.) */
+    /* Full-width utility buttons */
     #sidebar .wide-btn{
       display:block; width:calc(100% - 24px); margin:8px 12px;
       background:#111827; color:#fff;
     }
     #sidebar .wide-btn:hover{ background:#0b1220; }
 
-    /* Sidebar content spacing */
     #sidebar #sidebar-content{ padding:8px 12px 16px; }
 
-    /* Groups / details look compact */
+    /* Groups / details */
     #sidebar-content details{
       border:1px solid var(--muted); border-radius:12px; overflow:hidden;
       background:#fff; margin-bottom:8px;
@@ -67,7 +64,7 @@
       list-style:none; cursor:pointer; user-select:none;
       padding:8px 10px; background:var(--soft-2);
       display:flex; align-items:center; justify-content:space-between; gap:10px;
-      font-weight:700; color:var(--ink);
+      font-weight:700; color:#000;
     }
     #sidebar-content details[open] > summary{ background:#eef2f7; }
 
@@ -82,13 +79,13 @@
     }
     #sidebar-content li:first-child{ border-top:0; }
 
-    /* Hide "assigned" badges/chips */
+    /* Hide “assigned” chips the map injects */
     #sidebar-content .mini-pill,
     #sidebar-content .badge,
     #sidebar-content .tag,
     #sidebar-content .status { display:none !important; }
 
-    /* Done button style */
+    /* “Mark done” button */
     .bs-done-btn{
       appearance:none; border-radius:10px; border:1px solid #e2e8f0;
       background:#fff; color:#111827; padding:6px 10px; font-weight:800; cursor:pointer;
@@ -114,7 +111,7 @@
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
 
-  <!-- Sidebar toggle -->
+  <!-- Sidebar toggle (hamburger) -->
   <button id="sidebar-toggle">☰</button>
 
   <!-- Sidebar -->
@@ -144,163 +141,80 @@
   <!-- Map -->
   <div id="map"></div>
 
-  <!-- Leaflet -->
+  <!-- Leaflet + your app scripts (let script.js initialise the map ONCE) -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="script.js"></script>
+  <script src="sidebar.js"></script>
 
+  <!-- Wire return home + collapse all UI -->
   <script>
-  (function(){
-  if (!window.L) return;
-
-  const params = new URLSearchParams(location.search);
-  if (params.get('unlock') === '1') return;                    // escape hatch
-  const wanted = new Set((params.get('focus')||'')
-                  .split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
-  if (!wanted.size) return;
-
-  const up=s=>String(s||'').toUpperCase();
-  const idRx=/\bM\d{3,5}\b/;
-
-  function siteIdFromMarker(m){
-    if (m?.options?.siteId) return up(m.options.siteId);
-    if (m?.options?.title){ const mm=up(m.options.title).match(idRx); if(mm) return mm[0]; }
-    if (typeof m?.getTooltip==='function' && m.getTooltip()){
-      const mm=up(m.getTooltip().getContent()).match(idRx); if(mm) return mm[0];
-    }
-    const txt=(m?._icon?.textContent)?up(m._icon.textContent):'';
-    const mm=txt.match(idRx); return mm?mm[0]:null;
-  }
-
-  const state=new Map(); // mapId -> {bounds, matched, fitted, started}
-  function maybeFit(map){
-    const s=state.get(map._leaflet_id); if(!s||s.fitted) return;
-    const min=Math.min(3, wanted.size);
-    if (s.matched>=min || Date.now()-s.started>15000){
-      if (s.bounds){
-        const lock=s.bounds.pad(0.25);
-        try{ map.fitBounds(lock,{padding:[24,24]}); }catch{}
-        map.setMaxBounds(lock);
-        map.options.maxBoundsViscosity=1.0;
-        map.setMinZoom(map.getZoom());                   // stops zooming out to whole region
-      }
-      s.fitted=true;
-    }
-  }
-
-  const origAddTo=L.Marker.prototype.addTo;
-  L.Marker.prototype.addTo=function(map){
-    const res=origAddTo.call(this,map);
-    const sid=siteIdFromMarker(this);
-    if(sid && wanted.has(sid)){
-      let s=state.get(map._leaflet_id);
-      if(!s){ s={bounds:null,matched:0,fitted:false,started:Date.now()}; state.set(map._leaflet_id,s); }
-      const ll=this.getLatLng();
-      if(ll){ s.bounds=s.bounds? s.bounds.extend(ll):L.latLngBounds(ll,ll); s.matched++; maybeFit(map); }
-    }
-    return res;
-  };
-
-  // Safety sweep in case some markers were present before the patch loaded
-  setTimeout(()=>{
-    const maps=[];
-    ['BS_MAP','__BS_map','map','leafletMap'].forEach(k=>{ if(window[k]?.fitBounds) maps.push(window[k]); });
-    maps.forEach(map=>{
-      let s=state.get(map._leaflet_id);
-      if(!s){ s={bounds:null,matched:0,fitted:false,started:Date.now()-14000}; state.set(map._leaflet_id,s); }
-      for(const k in map._layers){
-        const lyr=map._layers[k];
-        if(!(lyr instanceof L.Marker)) continue;
-        const sid=siteIdFromMarker(lyr);
-        if(sid && wanted.has(sid)){
-          const ll=lyr.getLatLng();
-          s.bounds=s.bounds? s.bounds.extend(ll):L.latLngBounds(ll,ll);
-          s.matched++;
-        }
-      }
-      maybeFit(map);
-    });
-  },1000);
+    (function(){
+      document.getElementById('homeBtn')?.addEventListener('click', () => {
+        try{ sessionStorage.setItem('bayside_prev', location.href); }catch(_){}
+        location.href = 'index.html';
+      });
+      document.getElementById('toggle-all')?.addEventListener('click', (e)=>{
+        const root = document.getElementById('sidebar-content');
+        const groups = [...root.querySelectorAll('details')];
+        const anyOpen = groups.some(d => d.open);
+        groups.forEach(d => d.open = !anyOpen);
+        e.target.textContent = anyOpen ? 'Expand All' : 'Collapse All';
+      });
+    })();
   </script>
 
-  <!-- Sidebar filter to focus list -->
+  <!-- Filter sidebar to assigned IDs shown in ?focus=... -->
   <script>
-  (function () {
-    function getFocusFromQuery() {
-      const q = new URLSearchParams(location.search).get('focus') || '';
-      return q.split(',').map(s => s.trim()).filter(Boolean).map(s => s.toUpperCase());
-    }
-    async function getFocusFromFirestore() {
-      try {
-        const u = firebase.auth().currentUser;
-        if (!u) return [];
-        const snap = await firebase.firestore().collection('assignments')
-          .where('userId', '==', u.uid).get();
-        const set = new Set();
-        snap.forEach(doc => (doc.data()?.siteIds || [])
-          .forEach(id => set.add(String(id).toUpperCase())));
-        return Array.from(set);
-      } catch (e) {
-        console.warn('fallback focus load failed:', e);
-        return [];
+    (function () {
+      const up = s => String(s||'').trim().toUpperCase();
+      const focus = new URLSearchParams(location.search).get('focus') || '';
+      const FOCUS = focus.split(',').map(up).filter(Boolean);
+      if (!FOCUS.length) return;
+
+      function whenSidebarReady(cb){
+        const root = document.getElementById('sidebar-content');
+        if (!root) return;
+        if (root.children.length) return cb(root);
+        const mo = new MutationObserver(() => {
+          if (root.children.length){ mo.disconnect(); cb(root); }
+        });
+        mo.observe(root, { childList: true, subtree: true });
+        setTimeout(() => mo.disconnect(), 10000);
       }
-    }
-    function whenSidebarReady(cb) {
-      const root = document.getElementById('sidebar-content');
-      if (!root) return;
-      if (root.children.length > 0) { cb(root); return; }
-      const obs = new MutationObserver((_, o) => {
-        if (root.children.length > 0) { o.disconnect(); cb(root); }
-      });
-      obs.observe(root, { childList: true, subtree: true });
-      setTimeout(() => obs.disconnect(), 10000);
-    }
-    function filterSidebarToIds(root, ids) {
-      const wanted = new Set(ids.map(s => s.toUpperCase()));
 
-      // Banner
-      let banner = root.querySelector('.assign-banner');
-      if (!banner) {
-        banner = document.createElement('div');
-        banner.className = 'assign-banner';
-        root.prepend(banner);
+      function filterSidebar(root){
+        const want = new Set(FOCUS);
+        let banner = root.querySelector('.assign-banner');
+        if (!banner){
+          banner = document.createElement('div');
+          banner.className = 'assign-banner';
+          root.prepend(banner);
+        }
+        banner.textContent = `Showing ${FOCUS.length} assigned site(s)`;
+
+        const hasId = el => {
+          const t = (el.textContent||'').toUpperCase();
+          for (const id of want) if (t.includes(id)) return true;
+          return false;
+        };
+
+        const rows = root.querySelectorAll('li, .list-item, .sidebar-row, .item, div');
+        rows.forEach(el => {
+          if (el.classList?.contains('assign-banner')) return;
+          const keep = hasId(el) || [...el.querySelectorAll('*')].some(hasId);
+          el.style.display = keep ? '' : 'none';
+        });
+
+        root.querySelectorAll('details').forEach(d => {
+          const any = [...d.querySelectorAll('li, .list-item, .sidebar-row, .item')]
+            .some(el => el.style.display !== 'none');
+          d.style.display = any ? '' : 'none';
+          if (any) d.open = true;
+        });
       }
-      banner.textContent = ids.length ? `Showing ${ids.length} assigned site(s)` : 'No assigned sites to show.';
 
-      // Hide non-assigned rows
-      const hasAnyId = (el) => {
-        const t = (el.textContent || '').toUpperCase();
-        for (const id of wanted) if (t.includes(id)) return true;
-        return false;
-      };
-      const candidates = root.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row, div');
-      candidates.forEach(el => {
-        if (el.classList?.contains('assign-banner')) return;
-        const keep = hasAnyId(el) || [...el.querySelectorAll('*')].some(hasAnyId);
-        el.style.display = keep ? '' : 'none';
-      });
-      root.querySelectorAll('details').forEach(d => {
-        const any = [...d.querySelectorAll('li, .list-item, .sidebar-row, .item, .site-row')]
-          .some(el => el.style.display !== 'none');
-        d.style.display = any ? '' : 'none';
-        if (any) d.open = true;
-      });
-    }
-
-    // Expand / collapse all groups
-    document.getElementById('toggle-all')?.addEventListener('click', (e)=>{
-      const root = document.getElementById('sidebar-content');
-      const all = [...root.querySelectorAll('details')];
-      const anyOpen = all.some(d => d.open);
-      all.forEach(d => d.open = !anyOpen);
-      e.target.textContent = anyOpen ? 'Expand All' : 'Collapse All';
-    });
-
-    firebase.auth().onAuthStateChanged(async () => {
-      let ids = getFocusFromQuery();
-      if (!ids.length) ids = await getFocusFromFirestore();
-      if (!ids.length) return;
-      whenSidebarReady(root => filterSidebarToIds(root, ids));
-    });
-  })();
+      whenSidebarReady(filterSidebar);
+    })();
   </script>
 
   <!-- Buttons + optimistic progress; persist via work_logs; also read work_logs on load -->
@@ -381,6 +295,7 @@
       const uid = auth.currentUser?.uid || null;
       const taskId = await ensureTaskId();
 
+      // LOG (operators always allowed by your rules)
       await db.collection('work_logs').add({
         assignmentId: taskId || null,
         siteId, status,
@@ -460,6 +375,7 @@
           input.addEventListener('blur',   saveNote);
         }
 
+        // reflect EFFECTIVE state -> UI (optimistic overrides freshest logs while fresh)
         const eff = effectiveFor(sid);
         const opt  = optGet(sid);
         const status = (opt?.status || eff.status || '').toLowerCase();
@@ -474,6 +390,7 @@
       });
     }
 
+    // run once, then keep tidy for a minute (in case the sidebar renders incrementally)
     const iv = setInterval(()=>requestAnimationFrame(injectButtons), 1000);
     setTimeout(()=>clearInterval(iv), 60000);
     requestAnimationFrame(injectButtons);
@@ -487,16 +404,17 @@
             perSiteCache = (snap.data()||{}).perSite || {};
             requestAnimationFrame(injectButtons);
           },
-          ()=>{}
+          ()=>{ /* operators might not have read; that's OK */ }
         );
       }
     });
 
-    // live listeners for work_logs (only current operator's logs)
+    // live listeners for work_logs (read only current operator's logs to satisfy rules)
     firebase.auth().onAuthStateChanged(async (u)=>{
       if (!u) return;
       const uid = u.uid;
 
+      // work out which site IDs are shown
       const params = new URLSearchParams(location.search);
       let ids = (params.get('focus')||'')
         .split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
@@ -536,159 +454,188 @@
   })();
   </script>
 
-  <!-- Lean map: cull off-screen markers and hide non-assigned tags -->
+  <!-- Lean-map culling (hide markers out of view; if focus=..., hide non-assigned) -->
   <script>
-  (function () {
-    function getMap() {
-      return (window.BS && window.BS.map) ||
-             window.BS_MAP || window.__BS_map ||
-             window.leafletMap || window.map || null;
-    }
-    const map = getMap();
-    if (!map || !window.L) return;
+    (function(){
+      const idRx = /\bM\d{3,5}\b/i;
+      const up = s => String(s||'').trim().toUpperCase();
+      const focus = new URLSearchParams(location.search).get('focus') || '';
+      const FOCUS_SET = new Set(focus.split(',').map(up).filter(Boolean));
 
-    const up = (s) => String(s || "").trim().toUpperCase();
-    const focus = new URLSearchParams(location.search).get("focus") || "";
-    const FOCUS_SET = new Set(focus.split(",").map(up).filter(Boolean));
-    const idRx = /\bM\d{3,5}\b/i;
-
-    function markerSiteId(m) {
-      if (m && m.options && m.options.siteId) return up(m.options.siteId);
-      if (m && typeof m.getTooltip === "function" && m.getTooltip()) {
-        const t = m.getTooltip().getContent();
-        const mm = String(t || "").toUpperCase().match(idRx);
-        if (mm) return mm[0];
+      function getMap(){
+        const candidates = [window.BS_MAP, window.__BS_map, window.map, window.leafletMap];
+        return candidates.find(m => m && typeof m.getBounds === 'function' && typeof m.on === 'function') || null;
       }
-      if (m && m.options && m.options.title) {
-        const mm = String(m.options.title || "").toUpperCase().match(idRx);
-        if (mm) return mm[0];
-      }
-      const txt = (m && m._icon && m._icon.textContent) ? m._icon.textContent : "";
-      const mm = String(txt || "").toUpperCase().match(idRx);
-      return mm ? mm[0] : null;
-    }
-    function setMarkerVisible(m, on) {
-      const icon = m._icon, shadow = m._shadow;
-      if (icon)  icon.style.display  = on ? "" : "none";
-      if (shadow) shadow.style.display = on ? "" : "none";
-    }
-
-    let rafId = 0;
-    function refreshCulling() {
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        const padBounds = map.getBounds().pad(0.2);
-        for (const k in map._layers) {
-          const layer = map._layers[k];
-          if (layer instanceof L.Marker) {
-            const inView = padBounds.contains(layer.getLatLng());
-            if (FOCUS_SET.size) {
-              const sid = markerSiteId(layer);
-              const isAssigned = !!(sid && FOCUS_SET.has(up(sid)));
-              setMarkerVisible(layer, inView && isAssigned);
-            } else {
-              setMarkerVisible(layer, inView);
-            }
-          }
+      function siteIdFromMarker(m){
+        if (!m) return null;
+        if (m.options && m.options.siteId) return up(m.options.siteId);
+        if (m.options && m.options.title){
+          const mm = String(m.options.title).toUpperCase().match(idRx);
+          if (mm) return mm[0];
         }
-      });
-    }
-    map.on("moveend zoomend", refreshCulling);
-    setTimeout(refreshCulling, 0);
-    const tidyUntil = Date.now() + 8000;
-    const iv = setInterval(() => {
-      refreshCulling();
-      if (Date.now() > tidyUntil) clearInterval(iv);
-    }, 600);
-    window.BS_refreshCulling = refreshCulling;
-  })();
+        if (typeof m.getTooltip === 'function' && m.getTooltip()){
+          const txt = m.getTooltip().getContent();
+          const mm = String(txt||'').toUpperCase().match(idRx);
+          if (mm) return mm[0];
+        }
+        const txt = (m._icon && m._icon.textContent) ? m._icon.textContent : '';
+        const mm = String(txt||'').toUpperCase().match(idRx);
+        return mm ? mm[0] : null;
+      }
+      function setMarkerVisible(m, on){
+        if (m._icon)  m._icon.style.display = on ? '' : 'none';
+        if (m._shadow) m._shadow.style.display = on ? '' : 'none';
+      }
+
+      function startWhenReady(){
+        const map = getMap();
+        if (!map) { setTimeout(startWhenReady, 300); return; }
+
+        let raf = 0;
+        const refresh = () => {
+          if (raf) cancelAnimationFrame(raf);
+          raf = requestAnimationFrame(() => {
+            const pad = map.getBounds().pad(0.2);
+            for (const k in map._layers){
+              const layer = map._layers[k];
+              if (!(layer instanceof L.Marker)) continue;
+              const inView = pad.contains(layer.getLatLng());
+              if (FOCUS_SET.size){
+                const sid = siteIdFromMarker(layer);
+                const isAssigned = !!(sid && FOCUS_SET.has(sid));
+                setMarkerVisible(layer, inView && isAssigned);
+              } else {
+                setMarkerVisible(layer, inView);
+              }
+            }
+          });
+        };
+
+        map.on('moveend zoomend', refresh);
+        setTimeout(refresh, 0);
+
+        const tidyUntil = Date.now() + 8000;
+        const iv = setInterval(() => {
+          refresh();
+          if (Date.now() > tidyUntil) clearInterval(iv);
+        }, 600);
+      }
+
+      startWhenReady();
+    })();
   </script>
 
-<script>
-/* Auto fit+lock to ?focus=... as markers are added (race-proof) */
-(function(){
-  if (!window.L) return;
+  <!-- Race-proof AUTOLOCK to assigned area (fit & lock once, expand-only later) -->
+  <script>
+    (function(){
+      const params = new URLSearchParams(location.search);
+      const forceLock = params.get('autolock') === '1';
+      const forceUnlock = params.get('unlock') === '1';
+      const up = s => String(s||'').trim().toUpperCase();
+      const focusSet = new Set((params.get('focus')||'').split(',').map(up).filter(Boolean));
+      const idRx = /\bM\d{3,5}\b/i;
 
-  const params = new URLSearchParams(location.search);
-  if (params.get('unlock') === '1') return;               // escape hatch
-  const wanted = new Set((params.get('focus')||'')
-                  .split(',').map(s=>s.trim().toUpperCase()).filter(Boolean));
-  if (!wanted.size) return;
+      let isAdmin = false; // best-effort admin detection (operators autolock by default)
+      try {
+        firebase.auth().onAuthStateChanged(async (u)=>{
+          if (!u) return;
+          try {
+            const snap = await firebase.firestore().collection('users').doc(u.uid).get();
+            isAdmin = (snap.data()?.role === 'admin');
+          } catch {}
+        });
+      } catch {}
 
-  const up = s => String(s||'').toUpperCase();
-  const idRx = /\bM\d{3,5}\b/;
-
-  function siteIdFromMarker(m){
-    if (m && m.options && m.options.siteId) return up(m.options.siteId);
-    if (m && m.options && m.options.title){
-      const mm = up(m.options.title).match(idRx); if (mm) return mm[0];
-    }
-    if (m && typeof m.getTooltip==='function' && m.getTooltip()){
-      const mm = up(m.getTooltip().getContent()).match(idRx); if (mm) return mm[0];
-    }
-    const txt = (m && m._icon && m._icon.textContent) ? up(m._icon.textContent) : '';
-    const mm = txt.match(idRx); return mm ? mm[0] : null;
-  }
-
-  // Per-map state: we may not know your map variable; use the map passed to addTo()
-  const state = new Map(); // map._leaflet_id -> {bounds, matched, fitted, started}
-
-  function maybeFit(map){
-    const s = state.get(map._leaflet_id);
-    if (!s || s.fitted) return;
-    const min = Math.min(3, wanted.size);                 // fit after a few matches
-    if (s.matched >= min || Date.now() - s.started > 15000){
-      if (s.bounds){
-        const lock = s.bounds.pad(0.25);
-        try { map.fitBounds(lock, { padding:[24,24] }); } catch {}
-        map.setMaxBounds(lock);
-        map.options.maxBoundsViscosity = 1.0;
-        map.setMinZoom(map.getZoom());                    // don’t allow zooming out to the whole LGA
+      function getMap(){
+        const candidates = [window.BS_MAP, window.__BS_map, window.map, window.leafletMap];
+        return candidates.find(m => m && typeof m.getBounds === 'function' && typeof m.on === 'function') || null;
       }
-      s.fitted = true;
-    }
-  }
-
-  const origAddTo = L.Marker.prototype.addTo;
-  L.Marker.prototype.addTo = function(map){
-    const res = origAddTo.call(this, map);
-    const sid = siteIdFromMarker(this);
-    if (sid && wanted.has(sid)){
-      let s = state.get(map._leaflet_id);
-      if (!s){ s = { bounds:null, matched:0, fitted:false, started:Date.now() }; state.set(map._leaflet_id, s); }
-      const ll = this.getLatLng();
-      if (ll){
-        s.bounds = s.bounds ? s.bounds.extend(ll) : L.latLngBounds(ll, ll);
-        s.matched++;
-        maybeFit(map);
-      }
-    }
-    return res;
-  };
-
-  // Safety: do one sweep a bit later in case some markers existed before this patch loaded
-  setTimeout(()=>{
-    const maps = [];
-    ['BS_MAP','__BS_map','map','leafletMap'].forEach(k => { if (window[k] && window[k].fitBounds) maps.push(window[k]); });
-    maps.forEach(map=>{
-      let s = state.get(map._leaflet_id);
-      if (!s){ s = { bounds:null, matched:0, fitted:false, started:Date.now()-14000 }; state.set(map._leaflet_id, s); }
-      for (const k in map._layers){
-        const lyr = map._layers[k];
-        if (!(lyr instanceof L.Marker)) continue;
-        const sid = siteIdFromMarker(lyr);
-        if (sid && wanted.has(sid)){
-          const ll = lyr.getLatLng();
-          s.bounds = s.bounds ? s.bounds.extend(ll) : L.latLngBounds(ll,ll);
-          s.matched++;
+      function siteIdFromMarker(m){
+        if (!m) return null;
+        if (m.options && m.options.siteId) return up(m.options.siteId);
+        if (m.options && m.options.title){
+          const mm = String(m.options.title).toUpperCase().match(idRx);
+          if (mm) return mm[0];
         }
+        if (typeof m.getTooltip === 'function' && m.getTooltip()){
+          const txt = m.getTooltip().getContent();
+          const mm = String(txt||'').toUpperCase().match(idRx);
+          if (mm) return mm[0];
+        }
+        const txt = (m._icon && m._icon.textContent) ? m._icon.textContent : '';
+        const mm = String(txt||'').toUpperCase().match(idRx);
+        return mm ? mm[0] : null;
       }
-      maybeFit(map);
-    });
-  }, 1000);
-})();
-</script>
+      function assignedBounds(map){
+        let b = null;
+        for (const k in map._layers){
+          const lyr = map._layers[k];
+          if (!(lyr instanceof L.Marker)) continue;
+          const sid = siteIdFromMarker(lyr);
+          if (focusSet.size && (!sid || !focusSet.has(sid))) continue;
+          const ll = lyr.getLatLng();
+          if (!ll) continue;
+          b = b ? b.extend(ll) : L.latLngBounds(ll, ll);
+        }
+        return b;
+      }
 
+      function shouldAutoLock(){
+        if (forceUnlock) return false;
+        if (forceLock) return true;
+        if (focusSet.size > 0 && !isAdmin) return true;
+        return false;
+      }
+
+      function startWhenReady(){
+        const map = getMap();
+        if (!map) { setTimeout(startWhenReady, 300); return; }
+        if (!shouldAutoLock()) return;
+
+        let locked = false;
+        let maxB = null;
+
+        function tryLock(){
+          const b = assignedBounds(map);
+          if (!b) return false;
+          maxB = b.pad(0.15);
+          try { map.fitBounds(maxB, { padding:[24,24] }); } catch(e) {}
+          map.setMaxBounds(maxB);
+          map.options.maxBoundsViscosity = 1.0;
+          locked = true;
+          return true;
+        }
+        function maybeExpand(){
+          if (!locked || !maxB) return;
+          const b = assignedBounds(map);
+          if (b && !maxB.contains(b)){
+            maxB = b.pad(0.15);
+            map.setMaxBounds(maxB);
+          }
+        }
+
+        // Retry a few times while markers stream in
+        let tries = 0;
+        const iv = setInterval(()=>{
+          tries++;
+          if (tryLock() || tries >= 20) clearInterval(iv); // ~10s max
+        }, 500);
+
+        // Expand-only pass for a short period
+        const until = Date.now() + 8000;
+        const tidier = setInterval(()=>{
+          maybeExpand();
+          if (Date.now() > until) clearInterval(tidier);
+        }, 600);
+      }
+
+      // Kick off after scripts & (most) layers are in
+      setTimeout(startWhenReady, 400);
+      setTimeout(startWhenReady, 2000); // safety
+    })();
+  </script>
+</body>
+</html>
 
 </body>
 </html>
