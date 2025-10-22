@@ -53,6 +53,23 @@
     .work-card__img img{ width:100%; height:100%; object-fit:cover }
     .work-card__footer{ display:flex; align-items:center; justify-content:space-between; padding:12px 14px }
     .work-card__title{ font-weight:800; color:#111827 }
+
+    /* Modal */
+    .modal-backdrop{ position:fixed; inset:0; background:rgba(15,23,42,.55); display:none; z-index:50; }
+    .modal{ position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); width:min(1000px,92vw); background:#fff; border-radius:16px; border:1px solid var(--muted); box-shadow:0 25px 70px rgba(2,8,23,.25); display:none; z-index:51; }
+    .modal__head{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; border-bottom:1px solid var(--muted); }
+    .modal__title{ font-weight:800; }
+    .modal__body{ padding:16px; max-height:min(70vh, 760px); overflow:auto; }
+    .modal__foot{ padding:12px 16px; border-top:1px solid var(--muted); display:flex; justify-content:flex-end; gap:10px }
+    .iconbtn{ background:#fff; border:1px solid #cbd5e1; border-radius:10px; padding:8px 10px; cursor:pointer; }
+    table{ width:100%; border-collapse:collapse; }
+    th, td{ border:1px solid #e2e8f0; padding:10px 12px; text-align:left; }
+    th{ background:#f8fafc; }
+    .badge{ font-size:12px; background:#eef2ff; color:#3730a3; padding:4px 8px; border-radius:999px; border:1px solid #e0e7ff }
+    .badge.active{ background:#ecfeff; color:#155e75; border-color:#cffafe }
+    .note{ background:#f1f5f9; border:1px solid #e2e8f0; padding:10px 12px; border-radius:10px; color:#334155; margin-bottom:10px }
+    .ok{ color:#166534 } .err{ color:#b91c1c }
+    input[type="search"]{ width:280px; padding:8px 10px; border:1px solid #cbd5e1; border-radius:10px; }
   </style>
 
   <!-- jsPDF + autoTable -->
@@ -65,6 +82,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-functions-compat.js"></script>
   <script src="firebase-init.js"></script>
   <script src="auth-guard.js"></script>
 
@@ -87,10 +105,12 @@
       <article class="card">
         <div class="card__head">Users</div>
         <div class="card__body">
-          <div style="color:#334155">Create operator accounts and set display names.</div>
+          <div style="color:#334155">Create operator/admin accounts and manage access.</div>
           <div class="row">
-            <a class="btn btn-accent" href="create-operator.html">Create operator</a>
-            <a class="btn btn-outline" href="disable-operator.html">Disable / delete</a>
+            <!-- ✅ Link to your existing page -->
+            <a class="btn btn-accent" href="create-user.html">Create user</a>
+            <!-- ✅ Opens modal (no new html) -->
+            <button class="btn btn-outline" id="btnOpenDisable">Disable / delete</button>
           </div>
           <div class="row">
             <a class="btn btn-dark" href="risk-assessments.html">Open Risk Assessments</a>
@@ -146,7 +166,38 @@
 
   <footer class="footer-space" style="height:32px"></footer>
 
-  <!-- Small header helpers -->
+  <!-- ===== Disable/Delete modal (no extra HTML file) ===== -->
+  <div class="modal-backdrop" id="disableBackdrop" aria-hidden="true"></div>
+  <section class="modal" id="disableModal" role="dialog" aria-modal="true" aria-labelledby="disableTitle">
+    <div class="modal__head">
+      <div class="modal__title" id="disableTitle">Operators — Disable / delete</div>
+      <button class="iconbtn" id="btnCloseDisable">Close ✕</button>
+    </div>
+    <div class="modal__body">
+      <div class="note" id="disableNote" style="display:none"></div>
+      <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px">
+        <input type="search" id="opSearch" placeholder="Search name, email or UID…" />
+        <span id="opCount" class="badge">0</span>
+      </div>
+      <div style="overflow:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th><th>Email</th><th>UID</th><th>Status</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="opTbody">
+            <tr><td colspan="5">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal__foot">
+      <button class="iconbtn" id="btnCloseDisable2">Done</button>
+    </div>
+  </section>
+
+  <!-- Small header helpers + auth UI -->
   <script>
     (function () {
       const db = firebase.firestore();
@@ -174,7 +225,177 @@
     })();
   </script>
 
-  <!-- ===== Mowing PDF: ALL OPERATORS, COMPLETED TODAY — logo left, title right, Date-only column ===== -->
+  <!-- ===== Users modal logic (disable/delete) ===== -->
+  <script>
+    (function(){
+      const db = firebase.firestore();
+      const functions = firebase.functions();
+
+      const $ = (s) => document.querySelector(s);
+      const $$ = (s) => document.querySelectorAll(s);
+
+      const openBtn = $('#btnOpenDisable');
+      const closeBtns = [$('#btnCloseDisable'), $('#btnCloseDisable2')];
+      const modal = $('#disableModal');
+      const backdrop = $('#disableBackdrop');
+      const tbody = $('#opTbody');
+      const search = $('#opSearch');
+      const count = $('#opCount');
+      const note = $('#disableNote');
+
+      let cache = [];
+
+      function showNote(msg, ok=false){
+        note.style.display = 'block';
+        note.className = 'note ' + (ok ? 'ok' : 'err');
+        note.textContent = msg;
+      }
+
+      function hideNote(){ note.style.display='none'; }
+
+      function openModal(){
+        backdrop.style.display = 'block';
+        modal.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+        load().catch(e => showNote(e.message || 'Failed to load operators.'));
+      }
+
+      function closeModal(){
+        backdrop.style.display = 'none';
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+        hideNote();
+      }
+
+      openBtn?.addEventListener('click', openModal);
+      closeBtns.forEach(b => b?.addEventListener('click', closeModal));
+      backdrop?.addEventListener('click', closeModal);
+      window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
+
+      function row(u){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${u.name || '—'}</td>
+          <td>${u.email || '—'}</td>
+          <td style="font-family:ui-monospace, SFMono-Regular, Menlo, monospace">${u.id}</td>
+          <td>${u.disabled ? '<span class="badge">disabled</span>' : '<span class="badge active">active</span>'}</td>
+          <td>
+            <button class="btn btn-outline" data-act="${u.disabled ? 'enable' : 'disable'}" data-id="${u.id}">
+              ${u.disabled ? 'Enable' : 'Disable'}
+            </button>
+            <button class="btn btn-dark" data-act="delete" data-id="${u.id}">Delete</button>
+          </td>
+        `;
+        return tr;
+      }
+
+      function render(){
+        const term = (search.value||'').toLowerCase();
+        const list = cache.filter(u =>
+          (u.name||'').toLowerCase().includes(term) ||
+          (u.email||'').toLowerCase().includes(term) ||
+          (u.id||'').toLowerCase().includes(term)
+        );
+        tbody.innerHTML = '';
+        if (!list.length){ tbody.innerHTML = '<tr><td colspan="5">No operators found.</td></tr>'; count.textContent='0'; return; }
+        list.forEach(u => tbody.appendChild(row(u)));
+        count.textContent = String(list.length);
+      }
+
+      async function load(){
+        const snap = await db.collection('users').where('role','==','operator').get();
+        cache = [];
+        snap.forEach(doc => cache.push({ id: doc.id, ...doc.data() }));
+        render();
+      }
+
+      search.addEventListener('input', render);
+
+      // Helper: try HTTPS endpoint; falls back to callable; falls back to Firestore toggle
+      async function callAdminEndpoint(name, payload){
+        // Try HTTPS endpoint (same style as createUserHttp)
+        try{
+          const curUser = firebase.auth().currentUser;
+          if (!curUser) throw new Error('Sign in required.');
+          const idToken = await curUser.getIdToken(true);
+          const url = `https://us-central1-bayside-maps.cloudfunctions.net/${name}`;
+          const res = await fetch(url, {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+idToken },
+            body: JSON.stringify(payload || {})
+          });
+          const json = await res.json().catch(()=> ({}));
+          if (res.ok && (json.ok === true || json.result?.ok === true)) return json.result || json;
+          throw new Error(json?.error || `HTTP ${res.status}`);
+        }catch(e){
+          return Promise.reject(e);
+        }
+      }
+
+      tbody.addEventListener('click', async (e) => {
+        const btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        const uid = btn.getAttribute('data-id');
+        const act = btn.getAttribute('data-act');
+
+        hideNote();
+        btn.disabled = true;
+
+        try {
+          if (act === 'disable' || act === 'enable') {
+            const disabled = (act === 'disable');
+
+            // 1) Try HTTPS function
+            try{
+              await callAdminEndpoint('disableUserHttp', { uid, disabled });
+              showNote(`${disabled?'Disabled':'Enabled'} ${uid}`, true);
+            }catch(_){
+              // 2) Try callable function
+              try{
+                const fn = firebase.functions().httpsCallable('adminDisableUser');
+                await fn({ uid, disabled });
+                showNote(`${disabled?'Disabled':'Enabled'} ${uid}`, true);
+              }catch(_2){
+                // 3) Fallback: Firestore flag only
+                await db.collection('users').doc(uid).set({ disabled }, { merge:true });
+                showNote(`Cloud Function not found; set Firestore disabled=${disabled}. Auth account unchanged.`, false);
+              }
+            }
+
+          } else if (act === 'delete') {
+            if (!confirm('Type DELETE to permanently remove this operator (Auth + Firestore). Proceed?')) { btn.disabled=false; return; }
+            if (prompt('Confirm by typing DELETE') !== 'DELETE') { btn.disabled=false; return; }
+
+            // 1) Try HTTPS function
+            try{
+              await callAdminEndpoint('deleteUserHttp', { uid });
+              await db.collection('users').doc(uid).delete().catch(()=>{});
+              showNote(`Deleted ${uid}`, true);
+            }catch(_){
+              // 2) Try callable function
+              try{
+                const fn = firebase.functions().httpsCallable('adminDeleteUser');
+                await fn({ uid });
+                await db.collection('users').doc(uid).delete().catch(()=>{});
+                showNote(`Deleted ${uid}`, true);
+              }catch(_2){
+                showNote('Delete function not available. Cannot remove Auth user from browser.', false);
+              }
+            }
+          }
+
+          await load();
+        } catch (err) {
+          console.warn(err);
+          showNote(err.message || 'Action failed.', false);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    })();
+  </script>
+
+  <!-- ===== Mowing PDF: logo left, title right, Date-only column ===== -->
   <script>
     (function () {
       const db = firebase.firestore();
@@ -196,8 +417,6 @@
         const end   = new Date(`${iso}T23:59:59+10:00`);
         return { iso, start, end };
       }
-
-      // Date-only formatting (dd/mm/yyyy) in AEST, no time
       function fmtAESTDateOnly(ts) {
         const d = ts instanceof Date ? ts : (ts?.toDate ? ts.toDate() : new Date(ts));
         return new Intl.DateTimeFormat('en-GB', {
@@ -311,7 +530,7 @@
         doc.setFont('helvetica','bold'); doc.setFontSize(16);
         doc.text('Parks Mowing — Completed Today', pageW - marginX, headerY + 18, { align: 'right' });
 
-        // Meta date (leave on left as-is)
+        // Meta date (left)
         doc.setFont('helvetica','normal'); doc.setFontSize(11);
         doc.setTextColor(...SLATE);
         doc.text(`Date: ${iso}`, marginX, headerY + 36);
