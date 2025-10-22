@@ -141,10 +141,37 @@
   <!-- Map -->
   <div id="map"></div>
 
-  <!-- Leaflet + your app scripts (let script.js initialise the map ONCE) -->
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="script.js"></script>
-  <script src="sidebar.js"></script>
+ <!-- Leaflet -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<!-- Prevent script.js from running its own auto-init -->
+<script>
+  // script.js checks this flag; set it BEFORE loading script.js
+  window.BS_DISABLE_AUTO_INIT = true;
+</script>
+
+<!-- Your app scripts -->
+<script src="script.js"></script>
+<script src="sidebar.js"></script>
+
+<!-- Ensure the map is initialized exactly once -->
+<script>
+(function ensureSingleInit(){
+  function initOnce(){
+    var el = document.getElementById('map');
+    if (!el) return;
+    // Leaflet sets _leaflet_id on the container when already initialized
+    if (!el._leaflet_id && typeof window.initParksMowingMap === 'function') {
+      try { window.initParksMowingMap(); } catch(e){ console.warn('init failed', e); }
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initOnce);
+  } else {
+    initOnce();
+  }
+})();
+</script>
 
   <!-- Wire return home + collapse all UI -->
   <script>
