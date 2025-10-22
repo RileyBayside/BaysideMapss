@@ -174,7 +174,7 @@
     })();
   </script>
 
-  <!-- ===== Mowing PDF: ALL OPERATORS, COMPLETED TODAY — with logo + brand styling ===== -->
+  <!-- ===== Mowing PDF: ALL OPERATORS, COMPLETED TODAY — logo left, title right, Date-only column ===== -->
   <script>
     (function () {
       const db = firebase.firestore();
@@ -196,12 +196,13 @@
         const end   = new Date(`${iso}T23:59:59+10:00`);
         return { iso, start, end };
       }
-      function fmtAEST(ts) {
+
+      // Date-only formatting (dd/mm/yyyy) in AEST, no time
+      function fmtAESTDateOnly(ts) {
         const d = ts instanceof Date ? ts : (ts?.toDate ? ts.toDate() : new Date(ts));
-        return new Intl.DateTimeFormat('en-AU', {
-          timeZone: AEST_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
-          hour: '2-digit', minute: '2-digit', hour12: false
-        }).format(d);
+        return new Intl.DateTimeFormat('en-GB', {
+          timeZone: AEST_TZ, day: '2-digit', month: '2-digit', year: 'numeric'
+        }).format(d); // e.g. 22/10/2025
       }
 
       // Load logo as dataURL (from ./logo.png)
@@ -259,6 +260,7 @@
           });
         });
 
+        // latest record per operator+site
         const latest = new Map();
         for (const r of tmp) {
           const key = `${r.operatorUid}|${r.siteId}`;
@@ -281,7 +283,7 @@
 
         completed.forEach(r => {
           r.operator = usersMap[r.operatorUid] || r.operatorUid || '—';
-          r.timeAEST = fmtAEST(r.ts);
+          r.dateOnly = fmtAESTDateOnly(r.ts);
         });
 
         // Sort by operator > site
@@ -292,20 +294,24 @@
 
         const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
         const pageW = doc.internal.pageSize.getWidth();
+        const pageH = doc.internal.pageSize.getHeight();
         const marginX = 40;
 
-        // Header with logo and black/red theme
+        // Header: logo left, title right
         const headerY = 36;
         if (logoData) {
-          const LOGO_H = 36;           // ↑ slightly larger logo
+          const LOGO_H = 36;           // slightly larger
           const LOGO_W = LOGO_H * 2.3; // keep aspect ratio
-          doc.addImage(logoData, 'PNG', marginX, headerY - 20, LOGO_W, LOGO_H);
+          const LOGO_X = marginX;      // left-aligned
+          doc.addImage(logoData, 'PNG', LOGO_X, headerY - 20, LOGO_W, LOGO_H);
         }
 
+        // Title on the right
         doc.setTextColor(...BRAND_BLACK);
         doc.setFont('helvetica','bold'); doc.setFontSize(16);
-        doc.text('Parks Mowing — Completed Today', marginX, headerY + 18); // removed "(AEST)" from title
+        doc.text('Parks Mowing — Completed Today', pageW - marginX, headerY + 18, { align: 'right' });
 
+        // Meta date (leave on left as-is)
         doc.setFont('helvetica','normal'); doc.setFontSize(11);
         doc.setTextColor(...SLATE);
         doc.text(`Date: ${iso}`, marginX, headerY + 36);
@@ -315,14 +321,14 @@
         doc.setLineWidth(1.5);
         doc.line(marginX, headerY + 44, pageW - marginX, headerY + 44);
 
-        // Table body
+        // Table body (Date-only)
         const body = completed.length
-          ? completed.map(r => [r.operator, r.siteId, r.note || '', r.timeAEST])
+          ? completed.map(r => [r.operator, r.siteId, r.note || '', r.dateOnly])
           : [['—','—','No mowing sites completed today','—']];
 
         // AutoTable with brand styling
         doc.autoTable({
-          head: [['Operator', 'Site ID', 'Note', 'Time (AEST)']],
+          head: [['Operator', 'Site ID', 'Note', 'Date']],
           body,
           startY: headerY + 62,
           margin: { left: marginX, right: marginX },
@@ -346,14 +352,14 @@
             0: { cellWidth: 160 },
             1: { cellWidth: 70, halign: 'center' },
             2: { cellWidth: pageW - (marginX*2) - 160 - 70 - 110 },
-            3: { cellWidth: 110, halign: 'right' }
+            3: { cellWidth: 110, halign: 'right' } // Date column
           },
-          didDrawPage: (data) => {
+          didDrawPage: () => {
             // Footer page number (subtle slate)
             const str = `Page ${doc.internal.getNumberOfPages()}`;
             doc.setFontSize(9);
             doc.setTextColor(...SLATE);
-            doc.text(str, pageW - marginX, doc.internal.pageSize.getHeight() - 18, { align: 'right' });
+            doc.text(str, pageW - marginX, pageH - 18, { align: 'right' });
           }
         });
 
