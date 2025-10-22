@@ -139,6 +139,15 @@
     </div>
   </div>
 
+  <!-- Site photo upload -->
+<div id="photo-uploader" style="display:flex; align-items:center; gap:8px; margin:8px 0">
+  <button id="uploadSitePhotoBtn" class="btn btn-accent" type="button">Upload site photo</button>
+  <progress id="photoProg" value="0" max="100" style="display:none; width:160px"></progress>
+</div>
+
+<!-- Optional: simple gallery -->
+<div id="sitePhotoGallery" style="display:grid; grid-template-columns:repeat(auto-fill,120px); gap:8px"></div>
+
   <!-- Map -->
   <div id="map"></div>
 
